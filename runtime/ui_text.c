@@ -70,6 +70,8 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_PICTURE_FIT_KEEP] = "Keep (bars)", [UI_MENU_PICTURE_FIT_STRETCH] = "Stretch",
     [UI_MENU_SHARPNESS] = "FSR sharpness",
     [UI_MENU_SHARPNESS_DESC] = "Sharpening after FSR scaling; 0 turns it off.",
+    [UI_MENU_BRIGHTNESS] = "Brightness",
+    [UI_MENU_BRIGHTNESS_DESC] = "Lower it if daylight, water or white armour burn out to white. 100% is the game's own level.",
 
     [UI_MENU_FPS_LIMIT] = "Frame rate limit",
     [UI_MENU_FPS_LIMIT_DESC] = "The most frames per second the game draws; the game's clock follows it. Above 60 is "
@@ -303,6 +305,8 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_PICTURE_FIT_KEEP] = "Сохранять (полосы)", [UI_MENU_PICTURE_FIT_STRETCH] = "Растягивать",
     [UI_MENU_SHARPNESS] = "Резкость FSR",
     [UI_MENU_SHARPNESS_DESC] = "Повышение резкости после масштабирования FSR; 0 выключает его.",
+    [UI_MENU_BRIGHTNESS] = "Яркость",
+    [UI_MENU_BRIGHTNESS_DESC] = "Уменьшите, если дневной свет, вода или белая броня выгорают до белого. 100% — уровень самой игры.",
 
     [UI_MENU_FPS_LIMIT] = "Ограничение частоты кадров",
     [UI_MENU_FPS_LIMIT_DESC] = "Наибольшее число кадров в секунду; часы игры идут по нему. Выше 60 — экспериментальный "

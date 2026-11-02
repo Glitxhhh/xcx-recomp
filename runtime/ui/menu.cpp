@@ -546,6 +546,7 @@ static void tab_screen(float scale) {
     static const UiTextId fit[] = {UI_MENU_PICTURE_FIT_KEEP, UI_MENU_PICTURE_FIT_STRETCH};
     opt_choice("XCX_PICTURE_FIT", UI_MENU_PICTURE_FIT, fit, 2, UI_MENU_PICTURE_FIT_DESC);
     opt_slider("XCX_SHARPNESS", UI_MENU_SHARPNESS, 0, 100, UI_MENU_SHARPNESS_DESC, 5, "%.0f %%");
+    opt_slider("XCX_BRIGHTNESS", UI_MENU_BRIGHTNESS, 40, 120, UI_MENU_BRIGHTNESS_DESC, 5, "%.0f %%");
     opt_end();
 }
 

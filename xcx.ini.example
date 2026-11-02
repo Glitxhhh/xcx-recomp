@@ -126,6 +126,9 @@
 # from 0 (off) to 100. Changes while the game runs take effect at once.
 # upscaler = fsr
 # sharpness = 80
+# Picture brightness in percent, from 40 to 120: the gain of the game's final tonemap. Lower it if daylight, water or
+# white armour burn out. Changes take effect at once.
+# brightness = 100
 # Picture shape when the window's differs from the game resolution's (a 16:9 game on a 16:10 screen): keep (its
 # proportions, with black bars) or stretch (over the whole window). Changes take effect at once.
 # picture_fit = keep

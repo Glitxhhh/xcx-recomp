@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cfg.h"
 #include "host.h"
 #include "nvn_api.h"
 #include "vk.h"
@@ -216,6 +217,26 @@ static void summary(void) {
     U.subs = U.off_subs = U.regions = U.bytes = U.copy_ns = U.hits = U.drops = U.inflight = U.refused = 0;
 }
 
+// The brightness option (XCX_BRIGHTNESS, percent) scales the gain of the game's final tonemap, which clips the HDR scene
+// at 1 / gain, so bright sand, water and white armour keep their detail. The gain is the first float of vec4 1 in that
+// shader's uniform block of two vec4s: (1, 1, 0, 0), (gain, 1, 15/16, 1/32); the last two are the scale and bias of its
+// 16x16x16 grading LUT. Only the copy changes, so guest memory keeps the game's value and each frame scales it once.
+// The search reads guest memory: the arena is write-combined over the BAR, where reading the 300 KiB of a submission
+// costs milliseconds per frame. It is only written.
+static void scale_tonemap(void) {
+    int pct = cfg_int("XCX_BRIGHTNESS");
+    if (pct == 100) return;
+    for (int r = 0; r < U.nreg; r++) {
+        const float *f = (const float *)(uintptr_t)U.reg[r].lo;
+        float *to = (float *)(U.arena->map + U.reg[r].off);
+        uint64_t n = (U.reg[r].hi - U.reg[r].lo) / 4;
+        for (uint64_t i = 0; i + 8 <= n; i += 4)
+            if (f[i + 6] == 0.9375f && f[i + 7] == 0.03125f && f[i + 5] == 1.0f && f[i] == 1.0f && f[i + 1] == 1.0f &&
+                f[i + 2] == 0.0f && f[i + 3] == 0.0f)
+                to[i + 4] = f[i + 4] * (float)pct / 100.0f;
+    }
+}
+
 void vk_usnap_begin(const uint64_t *handles, int n, uint64_t fence) {
     if (!U.mode) U.mode = rt_knob("UBO_SNAPSHOT", "1") + 1;   // stored +1: 0 is "not read yet"
     U.on = 0, U.fence = fence, U.gen++;
@@ -255,6 +276,7 @@ void vk_usnap_begin(const uint64_t *handles, int n, uint64_t fence) {
     if (!(U.arena = arena_get(total))) return;
     for (int i = 0; i < U.nreg; i++)
         memcpy(U.arena->map + U.reg[i].off, (const void *)(uintptr_t)U.reg[i].lo, U.reg[i].hi - U.reg[i].lo);
+    scale_tonemap();
     vmaFlushAllocation(vk_ctx()->vma, U.arena->alloc, 0, total);   // a no-op on coherent memory
     U.on = 1;
     U.subs++, U.regions += (uint64_t)U.nreg, U.bytes += total, U.copy_ns += kern_now_ns() - t0;
