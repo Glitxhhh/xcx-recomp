@@ -104,6 +104,10 @@ int vk_fsr_record(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat fmt, 
                   VkImage dst, int dx, int dy, uint32_t dw, uint32_t dh);
 void vk_fsr_release(void);   // before the device goes away
 void vk_present_flip(void);
+// Presents the last vk_present_image or vk_present_blit image again, with this frame's menu overlay over it: for host UI
+// while the game is not presenting (the text entry, which blocks the guest thread). The image must still hold that
+// frame, which it does while the game waits. 0 when nothing was presented yet.
+int vk_present_repeat(void);
 // Every submission to ctx->gfx_queue (and xfer_queue when shared) takes this lock; vk_present_image and the swapchain
 // rebuild do. Recursive.
 void vk_queue_lock(void);

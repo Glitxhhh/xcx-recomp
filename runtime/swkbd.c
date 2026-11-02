@@ -1,23 +1,25 @@
 // Adapted from MacNativeGames games/totk/runtime/swkbd_host.c @ b75be8cf (MIT, Copyright (c) 2026 MacNativeGames
 // contributors): the ShowKeyboardArg offsets, the UTF-8/UTF-16 conversions, the disabled-key filter and the result codes.
-// The macOS text bar is replaced by a window of the host (swkbd.h text_entry_run: swkbd_win.c with Win32, swkbd_sdl.c
-// with SDL).
+// The macOS text bar is replaced by a front end of the host (swkbd.h text_entry_run: a window with Win32 in swkbd_win.c,
+// a field on the menu overlay with SDL in swkbd_sdl.c).
 //
 // nn::swkbd::ShowKeyboard: text entry for the game. On the Switch the call starts the keyboard library applet, which
-// takes the screen until the player confirms or cancels. XCX calls it in one place, naming a horse at a stable
-// (main+0x1ecbf64 -> main+0x1b2b3a0: UserName preset, at most 9 characters, '@' '%' '\' disabled, UTF-16 out, no
-// header, guide or initial text; an empty answer counts as not named).
+// takes the screen until the player confirms or cancels. XCX calls it in one place, naming the player character after
+// the avatar is made, when Elma opens the pod (from main+0x3af700: header "Please enter a name.", 1 to 10 units,
+// disabled-key bits 0x100, UTF-8 out, no initial text). The game presents no frame while the call waits.
 //
-// Front end: text_entry_run (swkbd.h), run on the guest thread that called (the call blocks, as on the Switch). The thread gives its virtual core up meanwhile, so the other guest threads keep running; it holds no
-// lock across the wait. The text starts as the game's initial text, else a default name from the catalog (ui_text.c),
-// selected, so a controller can confirm it: A = OK, B = cancel (each after it was seen released); Enter / Esc and the
-// buttons work too. While the window is open, and after it closes until everything is released, the game reads no
-// input (input_block). text_entry_run is the only front-end seam: an overlay (ImGui) can replace it.
+// Front end: text_entry_run (swkbd.h), run on the guest thread that called (the call blocks, as on the Switch). The
+// thread gives its virtual core up meanwhile, so the other guest threads keep running; it holds no lock across the
+// wait. The text starts as the game's initial text, else a default name from the catalog (ui_text.c), selected, so a
+// controller can confirm it: A = OK, B = cancel (each after it was seen released); Enter / Esc and the buttons work
+// too. While the entry is open, and after it closes until everything is released, the game reads no input
+// (input_block).
 //
 // Environment:
 //   XCX_SWKBD_ANSWER=<text>|<cancel>|<initial>   answer without a window (probes, scripted runs); <initial> keeps the
 //                                                 starting text (the game's, else the default name)
-//   XCX_SWKBD_TEST=ok|cancel                     open the window, then press OK / Cancel on the first timer tick
+//   XCX_SWKBD_TEST=ok|cancel                     open the entry, then press OK / Cancel (Win32: on the first timer tick;
+//                                                 SDL: 30 frames in, and type:<text> types <text> first, ui/menu.cpp)
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>

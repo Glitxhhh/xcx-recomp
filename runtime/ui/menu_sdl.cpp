@@ -41,6 +41,17 @@ static ImGuiKey key_of(SDL_Scancode sc) {
 
 extern "C" void menu_sdl_event(const SDL_Event *e) {
     float d = (float)gfx_window_sdl_density();
+    bool text = menu_text_active(), ui = text || menu_is_open();   // ui: the mouse goes to the menu or the entry
+    if (text) {   // a text entry (swkbd_sdl.c): every key and the typed text go to it, nothing toggles
+        if (e->type == SDL_EVENT_TEXT_INPUT) {
+            menu_event_text(e->text.text);
+            return;
+        }
+        if (e->type == SDL_EVENT_KEY_DOWN || e->type == SDL_EVENT_KEY_UP) {
+            if (ImGuiKey k = key_of(e->key.scancode)) menu_event_key(k, e->type == SDL_EVENT_KEY_DOWN);
+            return;
+        }
+    }
     switch (e->type) {
     case SDL_EVENT_KEY_DOWN:
         // Esc with the menu open (opened by F1 too) is not a toggle here: it goes to the menu, which closes itself
@@ -59,11 +70,11 @@ extern "C" void menu_sdl_event(const SDL_Event *e) {
         if (ImGuiKey k = key_of(e->key.scancode)) menu_event_key(k, e->type == SDL_EVENT_KEY_DOWN);
         return;
     case SDL_EVENT_MOUSE_MOTION:
-        if (menu_is_open()) menu_event_mouse_pos(e->motion.x * d, e->motion.y * d);
+        if (ui) menu_event_mouse_pos(e->motion.x * d, e->motion.y * d);
         return;
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
     case SDL_EVENT_MOUSE_BUTTON_UP: {
-        if (!menu_is_open()) return;
+        if (!ui) return;
         int b = e->button.button == SDL_BUTTON_LEFT ? 0 : e->button.button == SDL_BUTTON_RIGHT ? 1
               : e->button.button == SDL_BUTTON_MIDDLE ? 2 : -1;
         if (b < 0) return;
@@ -72,7 +83,7 @@ extern "C" void menu_sdl_event(const SDL_Event *e) {
         return;
     }
     case SDL_EVENT_MOUSE_WHEEL:
-        if (menu_is_open()) menu_event_wheel(e->wheel.x, e->wheel.y);
+        if (ui) menu_event_wheel(e->wheel.x, e->wheel.y);
         return;
     case SDL_EVENT_WINDOW_FOCUS_GAINED:
     case SDL_EVENT_WINDOW_FOCUS_LOST:
