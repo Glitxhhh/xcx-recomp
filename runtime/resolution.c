@@ -13,6 +13,9 @@
 // 3840x2160, 1920x1080 at 2560x1440, none at 5160x2160). The patch set "resbuf" (recomp/patches-upd.txt) loads them
 // from the patch page's +0x50 and +0x54 instead: XCX_RES_BUFFER = <w>x<h> switches it on, unset keeps the game's.
 //
+// A menu with a 3D model draws in a second view that asks for 1920x1080 by itself, so the patch set "viewsize"
+// (recomp/patches-upd.txt) gives such a view the main view's size whenever the game resolution is set.
+//
 // XCX_RENDER_SCALE sets the share of the game resolution the 3D scene draws in. The game picks that share itself by
 // dynamic resolution (at 100 % in every run so far, even at 19 fps), only inside its full-size render targets, so a scale
 // above 100 would draw outside them: the patch sets "scene" and "scenefull" (recomp/patches-upd.txt) replace the game's
@@ -140,6 +143,7 @@ void res_init(void) {
     plat_mem_protect(page_at, 0x1000, PLAT_PROT_READ);
     R.on = 1;
     rt_log("resolution: %ux%u (handheld %ux%u)", want[0], want[1], want[2], want[3]);
+    rt_patch_switch(rt_patch_set("viewsize"), 1);
     ui_fit_init();
 }
 
