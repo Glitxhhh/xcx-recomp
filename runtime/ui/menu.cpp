@@ -28,6 +28,7 @@ extern "C" {
 #include "input_map.h"
 #include "perfmon.h"
 #include "platform/platform.h"
+#include "swkbd.h"
 #include "sysinfo.h"
 #include "ui/menu.h"
 #include "ui_text.h"
@@ -75,20 +76,22 @@ static int change_open(int want) {
 static void set_open(int open) { change_open(open); }
 
 static int g_failed_flag();
+static std::atomic<int> g_text;   // a text entry is up (menu_text_begin): it takes the input and the overlay
 extern "C" int menu_is_open(void) { return g_open.load(std::memory_order_relaxed); }
-extern "C" void menu_toggle(void) {
-    if (!g_failed_flag()) change_open(-1);
+extern "C" int menu_text_active(void) { return g_text.load(std::memory_order_relaxed); }
+extern "C" void menu_toggle(void) {   // not over a text entry: the game is waiting for its answer
+    if (!g_failed_flag() && !menu_text_active()) change_open(-1);
 }
 
 // ---- events from the window adapter, queued while the menu is open; the present path hands them to ImGui
-enum { EV_KEY, EV_POS, EV_BUTTON, EV_WHEEL, EV_FOCUS, EV_MAX = 256 };
+enum { EV_KEY, EV_POS, EV_BUTTON, EV_WHEEL, EV_FOCUS, EV_CHAR, EV_MAX = 256 };
 struct Ev { int type, a, b; float x, y; };
 static PlatMutex ev_lock = PLAT_MUTEX_INIT;
 static Ev ev_q[EV_MAX];
 static int ev_n;
 
 static void push(Ev e) {
-    if (!menu_is_open()) return;
+    if (!menu_is_open() && !menu_text_active()) return;
     plat_mutex_lock(&ev_lock);
     if (e.type == EV_POS && ev_n && ev_q[ev_n - 1].type == EV_POS) ev_q[ev_n - 1] = e;   // only the newest position
     else if (ev_n < EV_MAX) ev_q[ev_n++] = e;
@@ -100,6 +103,11 @@ extern "C" void menu_event_mouse_pos(float x, float y) { push({EV_POS, 0, 0, x, 
 extern "C" void menu_event_mouse_button(int button, int down) { push({EV_BUTTON, button, down, 0, 0}); }
 extern "C" void menu_event_wheel(float dx, float dy) { push({EV_WHEEL, 0, 0, dx, dy}); }
 extern "C" void menu_event_focus(int focused) { push({EV_FOCUS, focused, 0, 0, 0}); }
+extern "C" void menu_event_text(const char *utf8) {
+    uint16_t u[64];
+    size_t n = swkbd_utf8_to_utf16(utf8, u, sizeof u / sizeof *u);
+    for (size_t i = 0; i < n; i++) push({EV_CHAR, u[i], 0, 0, 0});
+}
 
 static void drain_events(ImGuiIO &io) {
     Ev q[EV_MAX];
@@ -116,6 +124,7 @@ static void drain_events(ImGuiIO &io) {
         case EV_BUTTON: io.AddMouseButtonEvent(e.a, e.b != 0); break;
         case EV_WHEEL: io.AddMouseWheelEvent(e.x, e.y); break;
         case EV_FOCUS: io.AddFocusEvent(e.a != 0); break;
+        case EV_CHAR: io.AddInputCharacterUTF16((ImWchar16)e.a); break;
         }
     }
 }
@@ -760,6 +769,128 @@ static int g_tab;               // the tab shown
 static int g_tab_request = -1;  // select this tab at the next layout; -1 none
 static int g_focus_page = -1;   // this tab's first row takes the cursor once it is shown; -1 none
 
+// ---- the text entry (swkbd_sdl.c): a field over the last game image while the game waits for the answer. A or Plus on
+// the gamepad and Enter confirm, B and Esc cancel; the gamepad's buttons count once seen released, so the press that
+// opened the entry does not answer it. The fields below belong to the present path while g_text is set; text_lock
+// orders menu_text_poll's read of the answer after the frame that wrote it.
+static PlatMutex text_lock = PLAT_MUTEX_INIT;
+static char g_text_buf[(KB_LIMIT + 1) * 3], g_text_prompt[0x101 * 3];
+static int g_text_max, g_text_min, g_text_digits, g_text_focus, g_text_answer, g_text_frames;
+static uint32_t g_text_disabled;
+
+extern "C" void menu_text_begin(const char *prompt, const char *initial, int max_len, int min_len, uint32_t disabled,
+                                int digits_only) {
+    plat_mutex_lock(&text_lock);
+    snprintf(g_text_prompt, sizeof g_text_prompt, "%s", prompt);
+    snprintf(g_text_buf, sizeof g_text_buf, "%s", initial);
+    g_text_max = max_len, g_text_min = min_len, g_text_disabled = disabled, g_text_digits = digits_only;
+    g_text_focus = 1, g_text_answer = g_text_frames = 0;
+    g_reset.store(1);
+    g_text.store(1);
+    plat_mutex_unlock(&text_lock);
+}
+
+extern "C" int menu_text_poll(char *out, size_t cap) {
+    plat_mutex_lock(&text_lock);
+    int a = g_text_answer;
+    if (a) {
+        snprintf(out, cap, "%s", g_text_buf);
+        g_text.store(0);
+        g_reset.store(1);
+    }
+    plat_mutex_unlock(&text_lock);
+    return a;
+}
+
+// UTF-16 units of UTF-8 text, as the applet counts the length. With cut: *cut is the byte offset of the character that
+// takes the count past max, -1 when none does.
+static int text_units(const char *s, int max, int *cut) {
+    int units = 0;
+    for (const unsigned char *p = (const unsigned char *)s; *p;) {
+        int len = *p < 0x80 ? 1 : *p < 0xe0 ? 2 : *p < 0xf0 ? 3 : 4;
+        units += len == 4 ? 2 : 1;
+        if (cut && units > max) {
+            *cut = (int)((const char *)p - s);
+            return units;
+        }
+        while (len-- && *p) p++;
+    }
+    if (cut) *cut = -1;
+    return units;
+}
+
+static int text_callback(ImGuiInputTextCallbackData *d) {
+    if (d->EventFlag == ImGuiInputTextFlags_CallbackCharFilter)   // the applet's disabled keys
+        return d->EventChar > 0xffff || !swkbd_allowed((uint16_t)d->EventChar, g_text_disabled, g_text_digits);
+    int cut;   // CallbackEdit: the length the game allows
+    if (g_text_max > 0) {
+        text_units(d->Buf, g_text_max, &cut);
+        if (cut >= 0) d->DeleteChars(cut, d->BufTextLen - cut);
+    }
+    return 0;
+}
+
+// The gamepad's answer this frame: 1 A or Plus, -1 B, 0 none
+static int text_pad(int reset) {
+    uint64_t b;
+    int32_t lx, ly;
+    input_pad_read(&b, &lx, &ly);
+    uint64_t down = b & ~pad_prev;
+    pad_prev = b;
+    if (reset) return 0;
+    if (down & (1ull << B_A | 1ull << B_PLUS)) return 1;
+    return down & 1ull << B_B ? -1 : 0;
+}
+
+// Test hook XCX_SWKBD_TEST=ok|cancel|type:<text>: OK or Cancel 30 frames into the entry; type: types <text> at frame
+// 20 (over the selected starting text) and presses OK at frame 40. The frame that answers goes to XCX_MENU_TEST_DIR as
+// swkbd-test-<frame>.png. Returns the answer as text_pad does.
+static int text_test(ImGuiIO &io) {
+    const char *t = cfg_get("XCX_SWKBD_TEST");
+    if (!t) return 0;
+    int f = ++g_text_frames;
+    if (!strncmp(t, "type:", 5)) {
+        if (f == 20) io.AddInputCharactersUTF8(t + 5);
+        return f >= 40;
+    }
+    return f < 30 ? 0 : !strcmp(t, "cancel") ? -1 : 1;
+}
+
+// The text entry's window; returns this frame's answer (1 OK, -1 Cancel, 0 none). pad: text_pad's answer.
+static int layout_text(uint32_t w, uint32_t h, float scale, int pad) {
+    ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0, 0), ImVec2((float)w, (float)h), IM_COL32(0, 0, 0, 120));
+    ImGui::SetNextWindowPos(ImVec2(w * 0.5f, h * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(fminf(w * 0.9f, 760 * scale), 0), ImGuiCond_Always);
+    ImGui::Begin("##text", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                                        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav);
+    ImGui::TextColored(ImVec4(0.35f, 0.86f, 0.96f, 1), "%s", ui_text(UI_SWKBD_TITLE));
+    ImGui::Spacing();
+    ImGui::TextWrapped("%s", g_text_prompt[0] ? g_text_prompt : ui_text(UI_SWKBD_PROMPT));
+    int answer = ImGui::IsKeyPressed(ImGuiKey_Escape, false) ? -1 : pad;
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    // the field keeps the keyboard: at the start, its text selected so typing replaces it, and after a click beside it
+    if (g_text_focus || (!ImGui::GetActiveID() && !ImGui::IsMouseDown(0))) ImGui::SetKeyboardFocusHere();
+    g_text_focus = 0;
+    if (ImGui::InputText("##text_field", g_text_buf, sizeof g_text_buf,
+                         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll |
+                             ImGuiInputTextFlags_CallbackCharFilter | ImGuiInputTextFlags_CallbackEdit,
+                         text_callback) && !answer)
+        answer = 1;
+    ImGui::TextDisabled("%s", ui_text(UI_SWKBD_PAD_HINT));
+    const ImGuiStyle &st = ImGui::GetStyle();
+    const char *ok = ui_text(UI_SWKBD_OK), *cancel = ui_text(UI_SWKBD_CANCEL);
+    float bw = fmaxf(ImGui::CalcTextSize(ok).x, ImGui::CalcTextSize(cancel).x) + st.FramePadding.x * 4;
+    ImGui::SetCursorPosX(ImGui::GetWindowWidth() - st.WindowPadding.x - bw * 2 - st.ItemSpacing.x);
+    int short_text = text_units(g_text_buf, 0, nullptr) < g_text_min;   // OK waits for the game's shortest length
+    ImGui::BeginDisabled(short_text);
+    if (ImGui::Button(ok, ImVec2(bw, 0))) answer = 1;
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button(cancel, ImVec2(bw, 0))) answer = -1;
+    ImGui::End();
+    return answer == 1 && short_text ? 0 : answer;
+}
+
 // ---- the window: title, tabs (L / R or Q / E switch), the page, and the bottom row with "Continue" and "Quit game".
 // B on the gamepad and Esc close it.
 static void layout_menu(uint32_t w, uint32_t h, float scale) {
@@ -1089,7 +1220,8 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
     if (g_perf_save.exchange(0)) cfg_save();
     perf_tick(plat_now_ns(), t);
     bool open = g_open.load(std::memory_order_relaxed);
-    if (!open) {
+    bool text = g_text.load(std::memory_order_acquire);
+    if (!open && !text) {
         if (g_save_pending) g_save_pending = opt_save_tick(1);   // closed: the last change goes to xcx.ini now
         if (g_test.at && !g_test.opened && frame >= g_test.at) {
             g_test.opened = frame;
@@ -1134,7 +1266,12 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
     double dt = g_last_ns ? (t0 - g_last_ns) / 1e9 : 1 / 60.0;
     io.DeltaTime = (float)(dt < 1e-4 ? 1e-4 : dt > 0.1 ? 0.1 : dt);
     g_last_ns = t0;
-    if (!open) {   // the overlay alone: no input reaches ImGui
+    int pad = 0;
+    if (!open && !text) {   // the overlay alone: no input reaches ImGui
+    } else if (text) {
+        drain_events(io);
+        pad = text_pad(reset);
+        if (int a = text_test(io)) pad = a;
     } else if (g_test.page < 0) {
         drain_events(io);
         pad_events(io, reset);
@@ -1145,7 +1282,22 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
     }
     ImGui_ImplVulkan_NewFrame();
     ImGui::NewFrame();
-    if (open) layout_menu(t->width, t->height, scale);
+    if (text) {
+        plat_mutex_lock(&text_lock);
+        int answer = layout_text(t->width, t->height, scale, pad);
+        if (answer && !g_text_answer) {
+            g_text_answer = answer;
+            if (cfg_get("XCX_SWKBD_TEST")) {   // the test hook keeps the frame that answered
+                static char path[512];
+                const char *dir = cfg_get("XCX_MENU_TEST_DIR");
+                snprintf(path, sizeof path, "%s/swkbd-test-%llu.png", dir ? dir : ".", (unsigned long long)frame);
+                *shot = path;
+            }
+        }
+        plat_mutex_unlock(&text_lock);
+    } else if (open) {
+        layout_menu(t->width, t->height, scale);
+    }
     perf_draw(t, scale);
     ImGui::Render();
     if (open) g_save_pending = opt_save_tick(0);

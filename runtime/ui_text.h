@@ -5,7 +5,7 @@
 typedef enum {
     // Software keyboard
     UI_SWKBD_TITLE,          // caption of the text-entry window
-    UI_SWKBD_PROMPT,         // prompt when the game gives no header, guide or sub text (XCX names a horse)
+    UI_SWKBD_PROMPT,         // prompt when the game gives no header, guide or sub text
     UI_SWKBD_DEFAULT_NAME,   // text the entry starts with when the game gives none, so a controller can confirm it
     UI_SWKBD_OK,
     UI_SWKBD_CANCEL,

@@ -98,6 +98,8 @@ static uint32_t g_sc_n;
 static VkImage g_sc_img[MAX_IMAGES];
 static VkImageView g_sc_view[MAX_IMAGES];   // colour attachment views for the menu overlay
 static VkSemaphore g_render_done[MAX_IMAGES];
+// The last present_image call's game image, for vk_present_repeat: the text entry shows it again while the game waits.
+static struct { VkImage src; VkImageLayout layout; VkFormat fmt; int w, h, crop[4], has_crop; } g_last;
 static VkCommandPool g_pool;
 static VkCommandBuffer g_cb[FRAMES];
 static VkFence g_fence[FRAMES];
@@ -673,6 +675,9 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
         rt_log("gfx: present submit failed (%d)", (int)r);
     }
     g_frame++;
+    g_last.src = src, g_last.layout = layout, g_last.fmt = fmt, g_last.w = w, g_last.h = h;
+    g_last.has_crop = crop != NULL;
+    if (crop) memcpy(g_last.crop, crop, sizeof g_last.crop);
     if (cap) {
         vkWaitForFences(c->device, 1, &g_fence[slot], VK_TRUE, 5000000000ull);
         vmaInvalidateAllocation(c->vma, g_cap_alloc, 0, VK_WHOLE_SIZE);
@@ -691,6 +696,18 @@ void vk_present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, in
 
 void vk_present_blit(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4]) {
     present_image(src, layout, fmt, w, h, crop, 1);
+}
+
+int vk_present_repeat(void) {
+    plat_rmutex_lock(&g_pl);
+    int have = g_last.src != VK_NULL_HANDLE;
+    if (have) {
+        int crop[4];
+        memcpy(crop, g_last.crop, sizeof crop);
+        present_image(g_last.src, g_last.layout, g_last.fmt, g_last.w, g_last.h, g_last.has_crop ? crop : NULL, 0);
+    }
+    plat_rmutex_unlock(&g_pl);
+    return have;
 }
 
 void vk_present_flip(void) {

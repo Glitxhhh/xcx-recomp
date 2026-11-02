@@ -330,3 +330,14 @@ int wsys_probe_click(int where) {
     run_on_window(probe_event, &e);
     return 1;
 }
+
+// ---- text input for the text entry (swkbd_sdl.c): SDL_EVENT_TEXT_INPUT while on; SDL shows a screen keyboard where
+// the host has one (Steam's on the Steam Deck)
+static void text_input(void *arg) {
+    if (*(int *)arg) SDL_StartTextInput(g_win);
+    else SDL_StopTextInput(g_win);
+}
+
+void gfx_window_sdl_text_input(int on) {
+    if (g_win) run_on_window(text_input, &on);
+}

@@ -18,13 +18,14 @@ typedef struct { const char *lang; const char *const *text; } Row;
     [UI_MENU_LANGNAME_NL] = "Nederlands", [UI_MENU_LANGNAME_RU] = "Русский", \
     [UI_MENU_LANGNAME_ZH_HANS] = "简体中文", [UI_MENU_LANGNAME_ZH_HANT] = "繁體中文", [UI_MENU_LANGNAME_KO] = "한국어"
 
-// SWKBD: TITLE, PROMPT, DEFAULT_NAME (at most 9 UTF-16 units, no '@' '%' '\'), OK, CANCEL, PAD_HINT.
+// SWKBD: TITLE, PROMPT, DEFAULT_NAME, OK, CANCEL, PAD_HINT. The default name is the player character's canonical one,
+// in Latin letters in every language (the SDL text entry's font has none for Japanese, Chinese or Korean names).
 #define SWKBD(title, prompt, name, ok, cancel, hint) \
     [UI_SWKBD_TITLE] = title, [UI_SWKBD_PROMPT] = prompt, [UI_SWKBD_DEFAULT_NAME] = name, [UI_SWKBD_OK] = ok, \
     [UI_SWKBD_CANCEL] = cancel, [UI_SWKBD_PAD_HINT] = hint, LANG_NAMES
 
 static const char *const text_en[UI_TEXT_COUNT] = {
-    SWKBD("Text entry", "Enter a name", "Horse", "OK", "Cancel", "Controller: A = OK, B = Cancel"),
+    SWKBD("Text entry", "Enter a name", "Cross", "OK", "Cancel", "Controller: A = OK, B = Cancel"),
 
     [UI_MENU_TITLE] = "Settings",
     [UI_MENU_TAB_SCREEN] = "Screen", [UI_MENU_TAB_GAME] = "Game", [UI_MENU_TAB_SOUND] = "Sound",
@@ -256,7 +257,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
 };
 
 static const char *const text_ru[UI_TEXT_COUNT] = {
-    SWKBD("Ввод текста", "Введите имя", "Лошадь", "ОК", "Отмена", "Контроллер: A — ОК, B — отмена"),
+    SWKBD("Ввод текста", "Введите имя", "Cross", "ОК", "Отмена", "Контроллер: A — ОК, B — отмена"),
 
     [UI_MENU_TITLE] = "Настройки",
     [UI_MENU_TAB_SCREEN] = "Экран", [UI_MENU_TAB_GAME] = "Игра", [UI_MENU_TAB_SOUND] = "Звук",
@@ -494,17 +495,17 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
 };
 
 #define SWKBD_ONLY(name, ...) static const char *const name[UI_TEXT_COUNT] = {SWKBD(__VA_ARGS__)}
-SWKBD_ONLY(text_ja, "文字入力", "名前を入力してください", "ウマ", "OK", "キャンセル", "コントローラー: A = OK、B = キャンセル");
-SWKBD_ONLY(text_fr, "Saisie de texte", "Entrez un nom", "Cheval", "OK", "Annuler", "Manette : A = OK, B = Annuler");
-SWKBD_ONLY(text_de, "Texteingabe", "Gib einen Namen ein", "Pferd", "OK", "Abbrechen", "Controller: A = OK, B = Abbrechen");
-SWKBD_ONLY(text_it, "Inserimento testo", "Inserisci un nome", "Cavallo", "OK", "Annulla", "Controller: A = OK, B = Annulla");
-SWKBD_ONLY(text_es, "Introducir texto", "Introduce un nombre", "Caballo", "Aceptar", "Cancelar",
+SWKBD_ONLY(text_ja, "文字入力", "名前を入力してください", "Cross", "OK", "キャンセル", "コントローラー: A = OK、B = キャンセル");
+SWKBD_ONLY(text_fr, "Saisie de texte", "Entrez un nom", "Cross", "OK", "Annuler", "Manette : A = OK, B = Annuler");
+SWKBD_ONLY(text_de, "Texteingabe", "Gib einen Namen ein", "Cross", "OK", "Abbrechen", "Controller: A = OK, B = Abbrechen");
+SWKBD_ONLY(text_it, "Inserimento testo", "Inserisci un nome", "Cross", "OK", "Annulla", "Controller: A = OK, B = Annulla");
+SWKBD_ONLY(text_es, "Introducir texto", "Introduce un nombre", "Cross", "Aceptar", "Cancelar",
            "Mando: A = Aceptar, B = Cancelar");
-SWKBD_ONLY(text_nl, "Tekstinvoer", "Voer een naam in", "Paard", "OK", "Annuleren", "Controller: A = OK, B = Annuleren");
-SWKBD_ONLY(text_pt, "Inserir texto", "Introduz um nome", "Cavalo", "OK", "Cancelar", "Comando: A = OK, B = Cancelar");
-SWKBD_ONLY(text_zh_hans, "文字输入", "请输入名字", "马儿", "确定", "取消", "手柄：A 确定，B 取消");
-SWKBD_ONLY(text_zh_hant, "文字輸入", "請輸入名字", "馬兒", "確定", "取消", "手把：A 確定，B 取消");
-SWKBD_ONLY(text_ko, "문자 입력", "이름을 입력하세요", "말", "확인", "취소", "컨트롤러: A 확인, B 취소");
+SWKBD_ONLY(text_nl, "Tekstinvoer", "Voer een naam in", "Cross", "OK", "Annuleren", "Controller: A = OK, B = Annuleren");
+SWKBD_ONLY(text_pt, "Inserir texto", "Introduz um nome", "Cross", "OK", "Cancelar", "Comando: A = OK, B = Cancelar");
+SWKBD_ONLY(text_zh_hans, "文字输入", "请输入名字", "Cross", "确定", "取消", "手柄：A 确定，B 取消");
+SWKBD_ONLY(text_zh_hant, "文字輸入", "請輸入名字", "Cross", "確定", "取消", "手把：A 確定，B 取消");
+SWKBD_ONLY(text_ko, "문자 입력", "이름을 입력하세요", "Cross", "확인", "취소", "컨트롤러: A 확인, B 취소");
 
 static const Row rows[] = {
     {"en", text_en}, {"ja", text_ja}, {"fr", text_fr}, {"de", text_de}, {"it", text_it}, {"es", text_es},

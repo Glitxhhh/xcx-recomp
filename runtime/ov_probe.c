@@ -661,7 +661,7 @@ static void probe_media_gfx(void) {
            "vsync event %s\n", display, layer, window, vsync ? "bound (auto-clear)" : "FAILED");
 }
 
-// ---- software keyboard (swkbd.c): ShowKeyboardArg built by the SDK's own setters, as the horse naming does
+// ---- software keyboard (swkbd.c): ShowKeyboardArg built by the SDK's own setters, as a game does
 enum { KB_TYPE = 0x00, KB_DISABLED = 0x1c, KB_HEADER = 0x24, KB_GUIDE = 0x1a8, KB_MAX_LEN = 0x3ac, KB_MIN_LEN = 0x3b0,
        KB_UTF8 = 0x3bd, KB_INIT_LEN = 0x3c4, STRING_SIZE = 0x7d4, SWKBD_CANCELED = 0x29f };
 #define ARG_WORK (RT_V143 ? 0x518 : 0x4d0)   // SDK 20.5 grew KeyboardConfig (swkbd.c)
@@ -725,7 +725,7 @@ static void probe_swkbd(void) {
 
     const char *def = ui_text(UI_SWKBD_DEFAULT_NAME);
     const KbCase cases[] = {
-        {2, 8, 9, 0, 0x2c, 0, 0, NULL, "Epona", "Epona", 0},                  // XCX's horse naming (main+0x1ecbf64)
+        {2, 8, 9, 0, 0x2c, 0, 0, NULL, "Epona", "Epona", 0},                  // a name, UserName preset
         {2, 8, 9, 0, 0x2c, 0, 0, NULL, "ABCDEFGHIJKL", "ABCDEFGHI", 0},        // at most 9
         {2, 8, 9, 0, 0x2c, 0, 0, NULL, "a@b%c\\d e/f", "abcd e/f", 0},         // '@' '%' '\' disabled
         {2, 8, 9, 0, 0x2c, 0, 0, NULL, "<cancel>", "", SWKBD_CANCELED},
@@ -762,7 +762,7 @@ static void probe_swkbd(void) {
     input_poll_ui(&b, &lx, &ly, &rx, &ry);
     if (!b) input_poll(&b, &lx, &ly, &rx, &ry);
     printf("swkbd: %d of %d cases (arguments from the SDK's MakePreset/SetHeaderText/SetGuideText/SetInitialText; "
-           "horse-name limits, disabled keys, cancel 0x29f, default name \"%s\", UTF-8 out, surrogate pairs, number pad, "
+           "name limits, disabled keys, cancel 0x29f, default name \"%s\", UTF-8 out, surrogate pairs, number pad, "
            "minimum length, the Win32 window with OK and Cancel)\n", n - bad, n, def);
 }
 

@@ -14,6 +14,7 @@
 // Threads: the event functions are called by the window thread, menu_toggle by whichever thread polls the pad, the
 // overlay functions by the present path under its lock. ImGui itself runs on the present path only.
 #pragma once
+#include <stddef.h>
 #include <stdint.h>
 #include <vulkan/vulkan.h>
 
@@ -33,6 +34,17 @@ void menu_event_mouse_pos(float x, float y);
 void menu_event_mouse_button(int button, int down);   // 0 left, 1 right, 2 middle
 void menu_event_wheel(float dx, float dy);
 void menu_event_focus(int focused);
+void menu_event_text(const char *utf8);   // typed text (SDL_EVENT_TEXT_INPUT)
+
+// ---- the text entry (swkbd_sdl.c), any thread: while one is up the overlay shows a text field over the game instead of
+// the menu, the events above go to it and menu_toggle does nothing. Someone must keep presenting meanwhile
+// (vk_present_repeat, vk.h): the game waits for the answer and presents nothing. max_len and min_len count UTF-16 units
+// (0: no limit); disabled and digits_only as swkbd_allowed (swkbd.h).
+void menu_text_begin(const char *prompt, const char *initial, int max_len, int min_len, uint32_t disabled,
+                     int digits_only);
+// 0 while the entry is up; 1 OK with the text in out (UTF-8), -1 Cancel. A nonzero answer ends the entry.
+int menu_text_poll(char *out, size_t cap);
+int menu_text_active(void);
 
 // ---- the overlay, drawn into the swapchain image after the game image (gfx_present.c, present lock held)
 typedef struct {
