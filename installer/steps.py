@@ -669,9 +669,14 @@ class Compile(Step):
                            layout.sysroot or 'host', *tools, clang, *[d.name for d in layout.dlls])
 
     @staticmethod
-    def runtime_lib(ctx):
+    def v3(ctx):
+        """Build for x86-64-v3: the check found AVX2, or has not run (a check-only pass computes the keys first)."""
+        host = getattr(ctx, 'host', None)
+        return host is None or host['x86_64_v3']
+
+    def runtime_lib(self, ctx):
         """The runtime library for this CPU: the x86-64-v2 one when the check found no AVX2."""
-        return ctx.layout.runtime_lib if ctx.host['x86_64_v3'] else ctx.layout.runtime_lib_v2
+        return ctx.layout.runtime_lib if self.v3(ctx) else ctx.layout.runtime_lib_v2
 
     def current(self, ctx, record):
         exe = ctx.dest / GAME_EXE
@@ -699,7 +704,7 @@ class Compile(Step):
             '--gen', ctx.temp / 'gen', '--out', build, '--toolchain', layout.llvm,
             *(['--deps', layout.deps] if layout.deps else []), *(['--sysroot', layout.sysroot] if layout.sysroot else []),
             '--runtime', layout.runtime, '--runtime-lib', self.runtime_lib(ctx), '--ninja', layout.ninja,
-            '--cpu', 'x86-64-v3' if ctx.host['x86_64_v3'] else 'x86-64-v2',
+            '--cpu', 'x86-64-v3' if self.v3(ctx) else 'x86-64-v2',
             '--version', version_tag(game_version(ctx)), '--expected', layout.expected(game_version(ctx)),
             '--exefs', dest / 'exefs', '--romfs', dest / 'romfs',
             '--profile', dest / 'profile'], parse)
