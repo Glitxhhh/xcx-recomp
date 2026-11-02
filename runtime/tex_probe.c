@@ -359,6 +359,34 @@ static int test_import(pool_t *pool) {
     copy_wait(sp.buffer, sp.offset, sb, 0, 0x4000);
     vmaInvalidateAllocation(c->vma, sa, 0, VK_WHOLE_SIZE);
     GCHECK(!memcmp(s, m + 0x30000, 0x4000), "GPU read of CPU-written heap differs");
+
+    // A range noted as GPU-written that the CPU also writes, as the movie's 32-byte block: the CPU's bytes reach the
+    // GPU, the GPU's bytes reach the CPU, and neither side loses its own, also when the CPU writes after the last sync.
+    uint8_t *b = m + 0x38000, want[32];
+    uint64_t ba = a + 0x38000;
+    memset(b, 0x11, 32);
+    vk_mem_resolve(ba, 32, &sp);
+    vk_mem_shadow_sync();
+    vk_mem_resolve(ba, 32, &sp);
+    vk_mem_gpu_pending(ba, 32);
+    memset(b, 0, 8);
+    vk_mem_shadow_sync();
+    b[1] = 0x55;
+    for (int i = 0; i < 32; i++) s[i] = rnd8() | 0x80;
+    vmaFlushAllocation(c->vma, sa, 0, VK_WHOLE_SIZE);
+    copy_wait(sb, 16, sp.buffer, sp.offset + 16, 16);
+    vk_gpu_written(ba, 32);
+    memset(want, 0, 8), want[1] = 0x55;
+    memset(want + 8, 0x11, 8);
+    memcpy(want + 16, s + 16, 16);
+    GCHECK(!memcmp(b, want, 32), "guest copy of a range both sides write lost a side's bytes");
+    vk_mem_resolve(ba, 32, &sp);
+    vk_mem_shadow_sync();
+    copy_wait(sp.buffer, sp.offset, sb, 0, 32);
+    vmaInvalidateAllocation(c->vma, sa, 0, VK_WHOLE_SIZE);
+    GCHECK(!memcmp(s, want, 32), "GPU read of a range both sides write lost a side's bytes");
+    printf("probe-vkmem: a range the CPU and the GPU both write keeps both sides' bytes\n");
+    g_gpu_checks += 2;
     vmaDestroyBuffer(c->vma, sb, sa);
 
     // generations: written after `since` -> 1, then 0, explicit host write -> 1
