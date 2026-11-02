@@ -1,5 +1,5 @@
 // Host check of the installer's first step, compiled with the bundled clang at install time: does the CPU run
-// -march=x86-64-v3 code, and does a Vulkan 1.3 device exist. Prints one JSON object on stdout.
+// -march=x86-64-v3 code, else -march=x86-64-v2 code, and does a Vulkan 1.3 device exist. Prints one JSON object on stdout.
 // The Vulkan loader is opened at run time, so a machine without one gets "loader": false instead of a failed start.
 #include <cpuid.h>
 #include <stdio.h>
@@ -43,8 +43,20 @@ static int x86_64_v3(void) {
     return (c & (1u << 5)) != 0;   // LZCNT (ABM)
 }
 
+// The x86-64-v2 level: CMPXCHG16B, LAHF/SAHF, POPCNT, SSE3, SSSE3, SSE4.1 and SSE4.2.
+static int x86_64_v2(void) {
+    unsigned a, b, c, d;
+    if (!__get_cpuid(1, &a, &b, &c, &d)) return 0;
+    const unsigned sse3 = 1u << 0, ssse3 = 1u << 9, cx16 = 1u << 13, sse41 = 1u << 19, sse42 = 1u << 20,
+                   popcnt = 1u << 23;
+    const unsigned all = sse3 | ssse3 | cx16 | sse41 | sse42 | popcnt;
+    if ((c & all) != all) return 0;
+    if (!__get_cpuid(0x80000001, &a, &b, &c, &d)) return 0;
+    return (c & 1u) != 0;   // LAHF/SAHF in 64-bit mode
+}
+
 int main(void) {
-    printf("{\"x86_64_v3\": %s, ", x86_64_v3() ? "true" : "false");
+    printf("{\"x86_64_v3\": %s, \"x86_64_v2\": %s, ", x86_64_v3() ? "true" : "false", x86_64_v2() ? "true" : "false");
     void *lib = open_lib();
     PFN_vkGetInstanceProcAddr gipa = lib ? (PFN_vkGetInstanceProcAddr)lib_sym(lib, "vkGetInstanceProcAddr") : NULL;
     if (!gipa) {
