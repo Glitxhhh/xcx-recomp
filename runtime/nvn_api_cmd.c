@@ -468,6 +468,7 @@ NVN_API(nvnCommandBufferUpdateUniformBuffer) {
 
 static void ui_note_target(const tex_t *t);
 static void ui_rect(const Cpu *c, float *x, float *w, int viewport);
+static void ui_undo_rects(cmd_t *o);
 // ---------- CommandBuffer: render state, payloads of nvn_obj.h
 // void nvnCommandBufferSetRenderTargets(NVNcommandBuffer *cmd, int n, const NVNtexture *const *colors,
 // const NVNtextureView *const *color_views, const NVNtexture *depth, const NVNtextureView *depth_view)
@@ -490,6 +491,7 @@ NVN_API(nvnCommandBufferSetRenderTargets) {
     ui_note_target(n > 0 ? r->color[0] : NULL);
     r->depth = tex_pin(dt);
     copy_view(&r->dview, &r->has_dview, dv);
+    ui_undo_rects(cmd_of(c));
 }
 // void nvnCommandBufferClearColor(NVNcommandBuffer *cmd, int index, const float *rgba, int mask)
 NVN_API(nvnCommandBufferClearColor) {
@@ -503,6 +505,17 @@ NVN_API(nvnCommandBufferClearColor) {
 NVN_API(nvnCommandBufferClearDepthStencil) {
     *REC(cmd_of(c), OP_CLEAR_DS, p_clear_ds) = (p_clear_ds){arg_s(c, 0), nvn_arg_bool(c, 1), (int)arg_x(c, 2), (int)arg_x(c, 3)};
 }
+// The game can set a viewport and scissor before it switches target, as it does for the 256x256 pictures of the save
+// rows and the party portraits. ui_rect then takes them for the output's and moves them off the small target, which left
+// the picture empty, so each narrowed rect is kept as the game gave it and SetRenderTargets puts it back for a target of
+// another size. Index 0 is the viewport, 1 the scissor.
+static _Thread_local struct { float r[4]; int narrowed; } ui_kept[2];
+
+static void ui_keep_rect(int i, const float *raw, float x, float w) {
+    memcpy(ui_kept[i].r, raw, sizeof ui_kept[i].r);
+    ui_kept[i].narrowed = x != raw[0] || w != raw[2];
+}
+
 static void set_viewports(cmd_t *o, int first, int n, const float *v) {
     if (first < 0 || n < 0 || first + n > 16) {
         rt_log("nvn: SetViewports first %d n %d", first, n);
@@ -521,19 +534,26 @@ NVN_API(nvnCommandBufferSetViewports) {
     float one[4];   // the game's array stays as it is: it may set the same one again
     memcpy(one, v, sizeof one);
     ui_rect(c, &one[0], &one[2], 1);
+    ui_keep_rect(0, v, one[0], one[2]);
     set_viewports(cmd_of(c), 0, 1, one);
 }
 // void nvnCommandBufferSetViewport(NVNcommandBuffer *cmd, int x, int y, int w, int h)
 NVN_API(nvnCommandBufferSetViewport) {
     float v[4] = {(float)(int)arg_x(c, 1), (float)(int)arg_x(c, 2), (float)(int)arg_x(c, 3), (float)(int)arg_x(c, 4)};
-    ui_rect(c, &v[0], &v[2], 1);
+    float x = v[0], w = v[2];
+    ui_rect(c, &x, &w, 1);
+    ui_keep_rect(0, v, x, w);
+    v[0] = x, v[2] = w;
     set_viewports(cmd_of(c), 0, 1, v);
 }
 static void set_scissor(cmd_t *o, int x, int y, int w, int h) { *REC(o, OP_SCISSOR, p_scissor) = (p_scissor){x, y, w, h}; }
+
 // void nvnCommandBufferSetScissor(NVNcommandBuffer *cmd, int x, int y, int w, int h)
 NVN_API(nvnCommandBufferSetScissor) {
     float x = (float)(int)arg_x(c, 1), w = (float)(int)arg_x(c, 3);
+    const float raw[4] = {x, (float)(int)arg_x(c, 2), w, (float)(int)arg_x(c, 4)};
     ui_rect(c, &x, &w, 0);
+    ui_keep_rect(1, raw, x, w);
     set_scissor(cmd_of(c), (int)x, (int)arg_x(c, 2), (int)w, (int)arg_x(c, 4));
 }
 // void nvnCommandBufferSetScissors(NVNcommandBuffer *cmd, int first, int n, const int *xywh): the replay keeps one
@@ -549,7 +569,9 @@ NVN_API(nvnCommandBufferSetScissors) {
         }
     if (first == 0 && n > 0) {
         float x = (float)r[0], w = (float)r[2];
+        const float raw[4] = {x, (float)r[1], w, (float)r[3]};
         ui_rect(c, &x, &w, 0);
+        ui_keep_rect(1, raw, x, w);
         set_scissor(cmd_of(c), (int)x, r[1], (int)w, r[3]);
     }
 }
@@ -682,6 +704,14 @@ static void ui_note_target(const tex_t *t) {
     ui_on_output = t && t->d.width == out[0] && t->d.height == out[1];
     ui_in_rect = 0;
     memset(ui_pages, 0, sizeof ui_pages);
+}
+
+static void ui_undo_rects(cmd_t *o) {
+    if (ui_on_output) return;
+    if (ui_kept[0].narrowed) set_viewports(o, 0, 1, ui_kept[0].r);
+    const float *s = ui_kept[1].r;
+    if (ui_kept[1].narrowed) set_scissor(o, (int)s[0], (int)s[1], (int)s[2], (int)s[3]);
+    ui_kept[0].narrowed = ui_kept[1].narrowed = 0;
 }
 
 // Whether the guest call chain runs through the interface renderer.
