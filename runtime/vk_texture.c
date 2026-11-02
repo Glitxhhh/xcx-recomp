@@ -878,8 +878,8 @@ const VkTexImage *vk_texture_get(const tex_t *t) {
 }
 
 // Small render targets the CPU reads without NVN's invalidate (vk_texture_write_back_small); small_pending: one may be
-// dirty.
-enum { WB_SMALL = 64 << 10 };
+// dirty. The limit is the 256x256 RGBA8 save thumbnail.
+enum { WB_SMALL = 256 << 10 };
 static int small_pending;
 
 void vk_texture_gpu_written(const tex_t *t) {
@@ -1414,7 +1414,9 @@ void vk_texture_write_back(uint64_t addr, uint64_t size) {
 
 // XCX's grass system renders a 128x128 RGBA8 map of cut and trampled grass into a CPU-cached pool every frame and its
 // CPU code reads the pool bytes without nvnMemoryPoolInvalidateMappedRange (cut reactions: blades, insects, the cut
-// itself). On the Switch the bytes are there once the frame's fence has passed. So when the
+// itself). The save thumbnail is the same: the game renders a 256x256 RGBA8 target, counts three frames and reads the
+// pool bytes itself (main+0xa36e70), with no fence wait or invalidate, so a thumbnail left in the image saves as black
+// (issue 38). On the Switch the bytes are there once the frame's fence has passed. So when the
 // CPU waits for a fence, mirrored targets up to WB_SMALL bytes rendered by work up to that fence go back to their
 // storage, unless the CPU rewrote it since. Larger targets still go back on an invalidate, memcpy or ReadTexels.
 int vk_texture_small_dirty(void) { return __atomic_load_n(&small_pending, __ATOMIC_ACQUIRE); }

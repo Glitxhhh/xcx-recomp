@@ -493,12 +493,15 @@ static void vk_be_guest_read(uint64_t addr, uint64_t size) {
     vk_texture_write_back(addr, size);
 }
 // After a fence wait: the value is done, so its replay is too; a later submission the replay records meanwhile marks
-// its targets with a later fence, which write_back_small leaves alone. No drain.
+// its targets with a later fence, which write_back_small leaves alone. No drain. Every value the GPU has completed
+// counts, not only the one waited for: in menus the game's only wait is on the window's acquire sync, which has fence
+// 0, and a target finished long ago would otherwise stay out of its storage.
 static void vk_be_cpu_synced(uint64_t fence) {
     if (!vk_texture_small_dirty()) return;
     vk_sync_start();
     vk_present_drain();
-    vk_texture_write_back_small(fence);
+    uint64_t done = vk_sync_fence_done();
+    vk_texture_write_back_small(done > fence ? done : fence);
 }
 
 const GfxBackend gfx_vulkan_backend = {
