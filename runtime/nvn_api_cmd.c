@@ -468,6 +468,7 @@ NVN_API(nvnCommandBufferUpdateUniformBuffer) {
 
 static void ui_note_target(const tex_t *t);
 static void ui_rect(const Cpu *c, float *x, float *w, int viewport);
+static void ui_undo_rects(cmd_t *o);
 // ---------- CommandBuffer: render state, payloads of nvn_obj.h
 // void nvnCommandBufferSetRenderTargets(NVNcommandBuffer *cmd, int n, const NVNtexture *const *colors,
 // const NVNtextureView *const *color_views, const NVNtexture *depth, const NVNtextureView *depth_view)
@@ -490,6 +491,7 @@ NVN_API(nvnCommandBufferSetRenderTargets) {
     ui_note_target(n > 0 ? r->color[0] : NULL);
     r->depth = tex_pin(dt);
     copy_view(&r->dview, &r->has_dview, dv);
+    ui_undo_rects(cmd_of(c));
 }
 // void nvnCommandBufferClearColor(NVNcommandBuffer *cmd, int index, const float *rgba, int mask)
 NVN_API(nvnCommandBufferClearColor) {
@@ -503,6 +505,17 @@ NVN_API(nvnCommandBufferClearColor) {
 NVN_API(nvnCommandBufferClearDepthStencil) {
     *REC(cmd_of(c), OP_CLEAR_DS, p_clear_ds) = (p_clear_ds){arg_s(c, 0), nvn_arg_bool(c, 1), (int)arg_x(c, 2), (int)arg_x(c, 3)};
 }
+// The game can set a viewport and scissor before it switches target, as it does for the 256x256 pictures of the save
+// rows and the party portraits. ui_rect then takes them for the output's and moves them off the small target, which left
+// the picture empty, so each narrowed rect is kept as the game gave it and SetRenderTargets puts it back for a target of
+// another size. Index 0 is the viewport, 1 the scissor.
+static _Thread_local struct { float r[4]; int narrowed; } ui_kept[2];
+
+static void ui_keep_rect(int i, const float *raw, float x, float w) {
+    memcpy(ui_kept[i].r, raw, sizeof ui_kept[i].r);
+    ui_kept[i].narrowed = x != raw[0] || w != raw[2];
+}
+
 static void set_viewports(cmd_t *o, int first, int n, const float *v) {
     if (first < 0 || n < 0 || first + n > 16) {
         rt_log("nvn: SetViewports first %d n %d", first, n);
@@ -521,19 +534,26 @@ NVN_API(nvnCommandBufferSetViewports) {
     float one[4];   // the game's array stays as it is: it may set the same one again
     memcpy(one, v, sizeof one);
     ui_rect(c, &one[0], &one[2], 1);
+    ui_keep_rect(0, v, one[0], one[2]);
     set_viewports(cmd_of(c), 0, 1, one);
 }
 // void nvnCommandBufferSetViewport(NVNcommandBuffer *cmd, int x, int y, int w, int h)
 NVN_API(nvnCommandBufferSetViewport) {
     float v[4] = {(float)(int)arg_x(c, 1), (float)(int)arg_x(c, 2), (float)(int)arg_x(c, 3), (float)(int)arg_x(c, 4)};
-    ui_rect(c, &v[0], &v[2], 1);
+    float x = v[0], w = v[2];
+    ui_rect(c, &x, &w, 1);
+    ui_keep_rect(0, v, x, w);
+    v[0] = x, v[2] = w;
     set_viewports(cmd_of(c), 0, 1, v);
 }
 static void set_scissor(cmd_t *o, int x, int y, int w, int h) { *REC(o, OP_SCISSOR, p_scissor) = (p_scissor){x, y, w, h}; }
+
 // void nvnCommandBufferSetScissor(NVNcommandBuffer *cmd, int x, int y, int w, int h)
 NVN_API(nvnCommandBufferSetScissor) {
     float x = (float)(int)arg_x(c, 1), w = (float)(int)arg_x(c, 3);
+    const float raw[4] = {x, (float)(int)arg_x(c, 2), w, (float)(int)arg_x(c, 4)};
     ui_rect(c, &x, &w, 0);
+    ui_keep_rect(1, raw, x, w);
     set_scissor(cmd_of(c), (int)x, (int)arg_x(c, 2), (int)w, (int)arg_x(c, 4));
 }
 // void nvnCommandBufferSetScissors(NVNcommandBuffer *cmd, int first, int n, const int *xywh): the replay keeps one
@@ -549,7 +569,9 @@ NVN_API(nvnCommandBufferSetScissors) {
         }
     if (first == 0 && n > 0) {
         float x = (float)r[0], w = (float)r[2];
+        const float raw[4] = {x, (float)r[1], w, (float)r[3]};
         ui_rect(c, &x, &w, 0);
+        ui_keep_rect(1, raw, x, w);
         set_scissor(cmd_of(c), (int)x, r[1], (int)w, r[3]);
     }
 }
@@ -659,19 +681,44 @@ NVN_API(nvnCommandBufferBindVertexBuffer) {
 #define UI_BIND_LR (MOD_MAIN_BASE + 0x95ce04)
 #define UI_FULL_WIDTH 1.9f
 static _Thread_local int ui_on_output, ui_in_rect;
+static _Thread_local uint64_t ui_pages[8];   // ui_readable's 64 KiB pages, plus one so that 0 means none
+
+// Whether a guest stack frame can be read. The walks below ask often, so each thread remembers the last pages it asked
+// about until the render target changes.
+static int ui_readable(uint64_t a, uint64_t n) {
+    static _Thread_local unsigned next;
+    uint64_t first = (a >> 16) + 1, last = ((a + n - 1) >> 16) + 1;
+    int have = 0;
+    for (int i = 0; i < 8; i++) have |= (ui_pages[i] == first) | (ui_pages[i] == last) << 1;
+    if (first == last) have |= have << 1;
+    if (have == 3) return 1;
+    if (!plat_mem_readable(a, n)) return 0;
+    ui_pages[next++ % 8] = first;
+    if (last != first) ui_pages[next++ % 8] = last;
+    return 1;
+}
 
 static void ui_note_target(const tex_t *t) {
     unsigned out[2], scene[2];
     res_sizes(out, scene);
     ui_on_output = t && t->d.width == out[0] && t->d.height == out[1];
     ui_in_rect = 0;
+    memset(ui_pages, 0, sizeof ui_pages);
+}
+
+static void ui_undo_rects(cmd_t *o) {
+    if (ui_on_output) return;
+    if (ui_kept[0].narrowed) set_viewports(o, 0, 1, ui_kept[0].r);
+    const float *s = ui_kept[1].r;
+    if (ui_kept[1].narrowed) set_scissor(o, (int)s[0], (int)s[1], (int)s[2], (int)s[3]);
+    ui_kept[0].narrowed = ui_kept[1].narrowed = 0;
 }
 
 // Whether the guest call chain runs through the interface renderer.
 static int ui_caller(const Cpu *c) {
     if (c->x[30] - (MOD_MAIN_BASE + 0xa1c000) < 0x2c000) return 1;
     uint64_t fp = c->x[29];
-    for (int i = 0; i < 6 && fp && !(fp & 7) && plat_mem_readable(fp, 16); i++) {
+    for (int i = 0; i < 6 && fp && !(fp & 7) && ui_readable(fp, 16); i++) {
         uint64_t next = *(uint64_t *)(uintptr_t)fp, ret = *(uint64_t *)(uintptr_t)(fp + 8);
         if (ret - (MOD_MAIN_BASE + 0xa1c000) < 0x2c000) return 1;
         if (next <= fp) break;
@@ -688,7 +735,7 @@ static int ui_caller(const Cpu *c) {
 #define UI_LIST_LR (MOD_MAIN_BASE + 0xa3b8cc)   // a node reached through the parent's list: made at run time, world labels
 static uint64_t ui_node(const Cpu *c) {
     uint64_t a = c->x[29], below = 0, lr = 0;
-    for (int d = 0; d < 16 && a && plat_mem_readable(a, 0x48); d++) {
+    for (int d = 0; d < 16 && a && ui_readable(a, 0x48); d++) {
         const uint64_t *q = (const uint64_t *)(uintptr_t)a;
         if (q[1] == UI_ROOT_LR) return lr == UI_LIST_LR ? 0 : below;
         below = q[8], lr = q[1];
@@ -732,18 +779,50 @@ static void ui_rect(const Cpu *c, float *x, float *w, int viewport) {
     if (viewport) ui_in_rect = 1;
 }
 
+// A frosted pane (the Stats pane in Ground Gear, the Soul Challenge banner) first blurs the part of the frame behind it into
+// a small target. Its block, bound while that target is set, holds that part as texture coordinates: scale and offset
+// across, the same down, then 1 1 0 0. The pane itself narrows and may move to an edge, so the part it blurs follows it;
+// otherwise the pane shows, squeezed, what lies behind its 16:9 place.
+#define UI_BACKDROP_SIZE 0x130
+static void ui_fit_backdrop(const Cpu *c, uint64_t addr, float k) {
+    static _Thread_local struct { uint64_t addr; float x; } done[8];
+    float *f = (float *)(uintptr_t)addr;
+    if (f[1] != 0 || f[2] != 0 || f[4] != 0 || f[6] != 0 || f[8] != 1 || f[9] != 1 || f[10] != 0 || f[11] != 0) return;
+    if (!(f[0] > 0 && f[3] >= 0 && f[3] + f[0] <= 1.001f && f[5] > 0)) return;
+    unsigned slot = (unsigned)(addr >> 4) % 8;   // narrow already when bound again
+    if (done[slot].addr == addr && done[slot].x == f[0]) return;
+    float lo = 2 * f[3] - 1, hi = lo + 2 * f[0];   // the pane's reach in clip space, as ui_fit sees the pane
+    float shift = ui_shift(ui_node(c), lo, hi, k);
+    f[0] *= k, f[3] = (lo * k + shift + 1) / 2;
+    done[slot].addr = addr, done[slot].x = f[0];
+}
+
 static void ui_fit(const Cpu *c, int st, uint64_t addr, uint64_t size) {
     static _Thread_local struct { uint64_t addr; float x; } done[64];
     float k = res_ui_fit();
-    if (k >= 1 || !ui_on_output || ui_in_rect || st != 0 || c->x[30] != UI_BIND_LR || size < 0x80 || size > 0x400 ||
-        !plat_mem_readable(addr, 0x40))
+    if (k >= 1 || st != 0 || c->x[30] != UI_BIND_LR) return;
+    if (!ui_on_output) {
+        if (size == UI_BACKDROP_SIZE) ui_fit_backdrop(c, addr, k);
         return;
+    }
+    // The smallest blocks are 0x70 bytes: the Soul Challenge circle's matrix and colour.
+    if (ui_in_rect || size < 0x70 || size > 0x400) return;
+    // The address is read as is, as the uniform snapshots do: asking the system about it on every bind took the game from
+    // 60 fps to 10 on a wide frame.
     float *f = (float *)(uintptr_t)addr;
-    if (f[2] != 0 || f[6] != 0 || f[8] != 0 || f[9] != 0 || f[10] != 0 || f[11] != 0 || fabsf(f[0]) >= UI_FULL_WIDTH) return;
+    if (f[2] != 0 || f[6] != 0 || f[8] != 0 || f[9] != 0 || f[10] != 0 || f[11] != 0) return;
     unsigned slot = (unsigned)(addr >> 4) % 64;   // a block bound for a second draw is narrow already
     if (done[slot].addr == addr && done[slot].x == f[0]) return;
     float a = f[3], b = f[3] + f[0], lo = a < b ? a : b, hi = a < b ? b : a;
-    if (hi - lo >= 1 && (lo <= -0.99f || hi >= 0.99f)) return;   // a shade laid over a whole side keeps its full reach
+    // An element as wide as the canvas, or a tall shade over a whole side, keeps its full reach. Some elements only look
+    // that wide: they carry their shape in the vertices, in units of the canvas width on both axes, so the matrix's rows
+    // keep the canvas's 16:9 ratio, turned for spinning ones (the battle arts' charge rings, the autosave banner). Those
+    // narrow like the rest, placed by their origin.
+    if (fabsf(f[0]) >= UI_FULL_WIDTH || (hi - lo >= 1 && fabsf(f[5]) >= 1 && (lo <= -0.99f || hi >= 0.99f))) {
+        float rx = hypotf(f[0], f[1]), ry = hypotf(f[4], f[5]);
+        if (!(rx > 0) || fabsf(ry / rx - 16.0f / 9.0f) > 0.02f) return;
+        lo = hi = f[3];
+    }
     float shift = ui_shift(ui_node(c), lo, hi, k);
     f[0] *= k, f[1] *= k, f[3] = f[3] * k + shift;
     done[slot].addr = addr, done[slot].x = f[0];

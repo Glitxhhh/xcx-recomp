@@ -102,3 +102,14 @@ site sceneread main 9dc9a8 52a85909 @page:x9 2d0c0121 52a85909
 set uifit XCX_UI_FIT 1
 site uifit main 56094c 1e323a23 @page:x9 bd406925 1e250a52 1e323a23
 site uifit main a17580 1e213801 @page:x9 bd406925 1e250821 1e213801
+
+# viewsize (on above the shipped resolution, resolution.c): a menu with a 3D model asks for a second view, and the view
+# setup main+0x972ed0 takes that view's size from the request at +0x1a0, 1920x1080 for the menus, instead of the main
+# view's size at renderer +0x3c8 (issue #40). Its targets stayed 1920x1080 and the result was stretched over the frame.
+# A request for exactly that size means a whole frame, so it gets the main view's size; other sizes stay. The lifter takes
+# no flags in a site, so the choice is arithmetic: clz of the difference, shifted, is 1 on a match and 0 otherwise, and it
+# scales the step from the request to the main size. x11 and x12 are free: main+0x972f94 writes x11 next and the function
+# does not read x12.
+set viewsize XCX_VIEW_SIZE 0
+site viewsize main 972f84 b941a2a9 b941a2a9 511e012b 5ac0116b 53057d6b b943ca6c 4b09018c 1b0b7d8c 0b0c0129
+site viewsize main 972f8c 910692aa 910692aa b940014b 5110e16b 5ac0116b 53057d6b 910f326c cb0a018c 9b0b7d8c 8b0c014a
