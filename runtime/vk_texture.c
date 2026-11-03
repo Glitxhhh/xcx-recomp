@@ -55,6 +55,14 @@ typedef struct Tex {
     uint64_t wr_fence;            // any entry: newest submission recorded to write its image (render, copy, clear,
                                   // storage binding); ReadTexels waits for it instead of draining the replay queue
     uint8_t listed;               // in owned[]
+    uint8_t rb_queued;            // in rbq[]: the submission being recorded copies it to rb (vk_texture_record_readbacks)
+    VkBuffer rb;                  // small mirrored target: host-visible copy of its image, rows as storage_texels takes
+    VmaAllocation rb_alloc;
+    uint8_t *rb_map;
+    VkDeviceSize rb_size;
+    uint64_t rb_fence;            // the submission whose end copied the image to rb; rb is its content once it is done
+    uint32_t rd_epoch;            // map_epoch when rd_ok was found (write_back)
+    uint8_t rd_ok;                // its storage was readable then
     uint32_t wt_n;                // WriteTexels into the storage since the last upload
     struct Tex *rel_prev, *rel_next;   // while released: the list of released entries, oldest first
 } Tex;
@@ -101,6 +109,16 @@ static Tex **owned;
 static int nowned, cowned;
 static uint64_t max_owned;   // largest storage size in owned[]
 static uint64_t gpu_writes;  // GPU writes into mirrored textures so far: Tex.gpu_seq
+// Small mirrored targets the submission being recorded writes, for vk_texture_record_readbacks. Under tex_lock.
+static struct Tex **rbq;
+static int nrbq, crbq;
+// Bumped when a pool is freed or remapped (vk_texture_maps_changed): write_back asks the OS again whether a texture's
+// storage is readable only then. The query (VirtualQuery) takes about 0.5 ms in XCX's address space, and asking at each
+// of the ~13 write-backs per frame cut the city from 143 to about 80 fps (issue 37).
+static uint32_t map_epoch = 1;
+static uint64_t n_rb_copies, n_rb_used, n_rb_sync;   // readbacks recorded, write-backs from them, synchronous ones
+
+static void rbq_remove(struct Tex *e);
 // Bumped whenever the entry a slot resolves to can change: an entry created or destroyed, released or taken back into
 // use (the slot lookup and the follow of a finalized slot read only by_key, by_addr and the released flags).
 static uint32_t tex_gen = 1;
@@ -500,6 +518,8 @@ static void destroy_tex(Tex *e) {
             if (p->next_at == e) { p->next_at = e->next_at; break; }
     }
     if (e->released) nreleased--, rel_unlink(e);
+    if (e->rb_queued) rbq_remove(e);
+    if (e->rb) vk_defer_buffer(e->rb, e->rb_alloc);
     vk_exec_image_gone(e->pub.image);
     vk_defer_image(e->pub.image, e->alloc);
     free(e);
@@ -897,6 +917,14 @@ const VkTexImage *vk_texture_get(const tex_t *t) {
 enum { WB_SMALL = 256 << 10 };
 static int small_pending;
 
+// A readback takes plain colour texels: ASTC images hold decoded RGBA8, RGB formats are expanded, depth and stencil
+// storage has its own aspects. Those keep the synchronous write-back.
+void vk_texture_maps_changed(void) { __atomic_add_fetch(&map_epoch, 1, __ATOMIC_ACQ_REL); }
+
+static int rb_capable(const Tex *e) {
+    return !e->f.astc_bw && !e->f.expand_rgb && !e->f.depth && !e->f.stencil && e->t.L.size;
+}
+
 void vk_texture_gpu_written(const tex_t *t) {
     if (!t || !t->mem) return;
     vk_exec_frame_written(t);
@@ -912,7 +940,19 @@ void vk_texture_gpu_written(const tex_t *t) {
             storage_rewritten(e, 0, &e->gpu_gen);   // CPU writes up to here are older than this render
             e->gpu_seq = ++gpu_writes;
             e->gpu_fence = vk_exec_recording_fence();
-            if (e->t.L.size <= WB_SMALL) __atomic_store_n(&small_pending, 1, __ATOMIC_RELEASE);
+            if (e->t.L.size <= WB_SMALL) {
+                __atomic_store_n(&small_pending, 1, __ATOMIC_RELEASE);
+                if (e->gpu_fence && !e->rb_queued && rb_capable(e)) {
+                    if (nrbq == crbq) {
+                        int cap = crbq ? crbq * 2 : 32;
+                        Tex **q = realloc(rbq, sizeof *q * (size_t)cap);
+                        if (!q) rt_fatal("vk: out of memory (readback queue)");
+                        rbq = q, crbq = cap;
+                    }
+                    rbq[nrbq++] = e;
+                    e->rb_queued = 1;
+                }
+            }
             own_add(e);
         }
     }
@@ -1095,8 +1135,15 @@ uint32_t vk_texture_epoch(void) { return __atomic_load_n(&submit_epoch, __ATOMIC
 void vk_texture_new_submit(void) {
     lock();
     if (!++submit_epoch) submit_epoch = 1;
-    static uint64_t log_at;
+    static uint64_t log_at, wb_log_at;
     uint64_t f = __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED) / 60;
+    if (f / 20 != wb_log_at && (n_rb_copies | n_rb_used | n_rb_sync)) {
+        wb_log_at = f / 20;
+        rt_log("vk: frame %llu: small targets copied to host memory at their submission %llu, written back from there "
+               "%llu, written back with a copy the CPU waited for %llu", (unsigned long long)f * 60,
+               (unsigned long long)n_rb_copies, (unsigned long long)n_rb_used, (unsigned long long)n_rb_sync);
+        n_rb_copies = n_rb_used = n_rb_sync = 0;
+    }
     if ((rt_trace & RT_TRACE_PERF) && f != log_at && tex_alias > 0) {
         log_at = f;
         rt_log("perf: frame %llu: texture aliases: content copied %llu, filled from storage %llu, left uninitialised %llu",
@@ -1322,29 +1369,136 @@ void vk_write_texels(const tex_t *t, const view_t *v, const NVNcopyRegion *r, co
 // A mirrored texture the GPU rendered into holds its texels in its image only; its storage keeps what the CPU last put
 // there. The game may still read that storage with the CPU: XCX moves its generated grass maps between pools with
 // memcpy once the GPU is done, and the copy then carried zeros. Such a read writes the image back first.
-static void write_back(Tex *e) {
+// The whole image as regions, each level and layer one, in the order write_back and the readback both walk them; 0
+// when no region is left. *off: the region's offset in packed rows (g.row = g.wb, g.img = a slice), advanced past it.
+static int wb_region(const Tex *e, uint32_t *i, NVNcopyRegion *r, Region *g, VkDeviceSize *off) {
     const nvn_texdesc *d = &e->t.d;
+    int linear = nvn_tex_is_linear(d), is3d = d->target == NVN_TEXTURE_TARGET_3D;
+    uint32_t levels = linear ? 1 : e->pub.levels, layers = linear || is3d ? 1 : e->pub.layers;
+    for (; *i < levels * layers; ++*i) {
+        uint32_t lv = *i / layers, ly = *i % layers;
+        view_t v = {.set_levels = 1, .set_layers = 1, .base_level = (uint8_t)lv, .min_layer = (uint16_t)ly};
+        *r = (NVNcopyRegion){.width = (int)mip(d->width, lv),
+                             .height = d->target == 0 || d->target == 3 ? 1 : (int)mip(d->height, lv),
+                             .depth = is3d ? (int)mip(d->depth, lv) : 1};
+        if (!region_of(&e->t, &v, r, 0, 0, g)) continue;
+        ++*i;
+        *off += g->img * (size_t)g->nz;
+        return 1;
+    }
+    return 0;
+}
+
+// rb holds the image as the GPU left it after the latest write, and that copy is done
+static int rb_ready(const Tex *e) {
+    return e->rb && e->rb_fence == e->gpu_fence && e->rb_fence <= vk_sync_fence_done();
+}
+
+static void write_back(Tex *e) {
     // Storage the host has stopped mapping since the texture was made (upload skips it the same way) takes no copy
-    if (!e->t.L.size || !plat_mem_readable((uint64_t)(uintptr_t)e->t.mem, e->t.L.size)) {
+    uint32_t ep = __atomic_load_n(&map_epoch, __ATOMIC_ACQUIRE);
+    if (e->rd_epoch != ep)
+        e->rd_ok = (uint8_t)(e->t.L.size && plat_mem_readable((uint64_t)(uintptr_t)e->t.mem, e->t.L.size)), e->rd_epoch = ep;
+    if (!e->rd_ok) {
         e->gpu_dirty = 0;
         return;
     }
-    int linear = nvn_tex_is_linear(d), is3d = d->target == NVN_TEXTURE_TARGET_3D;
-    uint32_t levels = linear ? 1 : e->pub.levels, layers = linear || is3d ? 1 : e->pub.layers;
-    for (uint32_t lv = 0; lv < levels; lv++)
-        for (uint32_t ly = 0; ly < layers; ly++) {
-            view_t v = {.set_levels = 1, .set_layers = 1, .base_level = (uint8_t)lv, .min_layer = (uint16_t)ly};
-            NVNcopyRegion r = {.width = (int)mip(d->width, lv),
-                               .height = d->target == 0 || d->target == 3 ? 1 : (int)mip(d->height, lv),
-                               .depth = is3d ? (int)mip(d->depth, lv) : 1};
-            Region g;
-            if (!region_of(&e->t, &v, &r, 0, 0, &g)) continue;
-            uint8_t *buf = malloc(g.img * (size_t)g.nz);
-            if (!buf) rt_fatal("vk: out of memory for a texture write-back");
-            if (image_texels(e, &g, &r, buf, 0)) storage_texels(&e->t, &g, &r, buf, 1);
-            free(buf);
+    int from_rb = rb_ready(e);
+    if (from_rb) vmaInvalidateAllocation(vk_ctx()->vma, e->rb_alloc, 0, VK_WHOLE_SIZE);
+    NVNcopyRegion r;
+    Region g;
+    VkDeviceSize end = 0;
+    for (uint32_t i = 0; wb_region(e, &i, &r, &g, &end);) {
+        if (from_rb) {
+            storage_texels(&e->t, &g, &r, e->rb_map + (end - g.img * (size_t)g.nz), 1);
+            continue;
         }
+        uint8_t *buf = malloc(g.img * (size_t)g.nz);
+        if (!buf) rt_fatal("vk: out of memory for a texture write-back");
+        if (image_texels(e, &g, &r, buf, 0)) storage_texels(&e->t, &g, &r, buf, 1);
+        free(buf);
+    }
+    if (from_rb) n_rb_used++;
+    else n_rb_sync++;
     e->gpu_dirty = 0;
+}
+
+static void rbq_remove(Tex *e) {
+    for (int i = 0; i < nrbq; i++)
+        if (rbq[i] == e) {
+            rbq[i] = rbq[--nrbq];
+            break;
+        }
+    e->rb_queued = 0;
+}
+
+int vk_texture_readbacks_pending(void) {
+    lock();
+    int n = nrbq;
+    unlock();
+    return n;
+}
+
+// At the end of the submission of value fence (vk_sync_submit, in a command buffer of its own after the part): each
+// small mirrored target the submission rendered is copied to its rb, so once the value is done the CPU writes the
+// texels to storage from rb (write_back). The synchronous write-back instead submitted a copy behind the frame and
+// waited for it, and drained the present first: every fence wait of the game then waited for the whole frame's GPU
+// work. XCX's luminance meter (issue 37) dirties a small target every frame; where no grass map did, as in New Los
+// Angeles, that wait halved the frame rate.
+void vk_texture_record_readbacks(VkCommandBuffer cb, uint64_t fence) {
+    VkCtx *c = vk_ctx();
+    lock();
+    int any = 0;
+    for (int k = 0; k < nrbq; k++) {
+        Tex *e = rbq[k];
+        e->rb_queued = 0;
+        if (!e->gpu_dirty || e->gpu_fence != fence) continue;   // written back meanwhile, or a later submission's
+        VkDeviceSize need = 0;
+        NVNcopyRegion r;
+        Region g;
+        for (uint32_t i = 0; wb_region(e, &i, &r, &g, &need);) {}
+        if (!need) continue;
+        if (e->rb && e->rb_size < need) {
+            vk_defer_buffer(e->rb, e->rb_alloc);
+            e->rb = VK_NULL_HANDLE;
+        }
+        if (!e->rb) {
+            VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = need,
+                                     .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT};
+            VmaAllocationCreateInfo aci = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
+                                           .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
+                                                    VMA_ALLOCATION_CREATE_MAPPED_BIT};
+            VmaAllocationInfo info;
+            if (vmaCreateBuffer(c->vma, &bi, &aci, &e->rb, &e->rb_alloc, &info) != VK_SUCCESS) {
+                e->rb = VK_NULL_HANDLE;
+                continue;   // the synchronous write-back still covers it
+            }
+            e->rb_map = info.pMappedData;
+            e->rb_size = need;
+        }
+        if (!any) barrier(cb, ALL_RW, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
+        any = 1;
+        VkDeviceSize end = 0;
+        for (uint32_t i = 0; wb_region(e, &i, &r, &g, &end);) {
+            VkDeviceSize slice = g.img, base = end - slice * (size_t)g.nz;
+            for (int z = 0; z < g.nz; z++) {
+                VkBufferImageCopy rg = {.bufferOffset = base + slice * (size_t)z,
+                                        .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, g.level, g.is3d ? 0 : g.layer0 + (uint32_t)z, 1},
+                                        .imageOffset = {0, 0, g.is3d ? z : 0},
+                                        .imageExtent = {(uint32_t)r.width, (uint32_t)r.height, 1}};
+                vkCmdCopyImageToBuffer(cb, e->pub.image, VK_IMAGE_LAYOUT_GENERAL, e->rb, 1, &rg);
+            }
+        }
+        e->rb_fence = fence;
+        n_rb_copies++;
+    }
+    nrbq = 0;
+    // the host reads rb after the value; later submissions write the images only after the copies read them
+    if (any)
+        barrier(cb, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_TRANSFER_READ_BIT,
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_2_HOST_BIT,
+                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_HOST_READ_BIT);
+    unlock();
 }
 
 // Mirrored textures overlapping [addr, addr+size) that the GPU wrote since their last write-back.
@@ -1441,7 +1595,7 @@ void vk_texture_write_back(uint64_t addr, uint64_t size) {
 // storage, unless the CPU rewrote it since. Larger targets still go back on an invalidate, memcpy or ReadTexels.
 int vk_texture_small_dirty(void) { return __atomic_load_n(&small_pending, __ATOMIC_ACQUIRE); }
 
-void vk_texture_write_back_small(uint64_t fence) {
+int vk_texture_write_back_small(uint64_t fence, int sync) {
     lock();
     __atomic_store_n(&small_pending, 0, __ATOMIC_RELAXED);
     plat_mutex_lock_shared(&owned_lock);
@@ -1469,11 +1623,19 @@ void vk_texture_write_back_small(uint64_t fence) {
             Tex *x = hit[j];
             hit[j] = hit[j - 1], hit[j - 1] = x;
         }
+    // Without sync only when every hit has its readback: hits sharing storage then still go back oldest render first
+    int need_sync = 0;
+    for (int i = 0; i < k && !sync; i++) need_sync |= !rb_ready(hit[i]);
+    if (need_sync) {
+        __atomic_store_n(&small_pending, 1, __ATOMIC_RELEASE);
+        k = 0, n = 0;
+    }
     for (int i = 0; i < k; i++) write_back(hit[i]);
     for (int i = 0; i < k; i++) perf_count(PERF_CNT_WB);
     for (int i = k; i < n; i++) perf_count(PERF_CNT_WB_SKIP);
     free(hit);
     unlock();
+    return need_sync;
 }
 
 // ---------------------------------------------------------------- samplers (LAS textures.c)
