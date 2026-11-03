@@ -170,13 +170,28 @@ static int same_shape(const TexKey *a, const TexKey *b) {
 
 // MNG nvn_mtl.m tex_mirrored: textures whose content the CPU provides in pool memory. Display, compressible, zcull,
 // depth, multisample and GPU-only storage stays GPU-owned.
+// Tiny compressible targets in a CPU-visible pool are the exception: the CPU reads what the GPU rendered there. XCX
+// renders its average scene luminance into a 1x1 R32F target (IMAGE | COMPRESSIBLE, in a CPU_CACHED | GPU_CACHED |
+// COMPRESSIBLE pool) and its exposure control (main+0x9db330) reads the pool bytes: gain = clamp(1.3 / (2 * luminance),
+// 1.07, 2.5). Left GPU-owned, the bytes kept the pool's 0xF3 fill, the luminance read as negative and the gain stayed at
+// 2.5, so daylight burnt out (issue 37). Mirrored, the texture write-backs return them: vk_texture_write_back_small
+// at a fence wait, vk_texture_write_back on a CPU read of the storage.
+// Larger compressible targets (G-buffer, bloom, sky probes) stay GPU-owned: nothing reads them and their write-back
+// would cost a copy each frame. So do those whose storage the host cannot read: XCX's luminance chain also renders
+// 32x32, 8x8 and 1x1 compressible targets past the end of their pool's host mapping, and a write-back there crashed.
+enum { MIRROR_COMPRESSIBLE_MAX = 4 << 10 };
+
 static int tex_mirrored(const tex_t *t) {
     if (!t->mem || nvn_gpu_only((uintptr_t)t->mem)) return 0;
     if (t->has_layout) return 1;
     const pool_t *p = t->pool;
     if (!p || !(p->flags & (NVN_MEMORY_POOL_FLAGS_CPU_UNCACHED | NVN_MEMORY_POOL_FLAGS_CPU_CACHED))) return 0;
-    if (t->d.flags & (NVN_TEXTURE_FLAGS_DISPLAY | NVN_TEXTURE_FLAGS_COMPRESSIBLE | NVN_TEXTURE_FLAGS_ADAPTIVE_ZCULL |
+    if (t->d.flags & (NVN_TEXTURE_FLAGS_DISPLAY | NVN_TEXTURE_FLAGS_ADAPTIVE_ZCULL |
                       NVN_TEXTURE_FLAGS_DEPTH16_PREFER_FAST_CLEAR | NVN_TEXTURE_FLAGS_ZCULL_SUPPORT_STENCIL))
+        return 0;
+    if ((t->d.flags & NVN_TEXTURE_FLAGS_COMPRESSIBLE) &&
+        (!t->L.size || t->L.size > MIRROR_COMPRESSIBLE_MAX || !plat_mem_readable((uint64_t)(uintptr_t)t->mem, 1) ||
+         !plat_mem_readable((uint64_t)(uintptr_t)t->mem + t->L.size - 1, 1)))
         return 0;
     if (t->d.samples > 1 || t->d.target == NVN_TEXTURE_TARGET_BUFFER) return 0;
     if (t->d.format >= 0x31 && t->d.format <= 0x36) return 0;   // stencil / depth formats
@@ -1309,6 +1324,11 @@ void vk_write_texels(const tex_t *t, const view_t *v, const NVNcopyRegion *r, co
 // memcpy once the GPU is done, and the copy then carried zeros. Such a read writes the image back first.
 static void write_back(Tex *e) {
     const nvn_texdesc *d = &e->t.d;
+    // Storage the host has stopped mapping since the texture was made (upload skips it the same way) takes no copy
+    if (!e->t.L.size || !plat_mem_readable((uint64_t)(uintptr_t)e->t.mem, e->t.L.size)) {
+        e->gpu_dirty = 0;
+        return;
+    }
     int linear = nvn_tex_is_linear(d), is3d = d->target == NVN_TEXTURE_TARGET_3D;
     uint32_t levels = linear ? 1 : e->pub.levels, layers = linear || is3d ? 1 : e->pub.layers;
     for (uint32_t lv = 0; lv < levels; lv++)
