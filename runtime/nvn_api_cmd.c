@@ -779,19 +779,50 @@ static void ui_rect(const Cpu *c, float *x, float *w, int viewport) {
     if (viewport) ui_in_rect = 1;
 }
 
+// A frosted pane (the Stats pane in Ground Gear, the Soul Challenge banner) first blurs the part of the frame behind it into
+// a small target. Its block, bound while that target is set, holds that part as texture coordinates: scale and offset
+// across, the same down, then 1 1 0 0. The pane itself narrows and may move to an edge, so the part it blurs follows it;
+// otherwise the pane shows, squeezed, what lies behind its 16:9 place.
+#define UI_BACKDROP_SIZE 0x130
+static void ui_fit_backdrop(const Cpu *c, uint64_t addr, float k) {
+    static _Thread_local struct { uint64_t addr; float x; } done[8];
+    float *f = (float *)(uintptr_t)addr;
+    if (f[1] != 0 || f[2] != 0 || f[4] != 0 || f[6] != 0 || f[8] != 1 || f[9] != 1 || f[10] != 0 || f[11] != 0) return;
+    if (!(f[0] > 0 && f[3] >= 0 && f[3] + f[0] <= 1.001f && f[5] > 0)) return;
+    unsigned slot = (unsigned)(addr >> 4) % 8;   // narrow already when bound again
+    if (done[slot].addr == addr && done[slot].x == f[0]) return;
+    float lo = 2 * f[3] - 1, hi = lo + 2 * f[0];   // the pane's reach in clip space, as ui_fit sees the pane
+    float shift = ui_shift(ui_node(c), lo, hi, k);
+    f[0] *= k, f[3] = (lo * k + shift + 1) / 2;
+    done[slot].addr = addr, done[slot].x = f[0];
+}
+
 static void ui_fit(const Cpu *c, int st, uint64_t addr, uint64_t size) {
     static _Thread_local struct { uint64_t addr; float x; } done[64];
     float k = res_ui_fit();
-    if (k >= 1 || !ui_on_output || ui_in_rect || st != 0 || c->x[30] != UI_BIND_LR || size < 0x80 || size > 0x400)
+    if (k >= 1 || st != 0 || c->x[30] != UI_BIND_LR) return;
+    if (!ui_on_output) {
+        if (size == UI_BACKDROP_SIZE) ui_fit_backdrop(c, addr, k);
         return;
+    }
+    // The smallest blocks are 0x70 bytes: the Soul Challenge circle's matrix and colour.
+    if (ui_in_rect || size < 0x70 || size > 0x400) return;
     // The address is read as is, as the uniform snapshots do: asking the system about it on every bind took the game from
     // 60 fps to 10 on a wide frame.
     float *f = (float *)(uintptr_t)addr;
-    if (f[2] != 0 || f[6] != 0 || f[8] != 0 || f[9] != 0 || f[10] != 0 || f[11] != 0 || fabsf(f[0]) >= UI_FULL_WIDTH) return;
+    if (f[2] != 0 || f[6] != 0 || f[8] != 0 || f[9] != 0 || f[10] != 0 || f[11] != 0) return;
     unsigned slot = (unsigned)(addr >> 4) % 64;   // a block bound for a second draw is narrow already
     if (done[slot].addr == addr && done[slot].x == f[0]) return;
     float a = f[3], b = f[3] + f[0], lo = a < b ? a : b, hi = a < b ? b : a;
-    if (hi - lo >= 1 && fabsf(f[5]) >= 1 && (lo <= -0.99f || hi >= 0.99f)) return;   // a tall shade over a whole side keeps its full reach
+    // An element as wide as the canvas, or a tall shade over a whole side, keeps its full reach. Some elements only look
+    // that wide: they carry their shape in the vertices, in units of the canvas width on both axes, so the matrix's rows
+    // keep the canvas's 16:9 ratio, turned for spinning ones (the battle arts' charge rings, the autosave banner). Those
+    // narrow like the rest, placed by their origin.
+    if (fabsf(f[0]) >= UI_FULL_WIDTH || (hi - lo >= 1 && fabsf(f[5]) >= 1 && (lo <= -0.99f || hi >= 0.99f))) {
+        float rx = hypotf(f[0], f[1]), ry = hypotf(f[4], f[5]);
+        if (!(rx > 0) || fabsf(ry / rx - 16.0f / 9.0f) > 0.02f) return;
+        lo = hi = f[3];
+    }
     float shift = ui_shift(ui_node(c), lo, hi, k);
     f[0] *= k, f[1] *= k, f[3] = f[3] * k + shift;
     done[slot].addr = addr, done[slot].x = f[0];
