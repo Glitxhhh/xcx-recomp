@@ -116,7 +116,7 @@ static void write_lines(const InputMap *m) {
         if (line[0]) {
             cfg_set(var, line);
         } else {
-            const char *k = var + 5;
+            const char *k = var + 4;   // BIND_..., the key as cfg_reset takes it
             cfg_reset(&k, 1);
         }
         rt_log("menu: bind_%s = %s", input_action_name(a), line[0] ? line : "(default)");
