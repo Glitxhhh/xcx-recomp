@@ -68,6 +68,15 @@ site xcx60 main 23efec 72b6b0c8 d503201f
 site xcx60 main 23eff8 1e270101 bd404101
 site xcx60 main 23effc 1e212800 1e213800
 
+# The menus' frame step (issue #63): main+0x927e10 fills the menu manager's frame info each frame from the game's frame
+# interval in vsyncs (main+0x1d943a0): +0x8fc and +0x900 = interval / 60 s, +0x904 = 30 / (60 / interval). Menu models
+# (Ground Gear and the others, through main+0x6916cc and the model's step setter main+0x185d48) and several menu timers
+# advance by +0x900, so with one vsync per frame they stepped 1/60 s per frame and ran fast above 60 fps. The step is
+# the patch page's +0x40 (the measured frame time) times the interval instead, so cutscenes (interval 2, period 1/60 s)
+# keep 2/60 s, and +0x904 is 30 times that step. x9 is unused in the function, s3 is caller-saved, w0 is the interval.
+site xcx60 main 927e4c 1e201821 @page:x9 bd404121 1e220003 1e230821
+site xcx60 main 927e50 1e201840 1e210840
+
 # The mod's getter that returns false on Switch (1.0.1 +0x13eb280): true. Off: in 2.0.0 it crashes the title screen's
 # rendering (main+0x9530b0 reads through a bad pointer).
 site xcx60g main 13db618 2a1f03e0 52800020
