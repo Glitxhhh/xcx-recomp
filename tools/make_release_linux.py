@@ -14,8 +14,9 @@ the .NET 10 SDK and Python 3.12+ with Pillow (.venv). The folder holds:
                file puts the folder, tools/ and recomp/ on sys.path
     llvm/      LLVM 23 (clang, lld, llvm-ar, the clang resource headers) and llvm/sysroot: the files of the sniper SDK
                sysroot the game's compile and link read, nothing else (recorded while building the runtime library)
-    runtime/   libxcxrt.a (build_game.py --make-runtime-lib --sysroot), the runtime headers, romfs.c, patches.c and
-               ov_zstd.c (compiled per install), xcx.png (the window icon), deps/ (Vulkan headers 1.4.363, VMA, zstd
+    runtime/   libxcxrt.a and libxcxrt-v2.a (build_game.py --make-runtime-lib --sysroot, --cpu x86-64-v3 and -v2), the
+               runtime headers, romfs.c, patches.c and ov_zstd.c (compiled per install),
+               xcx.png (the window icon), deps/ (Vulkan headers 1.4.363, VMA, zstd
                built static; SDL3, Opus and libvpx come from the sysroot)
     bin/       xcx_xlate (+ .id), hactool, ninja, libSDL3.so.0 (the sysroot's; the game finds it beside itself)
     recomp/, tools/, data/, installer/, licenses/, THIRD_PARTY_NOTICES.md, xcx.ini.example, VERSION
@@ -204,14 +205,15 @@ def build_bin(out, llvm, sysroot):
 # ---- runtime/ ----------------------------------------------------------------------------------------------------------
 
 def runtime_lib(out, llvm, sysroot):
-    build = CHECK / 'rtlib'
-    shutil.rmtree(build, ignore_errors=True)
-    run([sys.executable, ROOT / 'tools' / 'build_game.py', '--make-runtime-lib', '--version', mr.VERSION_TAG,
-         '--expected', ROOT / 'tools' / 'data' / mr.EXPECTED, '--toolchain', llvm, '--sysroot', sysroot,
-         '--deps', out / 'runtime' / 'deps', '--ninja', out / 'bin' / 'ninja', '--gen', mr.RUNTIME_LAYOUT,
-         '--out', build])
     rt = out / 'runtime'
-    shutil.copy2(build / 'libxcxrt.a', rt / 'libxcxrt.a')
+    for cpu, name in mr.RUNTIME_LIBS:
+        build = CHECK / f'rtlib-{cpu}'
+        shutil.rmtree(build, ignore_errors=True)
+        run([sys.executable, ROOT / 'tools' / 'build_game.py', '--make-runtime-lib', '--version', mr.VERSION_TAG,
+             '--expected', ROOT / 'tools' / 'data' / mr.EXPECTED, '--toolchain', llvm, '--sysroot', sysroot,
+             '--cpu', cpu, '--deps', out / 'runtime' / 'deps', '--ninja', out / 'bin' / 'ninja', '--gen',
+             mr.RUNTIME_LAYOUT, '--out', build])
+        shutil.copy2(build / 'libxcxrt.a', rt / name)
     for p in sorted((ROOT / 'runtime').rglob('*')):
         if p.suffix in mr.RUNTIME_SUFFIXES and p.is_file():
             (rt / p.relative_to(ROOT / 'runtime')).parent.mkdir(parents=True, exist_ok=True)

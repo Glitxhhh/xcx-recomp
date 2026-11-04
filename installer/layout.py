@@ -7,7 +7,7 @@ Release (docs/installer.md "Release layout"), root = the unpacked folder:
     recomp/, tools/         the lifter and the scripts; tools/data/expected-xcx-<version>.json for the base game and
                             each supported update (SUPPORTED)
     llvm/                   llvm-mingw (bin/clang.exe)
-    runtime/                libxcxrt.a, the headers, install-side sources (romfs.c, patches.c, ov_zstd.c) and the icon; runtime/deps/ holds
+    runtime/                libxcxrt.a (libxcxrt-v2.a for CPUs without AVX2), the headers, install-side sources (romfs.c, patches.c, ov_zstd.c) and the icon; runtime/deps/ holds
                             include/ + lib/ of Vulkan, SDL3, Opus, libvpx and VMA (build_game.py --deps)
     bin/                    xcx_xlate.exe (+ xcx_xlate.id), hactool.exe, ninja.exe, SDL3.dll, libopus-0.dll
     xcx.ini.example
@@ -71,6 +71,11 @@ class Layout:
     @property
     def clang(self):
         return self.llvm / 'bin' / ('clang' + EXE)
+
+    @property
+    def runtime_lib_v2(self):
+        """libxcxrt-v2.a beside libxcxrt.a: the runtime for x86-64-v2 CPUs (build_game.py --cpu x86-64-v2)."""
+        return self.runtime_lib.with_name('libxcxrt-v2.a')
 
     def expected(self, version):
         """The expected hashes of the base game (BASE) or an update."""

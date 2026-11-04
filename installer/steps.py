@@ -279,7 +279,12 @@ class Check(Step):
             raise InstallError('check.host_probe_failed', code=r.returncode) from None
         ctx.reporter.log(f'host: {r.stdout.strip()}')
         if not host['x86_64_v3']:
-            raise InstallError('check.cpu_no_avx2')
+            # Without AVX2 the game builds for x86-64-v2 (Compile, runtime/libxcxrt-v2.a), which runs slower
+            if not host['x86_64_v2']:
+                raise InstallError('check.cpu_too_old')
+            if not layout.runtime_lib_v2.is_file():
+                raise InstallError('check.cpu_no_avx2')
+            ctx.reporter.warning('warn.cpu_no_avx2')
         if not host['loader']:
             raise InstallError('check.vulkan_missing')
         devices = host['devices']
@@ -660,8 +665,18 @@ class Compile(Step):
         layout = ctx.layout
         clang = subprocess.run([str(layout.clang), '--version'], capture_output=True, text=True).stdout
         tools = [layout.tools / n for n in ('build_game.py', 'build_shaders.py', 'romfs_index.py', 'check_content.py')]
-        return fingerprint('compile-1', ctx.keys['lift'], layout.runtime, layout.runtime_lib, layout.deps or 'system',
+        return fingerprint('compile-1', ctx.keys['lift'], layout.runtime, self.runtime_lib(ctx), layout.deps or 'system',
                            layout.sysroot or 'host', *tools, clang, *[d.name for d in layout.dlls])
+
+    @staticmethod
+    def v3(ctx):
+        """Build for x86-64-v3: the check found AVX2, or has not run (a check-only pass computes the keys first)."""
+        host = getattr(ctx, 'host', None)
+        return host is None or host['x86_64_v3']
+
+    def runtime_lib(self, ctx):
+        """The runtime library for this CPU: the x86-64-v2 one when the check found no AVX2."""
+        return ctx.layout.runtime_lib if self.v3(ctx) else ctx.layout.runtime_lib_v2
 
     def current(self, ctx, record):
         exe = ctx.dest / GAME_EXE
@@ -688,7 +703,8 @@ class Compile(Step):
         code, log = run_tool(ctx, 'compile', layout.tools / 'build_game.py', [
             '--gen', ctx.temp / 'gen', '--out', build, '--toolchain', layout.llvm,
             *(['--deps', layout.deps] if layout.deps else []), *(['--sysroot', layout.sysroot] if layout.sysroot else []),
-            '--runtime', layout.runtime, '--runtime-lib', layout.runtime_lib, '--ninja', layout.ninja,
+            '--runtime', layout.runtime, '--runtime-lib', self.runtime_lib(ctx), '--ninja', layout.ninja,
+            '--cpu', 'x86-64-v3' if self.v3(ctx) else 'x86-64-v2',
             '--version', version_tag(game_version(ctx)), '--expected', layout.expected(game_version(ctx)),
             '--exefs', dest / 'exefs', '--romfs', dest / 'romfs',
             '--profile', dest / 'profile'], parse)
