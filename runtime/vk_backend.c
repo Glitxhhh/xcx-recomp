@@ -217,7 +217,10 @@ static void replay_main(void *arg) {
         }
         plat_mutex_lock(&rl);
         if (it.kind == RI_SUBMIT) r_submit_done = it.submit_no;
-        else r_presents_done++;
+        // Only presents count for the frame bound in vk_be_present: a frame also queues hundreds of releases, and
+        // counting them let the game run up to 76 frames ahead of the replay, past the one frame its unfenced rewrites
+        // of uniform, vertex and storage data allow for (flickering, a black scene behind menus; issue 71).
+        else if (it.kind == RI_PRESENT) r_presents_done++;
         r_busy = 0;
         plat_cond_broadcast(&rcv);
     }
@@ -348,11 +351,12 @@ static void vk_be_present(const tex_t *t, const int crop[4], uint64_t at_ns) {
 WEAK void vk_program_release(const prog_t *p) { (void)p; }
 
 static int vk_be_pool_init(pool_t *p) { vk_sync_start(); return vk_pool_init(p); }
-static void vk_be_pool_fini(pool_t *p) { vk_sync_start(); replay_drain(DR_POOL_FINI); vk_present_drain(); vk_pool_fini(p); }
+static void vk_be_pool_fini(pool_t *p) { vk_sync_start(); replay_drain(DR_POOL_FINI); vk_present_drain(); vk_pool_fini(p); vk_texture_maps_changed(); }
 static int vk_be_pool_map_virtual(pool_t *v, int n, const void *requests) {
     vk_sync_start();
     replay_drain(DR_MAP_VIRTUAL);
     vk_present_drain();
+    vk_texture_maps_changed();
     return vk_pool_map_virtual(v, n, requests);
 }
 static void vk_be_texture_register(int id, const tex_t *t, const view_t *v) { vk_sync_start(); vk_texture_register(id, t, v); }
@@ -493,15 +497,19 @@ static void vk_be_guest_read(uint64_t addr, uint64_t size) {
     vk_texture_write_back(addr, size);
 }
 // After a fence wait: the value is done, so its replay is too; a later submission the replay records meanwhile marks
-// its targets with a later fence, which write_back_small leaves alone. No drain. Every value the GPU has completed
-// counts, not only the one waited for: in menus the game's only wait is on the window's acquire sync, which has fence
-// 0, and a target finished long ago would otherwise stay out of its storage.
+// its targets with a later fence, which write_back_small leaves alone. No replay drain. Every value the GPU has
+// completed counts, not only the one waited for: in menus the game's only wait is on the window's acquire sync, which
+// has fence 0, and a target finished long ago would otherwise stay out of its storage. Targets the submission copied
+// to host memory at its end (vk_texture_record_readbacks) go back from there; only the others need the present drain
+// and a copy the CPU waits for.
 static void vk_be_cpu_synced(uint64_t fence) {
     if (!vk_texture_small_dirty()) return;
     vk_sync_start();
-    vk_present_drain();
     uint64_t done = vk_sync_fence_done();
-    vk_texture_write_back_small(done > fence ? done : fence);
+    if (done < fence) done = fence;
+    if (!vk_texture_write_back_small(done, 0)) return;
+    vk_present_drain();
+    vk_texture_write_back_small(done, 1);
 }
 
 const GfxBackend gfx_vulkan_backend = {

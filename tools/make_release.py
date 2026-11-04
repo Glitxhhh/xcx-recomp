@@ -11,8 +11,9 @@ cached in toolchain/release-dl/ and checked against the sha256 in PINS; a mismat
                files come out of the python.org installer's own component MSI, unpacked with msiexec /a and expand.exe;
                the installer is never run)
     llvm/      llvm-mingw, x86_64 only, the files clang and lld need to compile and link xcx.exe
-    runtime/   libxcxrt.a (build_game.py --make-runtime-lib with llvm/), the runtime headers, romfs.c, patches.c and
-               ov_zstd.c (compiled per install), deps/ (headers and import libraries of SDL3, Opus, libvpx, Vulkan and VMA)
+    runtime/   libxcxrt.a and libxcxrt-v2.a (build_game.py --make-runtime-lib with llvm/, --cpu x86-64-v3 and -v2), the
+               runtime headers, romfs.c, patches.c and ov_zstd.c (compiled per install),
+               deps/ (headers and import libraries of SDL3, Opus, libvpx, Vulkan and VMA)
     bin/       xcx_xlate.exe (+ .id), hactool.exe, SDL3.dll (upstream), libopus-0.dll, ninja.exe
     recomp/, tools/, data/, installer/, licenses/, THIRD_PARTY_NOTICES.md, xcx.ini.example
     VERSION    the repository's VERSION plus the commit, 0.1.0+973c626 (VERSION alone outside a git checkout); the
@@ -108,6 +109,8 @@ LLVM_SKIP_SUFFIXES = {'.idl', '.tlb'}
 TOOLS_FILES = ['build_game.py', 'build_shaders.py', 'check_content.py', 'extract.py', 'package_select.py', 'romfs_index.py']
 TOOLS_DIRS = ['vendor/macnativegames', 'data']   # data/: expected hashes
 RUNTIME_LAYOUT = ROOT / 'tools' / 'runtime-layout'   # build_game.py --gen of libxcxrt.a
+# The runtime libraries a release ships, by build_game.py --cpu: the installer picks by the host's x86-64 level
+RUNTIME_LIBS = (('x86-64-v3', 'libxcxrt.a'), ('x86-64-v2', 'libxcxrt-v2.a'))
 RUNTIME_SUFFIXES = {'.h', '.inc', '.ico'}   # .ico: the installer window icon
 
 VERSION_TAG = 'upd'   # installer/layout.py version_tag: the generated/ and build/extracted/ name of 2.0.0
@@ -378,14 +381,16 @@ def take_prebuilt(out, src):
 # ---- runtime/, recomp/, tools/, data/ ---------------------------------------------------------------------------------
 
 def runtime_lib(out, llvm):
-    """Build libxcxrt.a with the folder's llvm/ and copy it, the headers and the install-side sources into runtime/."""
-    build = MAIN_ROOT / 'build' / 'release-check' / 'rtlib'
-    run([sys.executable, ROOT / 'tools' / 'build_game.py', '--make-runtime-lib', '--version', VERSION_TAG,
-         '--expected', ROOT / 'tools' / 'data' / EXPECTED, '--toolchain', llvm,
-         '--deps', out / 'runtime' / 'deps', '--ninja', out / 'bin' / 'ninja.exe', '--gen', RUNTIME_LAYOUT,
-         '--out', build], env=clean_env(llvm / 'bin', out / 'bin'))
+    """Build libxcxrt.a, and libxcxrt-v2.a for CPUs without AVX2, with the folder's llvm/ and copy them, the headers and
+    the install-side sources into runtime/."""
     rt = out / 'runtime'
-    shutil.copy2(build / 'libxcxrt.a', rt / 'libxcxrt.a')
+    for cpu, name in RUNTIME_LIBS:
+        build = MAIN_ROOT / 'build' / 'release-check' / f'rtlib-{cpu}'
+        run([sys.executable, ROOT / 'tools' / 'build_game.py', '--make-runtime-lib', '--version', VERSION_TAG,
+             '--expected', ROOT / 'tools' / 'data' / EXPECTED, '--toolchain', llvm, '--cpu', cpu,
+             '--deps', out / 'runtime' / 'deps', '--ninja', out / 'bin' / 'ninja.exe', '--gen', RUNTIME_LAYOUT,
+             '--out', build], env=clean_env(llvm / 'bin', out / 'bin'))
+        shutil.copy2(build / 'libxcxrt.a', rt / name)
     for p in sorted((ROOT / 'runtime').rglob('*')):
         if p.suffix in RUNTIME_SUFFIXES and p.is_file():
             (rt / p.relative_to(ROOT / 'runtime')).parent.mkdir(parents=True, exist_ok=True)

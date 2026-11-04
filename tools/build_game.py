@@ -51,6 +51,10 @@ Split build. --make-runtime-lib compiles only runtime/ into <out>/libxcxrt.a (wh
 then compiles only the generated C and the install-time files (modules.c and INSTALL_SIDE, which bake the player's
 game hashes and version in) and links them with that library. The library holds no game-derived data.
 
+--cpu x86-64-v2 builds for processors without AVX2 (before Intel Haswell and AMD Excavator) instead of x86-64-v3. It
+applies to the generated C and runtime/ alike, so a --runtime-lib must be built with the same --cpu. Without FMA in
+hardware every fused multiply-add of the game becomes a call to the C library's fma, so such a build runs slower.
+
 Standard library only.
 """
 import argparse
@@ -90,10 +94,12 @@ CLANG = UCRT / 'clang.exe' if WIN else on_path('clang')
 NINJA = UCRT / 'ninja.exe' if WIN else on_path('ninja')
 SDL3_DLLS = [UCRT / 'SDL3.dll', UCRT / 'libiconv-2.dll', UCRT / 'libopus-0.dll'] if WIN else []
 
-# Flags for generated code as LAS Recomp builds it (Makefile GENFLAGS, Windows), plus -march for the FP/SIMD lowering.
+# Flags for generated code as LAS Recomp builds it (Makefile GENFLAGS, Windows), plus -march for the FP/SIMD lowering
+# (--cpu replaces it in both lists).
 GEN_FLAGS = ['-O1', '-fno-strict-aliasing', '-Wno-return-type', '-Wno-unused-label', '-fvisibility=hidden',
              '-march=x86-64-v3']
 RT_FLAGS = ['-O2', '-g', '-Wall', '-fno-strict-aliasing', '-march=x86-64-v3']
+CPU_LEVELS = ('x86-64-v3', 'x86-64-v2')
 if WIN:
     LINK_FLAGS = ['-fuse-ld=lld', '-Wl,--stack,16777216', '"-Wl,--Map=$builddir/xcx.map"']   # the map feeds tools/prof_report.py
     LINK_LIBS = ['-lpsapi', '-lbcrypt', '-lvulkan-1', '-luser32', '-lgdi32', '-ldwmapi', '-lwinmm', '-lSDL3', '-lopus', '-l:libvpx.a', '-l:libzstd.a', '-l:libstdc++.a', '-l:libwinpthread.a']   # Vulkan back end; libvpx static (movies); libzstd static (resolution.c)
@@ -725,7 +731,11 @@ def main():
                                                     f'({", ".join(sorted(INSTALL_SIDE))} and modules.c still compile)')
     ap.add_argument('--expected', type=Path,
                     help='expected hashes (default tools/data/expected-<display version>.json)')
+    ap.add_argument('--cpu', choices=CPU_LEVELS, default=CPU_LEVELS[0],
+                    help=f'x86-64 level to compile for (default {CPU_LEVELS[0]}; x86-64-v2 for CPUs without AVX2)')
     args = ap.parse_args()
+    for flags in (GEN_FLAGS, RT_FLAGS):
+        flags[flags.index('-march=x86-64-v3')] = f'-march={args.cpu}'
 
     gen = (args.gen or ROOT / 'generated' / args.version).resolve()
     out = (args.out or ROOT / 'build' / args.version).resolve()

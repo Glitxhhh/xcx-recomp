@@ -170,7 +170,7 @@ void input_map_configure(void) {
         char var[32];
         snprintf(var, sizeof var, "XCX_BIND_%s", action_names[a]);
         const char *v = cfg_get(var);
-        if (v && *v && input_map_bind(action_names[a], v)) rt_log("input: %s = %s", var + 5, v);
+        if (v && *v && input_map_bind(action_names[a], v)) rt_log("input: %s = %s", var + 4, v);
     }
 }
 

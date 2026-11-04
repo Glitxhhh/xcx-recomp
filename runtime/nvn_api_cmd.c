@@ -680,6 +680,7 @@ NVN_API(nvnCommandBufferBindVertexBuffer) {
 // (fades, dim layers) stays as it is, so that it still covers the frame.
 #define UI_BIND_LR (MOD_MAIN_BASE + 0x95ce04)
 #define UI_FULL_WIDTH 1.9f
+#define UI_TALL 1.5f
 static _Thread_local int ui_on_output, ui_in_rect;
 static _Thread_local uint64_t ui_pages[8];   // ui_readable's 64 KiB pages, plus one so that 0 means none
 
@@ -814,11 +815,12 @@ static void ui_fit(const Cpu *c, int st, uint64_t addr, uint64_t size) {
     unsigned slot = (unsigned)(addr >> 4) % 64;   // a block bound for a second draw is narrow already
     if (done[slot].addr == addr && done[slot].x == f[0]) return;
     float a = f[3], b = f[3] + f[0], lo = a < b ? a : b, hi = a < b ? b : a;
-    // An element as wide as the canvas, or a tall shade over a whole side, keeps its full reach. Some elements only look
-    // that wide: they carry their shape in the vertices, in units of the canvas width on both axes, so the matrix's rows
+    // An element as wide as the canvas, or a tall shade over a whole side, keeps its full reach. Tall means over three
+    // quarters of the canvas's height: the Load Game rows and the Active Members level linework (the lower right quarter)
+    // also start at a screen edge, and they narrow like the rest. Some elements only look that wide: they carry their shape in the vertices, in units of the canvas width on both axes, so the matrix's rows
     // keep the canvas's 16:9 ratio, turned for spinning ones (the battle arts' charge rings, the autosave banner). Those
     // narrow like the rest, placed by their origin.
-    if (fabsf(f[0]) >= UI_FULL_WIDTH || (hi - lo >= 1 && fabsf(f[5]) >= 1 && (lo <= -0.99f || hi >= 0.99f))) {
+    if (fabsf(f[0]) >= UI_FULL_WIDTH || (hi - lo >= 1 && fabsf(f[5]) >= UI_TALL && (lo <= -0.99f || hi >= 0.99f))) {
         float rx = hypotf(f[0], f[1]), ry = hypotf(f[4], f[5]);
         if (!(rx > 0) || fabsf(ry / rx - 16.0f / 9.0f) > 0.02f) return;
         lo = hi = f[3];

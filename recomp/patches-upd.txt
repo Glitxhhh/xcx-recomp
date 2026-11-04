@@ -56,6 +56,18 @@ site xcx60 main ab700 bd40b6a8 @page:x8 bd40b6a8 bd404d10 1e300908
 site xcx60 main e5e8c 1e280800 @page:x0 bd404c01 1e280800 1e210800
 site xcx60 main e5860 1e214000 @page:x8 bd404d01 1e214000 1e210800
 
+# The small or big field jump (issue #64), decided by main+0x23ee90: big when the jump's hold time (VF_JumpInputDuration,
+# which counts from the takeoff) reaches min(VF_HighJumpInputFrame / 30, the PROG_SmallOrBigJump frame / 30 +
+# CF_NormalTakeOffEnd / 30) - 1e-6 on a frame where the jump animation has not yet passed that PROG frame. The hold time
+# leads the animation by the takeoff plus the part of a frame the takeoff overshoots, and the animation's last frame
+# before the PROG frame falls up to a frame short of it, so held jumps turned small when the two frame boundaries fell
+# unevenly, which steady 30 or 60 fps frames avoid. The threshold is lowered by the patch page's +0x40 (one frame)
+# instead of 1e-6, so a held jump is big at any frame time and a tap stays small. x8 is free until main+0x23f008.
+site xcx60 main 23efe8 5286f7a8 @page:x8
+site xcx60 main 23efec 72b6b0c8 d503201f
+site xcx60 main 23eff8 1e270101 bd404101
+site xcx60 main 23effc 1e212800 1e213800
+
 # The menus' frame step (issue #63): main+0x927e10 fills the menu manager's frame info each frame from the game's frame
 # interval in vsyncs (main+0x1d943a0): +0x8fc and +0x900 = interval / 60 s, +0x904 = 30 / (60 / interval). Menu models
 # (Ground Gear and the others, through main+0x6916cc and the model's step setter main+0x185d48) and several menu timers
