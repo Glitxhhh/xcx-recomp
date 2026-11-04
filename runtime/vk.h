@@ -325,7 +325,12 @@ void vk_texture_storage_bound_locked(const VkTexImage *img);   // bound as a sto
 uint64_t vk_texture_last_write(const tex_t *t);    // timeline value of the newest submission recorded to write it; 0: none
 size_t vk_texture_texel_span(const tex_t *t, const view_t *v, const NVNcopyRegion *r, uint64_t row, uint64_t img);   // bytes ReadTexels spans; 0 for a bad region
 int vk_texture_small_dirty(void);                   // a small mirrored target holds GPU texels its storage lacks
-void vk_texture_write_back_small(uint64_t fence);   // writes those rendered by work up to fence back to storage
+int vk_texture_write_back_small(uint64_t fence, int sync);   // writes those rendered by work up to fence back to
+                                                            // storage; sync 0: only from their readbacks, 1 when
+                                                            // one needs a synchronous copy (nothing written then)
+void vk_texture_maps_changed(void);                 // a pool was freed or remapped: write_back checks storage again
+int vk_texture_readbacks_pending(void);             // the submission being recorded wrote small mirrored targets
+void vk_texture_record_readbacks(VkCommandBuffer cb, uint64_t fence);   // copies them to host memory at its end
 void vk_texture_debug(const VkTexImage *img, uint32_t *uploads, int *last_change, int *pages_written);   // vk_dump
 int vk_texture_slot_swz(int id, uint8_t swz[4]);    // vk_dump: swizzle of the descriptor in slot id
 int vk_texture_read_image(const tex_t *t, const view_t *v, const NVNcopyRegion *r, uint8_t *dst, uint64_t row,
