@@ -217,7 +217,10 @@ static void replay_main(void *arg) {
         }
         plat_mutex_lock(&rl);
         if (it.kind == RI_SUBMIT) r_submit_done = it.submit_no;
-        else r_presents_done++;
+        // Only presents count for the frame bound in vk_be_present: a frame also queues hundreds of releases, and
+        // counting them let the game run up to 76 frames ahead of the replay, past the one frame its unfenced rewrites
+        // of uniform, vertex and storage data allow for (flickering, a black scene behind menus; issue 71).
+        else if (it.kind == RI_PRESENT) r_presents_done++;
         r_busy = 0;
         plat_cond_broadcast(&rcv);
     }
