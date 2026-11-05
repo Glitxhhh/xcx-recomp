@@ -34,6 +34,7 @@ typedef struct {
 static Out outs[OUT_MAX];
 static PlatMutex lock = PLAT_MUTEX_INIT;
 static int sdl_ready = -1;
+static int suspended;   // audio_out_suspend: out of focus, every started stream is paused
 
 static uint64_t now_ns(void) { return plat_now_ns(); }
 
@@ -121,6 +122,23 @@ static void ov_close(Cpu *c) {
     if (s) SDL_DestroyAudioStream(s);
 }
 
+// Out of focus (ov_system.c oe_set_focus): the device stops pulling every started stream, so the queued sound holds
+// and no buffer is released until the focus returns, as on a suspended console. A game that waits for a release then
+// waits in GetReleasedAudioOutBuffer's event, which gives its virtual core up.
+void audio_out_suspend(int on) {
+    plat_mutex_lock(&lock);
+    if (on != suspended) {
+        suspended = on;
+        for (int i = 0; i < OUT_MAX; i++) {
+            Out *o = &outs[i];
+            if (!o->guest || !o->stream || o->state != STATE_STARTED) continue;
+            if (on) SDL_PauseAudioStreamDevice(o->stream);
+            else SDL_ResumeAudioStreamDevice(o->stream);
+        }
+    }
+    plat_mutex_unlock(&lock);
+}
+
 // Result StartAudioOut(AudioOut *)
 static void ov_start(Cpu *c) {
     plat_mutex_lock(&lock);
@@ -128,7 +146,7 @@ static void ov_start(Cpu *c) {
     if (o->state != STATE_STARTED) {
         o->state = STATE_STARTED;
         o->start_ns = now_ns();
-        if (o->stream) SDL_ResumeAudioStreamDevice(o->stream);
+        if (o->stream && !suspended) SDL_ResumeAudioStreamDevice(o->stream);
     }
     plat_mutex_unlock(&lock);
     ret_x(c, 0);
