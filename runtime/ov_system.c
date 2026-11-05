@@ -161,7 +161,29 @@ static int assume_focus(void) {
     }
     return (int)a;
 }
-void oe_set_focus(int in_focus) { plat_xchg32(&focus_state, in_focus || assume_focus() ? 1 : 2); }
+// Out of focus is suspended time. On the console the system stops the whole application, its audio with it, while
+// the HOME menu has the focus; here the game only pauses itself when it reads focus state 2, so audren.c render_thread
+// holds its voices while oe_suspended, ov_audio_out.c audio_out_suspend pauses the AudioOut streams, and ov_movie.c paces movies by oe_clock_ns, which stops for that time. Otherwise
+// a movie's sound plays on during the pause and the picture never catches up.
+static PlatMutex suspend_lock = PLAT_MUTEX_INIT;
+static uint64_t suspended_ns, suspend_start;
+void oe_set_focus(int in_focus) {
+    int32_t state = in_focus || assume_focus() ? 1 : 2;
+    plat_mutex_lock(&suspend_lock);
+    uint64_t now = kern_now_ns();
+    if (state == 2 && !suspend_start) suspend_start = now ? now : 1;
+    if (state == 1 && suspend_start) suspended_ns += now - suspend_start, suspend_start = 0;
+    plat_xchg32(&focus_state, state);
+    plat_mutex_unlock(&suspend_lock);
+    audio_out_suspend(state == 2);
+}
+int oe_suspended(void) { return plat_cas32(&focus_state, 0, 0) == 2; }
+uint64_t oe_clock_ns(void) {
+    plat_mutex_lock(&suspend_lock);
+    uint64_t now = kern_now_ns(), t = now - suspended_ns - (suspend_start ? now - suspend_start : 0);
+    plat_mutex_unlock(&suspend_lock);
+    return t;
+}
 static void ov_focus_state(Cpu *c) { ret_x(c, (uint64_t)focus_state); }
 
 static volatile int32_t notify_resume, notify_operation, notify_performance;
