@@ -224,6 +224,9 @@ void kern_bind_system_event(Cpu *c, uint64_t ev, int autoclear);   // guest thre
 void kern_signal_system_event(uint64_t ev);                // any thread
 int kern_svc(Cpu *c, uint32_t imm);                        // thread/sync SVCs; 1 if handled
 uint64_t kern_now_ns(void);
+int oe_suspended(void);              // ov_system.c: the game is out of focus (suspended, as under the console's HOME menu)
+uint64_t oe_clock_ns(void);          // ov_system.c: kern_now_ns less the time spent out of focus
+void audio_out_suspend(int on);      // ov_audio_out.c: pause every started AudioOut stream while out of focus
 extern uint64_t rt_guest_start_ns;   // kern_now_ns when the guest started (boot.c), 0 before
 typedef struct { uint64_t svcs, threads, host_calls; } RtStats;
 RtStats rt_stats(void);                                    // host_calls: hostfn_calls()
