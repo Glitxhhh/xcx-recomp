@@ -94,6 +94,13 @@ Every guest thread is a host thread. XCX assumes Horizon's scheduler: three appl
   (MacNativeGames' sites); `resolution.c` sets them from `output_res` and `render_scale` and grows the texture heap
   and the application pool to match. When the window is larger than the output, `vk_fsr.c` runs AMD FSR 1 (EASU,
   RCAS) on the present.
+- DLSS (`vk_dlss.c`, `upscaler = dlss`, read at start; ported from TotK Recomp's `vk_dlaa.c`). NVIDIA DLSS through the
+  driver's NGX core loaded at run time (no SDK code compiled in), with `nvngx_dlss.dll` next to the exe. It replaces the
+  game's FXAA draw, which is also its scaling draw: DLSS reads the post-processed light target at the scene size and
+  writes the output-sized picture the interface is drawn over (DLAA at render scale 100, upscaling below). The scene's
+  draws get a sub-pixel Halton viewport jitter (full-screen draws excepted); camera motion vectors are reprojected from
+  the scene depth through this and last frame's view-projection of the scene camera block (vertex c3, 0x300 bytes), in
+  double precision on the CPU. Objects that move on their own get only the camera's motion.
 - Occlusion queries never block the CPU; a result that is not ready counts as visible.
 - ASTC textures are uploaded as they are where the device reports `textureCompressionASTC_LDR`, and decoded by a compute shader everywhere else (`vk_astc.c`, `XCX_ASTC`). The CPU decoder (`tex_astc*.c`) is the fallback and the test oracle.
 - Draw state. A draw whose program, bound state and textures repeat reuses the previous draw's shaders and skips rebuilding its descriptor sets; descriptor sets are written through update templates (`vk_exec_draw.c`, `vk_pipeline.c`).

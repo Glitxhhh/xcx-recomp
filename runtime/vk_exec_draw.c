@@ -27,6 +27,7 @@
 #include "nvn_hmap.h"
 #include "vk.h"
 #include "vk_exec.h"
+#include "vk_dlss.h"
 #include "platform/platform.h"
 
 #define MAX_BINDINGS 128
@@ -1680,6 +1681,7 @@ static void record_fixed(VkExec *ex) {
         if (w < 1) w = 1;
         if (h < 1) h = 1;
         VkViewport v = {x, y + h, w, -h, ex->depth_range[0], ex->depth_range[1]};   // the y flip: negative height
+        vk_dlss_viewport(&v);   // the scene's draws move by the DLSS jitter
         vkCmdSetViewportWithCount(cb, 1, &v);
         ex->recorded++;
     }
@@ -1868,6 +1870,7 @@ static int prepare_draw(VkExec *ex, int prim, int32_t count, int restart) {
         if (fs_wait) fs = shader_for(ex, NVN_STAGE_FS, &has_fs, NULL, 1);
     }
     if (!vs || (has_fs && !fs)) return 0;
+    if (vk_dlss_skip_draw(ex)) return 0;   // the game's FXAA scaling, whose target DLSS wrote (vk_dlss.c)
     uint32_t fbl = feedback_prepare(ex, fs);
     VkPipeState s = ex->pipe;
     s.vs = vs, s.fs = fs;
@@ -1938,6 +1941,7 @@ static int prepare_draw(VkExec *ex, int prim, int32_t count, int restart) {
         ex->recorded++;
         B.st = s, B.st_valid = 1;
     }
+    vk_dlss_draw(ex, count);   // the scene camera and the jitter (vk_dlss.c)
     record_fixed(ex);
     repeat_stats(ex, info);
     bind_resources(ex, info);
