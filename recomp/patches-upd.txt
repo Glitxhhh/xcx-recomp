@@ -55,6 +55,12 @@ site xcx60 main ab700 bd40b6a8 @page:x8 bd40b6a8 bd404d10 1e300908
 # x0 is reloaded right after the first, x8 is free at the second, and s1 is caller-saved at both (a call follows).
 site xcx60 main e5e8c 1e280800 @page:x0 bd404c01 1e280800 1e210800
 site xcx60 main e5860 1e214000 @page:x8 bd404d01 1e214000 1e210800
+# The hold's tick sound (main+0xe5ee8): a timer at +0x48 of the hold loses 1.0 a frame and, at 0, is reset to 10.0 and
+# plays the tick (main+0x35e6b0), so the tick came every 10 frames, 4 times as often at 120 fps. The step is the patch
+# page's +0x4c (30 / frame rate) instead: fmov s1, #-1.0 becomes its load and the fadd a fsub. x8 is rewritten at
+# main+0xe5f00 before its next use.
+site xcx60 main e5eec 1e3e1001 @page:x8 bd404d01
+site xcx60 main e5ef0 1e212800 1e213800
 
 # The small or big field jump (issue #64), decided by main+0x23ee90: big when the jump's hold time (VF_JumpInputDuration,
 # which counts from the takeoff) reaches min(VF_HighJumpInputFrame / 30, the PROG_SmallOrBigJump frame / 30 +

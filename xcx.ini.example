@@ -150,6 +150,10 @@
 # audio_prefill_ms = 20
 # Volume in percent (0 to 100), on top of the game's own. Changes while the game runs take effect at once.
 # volume = 100
+# 1 pauses the game and its sound while the window is in the background, as a console does under its HOME menu.
+# 0 (default) keeps the game running in the background, so cutscenes and their sound always stay together; pause with
+# the game's own menu (+ / Start).
+# pause_in_background = 0
 
 [input]
 # Gamepad motion controls (0 = off) and vibration (0 = off).
