@@ -9,8 +9,8 @@
 //   XCX_LOCALE=<BCP 47 tag>           else the language for this locale ("pt-BR"), else the Windows user locale;
 //                                      a language the game does not ship becomes en-US
 //   XCX_OPERATION_MODE=docked|handheld   operation and performance mode reported to the game (default docked)
-//   XCX_ASSUME_FOCUS=1                GetCurrentFocusState always reports in focus, whatever the window says; the
-//                                      window opens without taking focus (gfx_window_win.c), for scripted runs
+//   XCX_ASSUME_FOCUS=0|1              1: GetCurrentFocusState always reports in focus, whatever the window says.
+//                                      Default: 1 unless XCX_PAUSE_IN_BACKGROUND=1 (the game keeps running out of focus)
 //   XCX_SHARED_FONTS=<dir>            nn::pl shared fonts (tools/extract_fonts.py output), default
 //                                      <romfs>/../../firmware/shared-fonts
 #include <ctype.h>
@@ -148,15 +148,18 @@ static void ov_focus_mode(Cpu *c) {
 }
 
 // FocusState GetCurrentFocusState(): 1 in focus, 2 out of focus (nn::oe::FocusState). In focus until the window
-// reports otherwise through oe_set_focus; XCX_ASSUME_FOCUS=1 (unattended runs) pins it to 1. The caller of
+// reports otherwise through oe_set_focus. By default the focus is pinned to 1: the game, which pauses itself out of
+// focus without its sound, would let a cutscene drift from its voices, and players pause with the game's own menu.
+// XCX_PAUSE_IN_BACKGROUND=1 reports the window's focus and suspends the time out of focus (below); XCX_ASSUME_FOCUS
+// overrides both ways. The caller of
 // oe_set_focus also pushes OE_MSG_FOCUS_STATE_CHANGED.
 static volatile int32_t focus_state = 1;
 static int assume_focus(void) {
     static volatile int32_t v = -1;
     int32_t a = v;
     if (a < 0) {
-        const char *e = cfg_get("XCX_ASSUME_FOCUS");
-        a = e && atoi(e) ? 1 : 0;
+        const char *e = cfg_get("XCX_ASSUME_FOCUS"), *p = cfg_get("XCX_PAUSE_IN_BACKGROUND");
+        a = e ? atoi(e) != 0 : !(p && atoi(p));
         plat_xchg32(&v, a);
     }
     return (int)a;
