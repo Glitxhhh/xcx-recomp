@@ -131,6 +131,7 @@ static int present_and_check(Source *s, int first, int i, int *w_out, int *h_out
 }
 
 int probe_window(void) {
+    vk_hdr_off();   // the checks read 8-bit swapchain pixels
     gfx_window_start();
     VkCtx *c = vk_ctx();
     if (!c) return fail("no Vulkan device");
