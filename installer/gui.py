@@ -205,6 +205,11 @@ class App:
         self.label(grid, 'ui.dest').grid(row=i + 1, column=0, sticky='w', pady=4)
         ttk.Entry(grid, textvariable=self.vars['dest']).grid(row=i + 1, column=1, sticky='ew', pady=4)
         self.button(grid, 'ui.browse', self.pick_dest).grid(row=i + 1, column=2, padx=(8, 0))
+        self.dlss_var = tk.BooleanVar(value=True)
+        dlss = ttk.Checkbutton(f, variable=self.dlss_var)
+        self.bind_text(dlss, 'text', 'ui.dlss')
+        dlss.pack(anchor='w', pady=(8, 0))
+        self.label(f, 'ui.dlss_help', wraplength=600, justify='left').pack(anchor='w', padx=(22, 0))
         self.update_hint = ttk.Label(f, wraplength=620, justify='left')
         self.update_hint.pack(anchor='w', pady=(8, 0))
         self.form_error = ttk.Label(f, style='Err.TLabel', wraplength=620, justify='left')
@@ -265,7 +270,8 @@ class App:
 
     def form(self):
         return Form(base=self.vars['base'].get(), update=self.vars['update'].get(), dlc=self.vars['dlc'].get(),
-                    keys=self.vars['keys'].get(), lang=self.selected_lang(), dest=self.vars['dest'].get())
+                    keys=self.vars['keys'].get(), lang=self.selected_lang(), dest=self.vars['dest'].get(),
+                    dlss=self.dlss_var.get())
 
     def refresh_form(self):
         form = self.form()
@@ -493,7 +499,7 @@ class App:
 # ---- self test ---------------------------------------------------------------------------------------------------
 
 SAMPLE_START = {'type': 'start', 'release': 'selftest', 'mode': 'install', 'dest': 'Z:/selftest/XCX', 'log': 'D:\\log.txt',
-                'steps': ['check', 'extract', 'lift', 'compile', 'prepare', 'cleanup']}
+                'steps': ['check', 'extract', 'lift', 'compile', 'prepare', 'dlss', 'cleanup']}
 SAMPLE_RUN = [
     SAMPLE_START,
     {'type': 'plan', 'run': ['check', 'extract'], 'skip': {}},

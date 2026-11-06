@@ -739,6 +739,17 @@ void vk_dlss_frame(void) {
         D.gbuf = D.post = D.done = D.up = 0;
         return;
     }
+    // Upscaling: textures are sampled for the output's resolution, not the scene's (NVIDIA's DLSS guide: a mip bias of
+    // log2(render / output)), so their detail survives the scaling. The ratio is that of the size DLSS last ran at;
+    // DLAA (1:1) and DLSS off give 0.
+    static float bias;
+    float b = dl_active() && D.last && D.last->ow ? log2f((float)D.last->w / (float)D.last->ow) : 0.0f;
+    if (b > -0.01f) b = 0.0f;
+    if (fabsf(b - bias) > 0.01f) {
+        bias = b;
+        vk_sampler_dlss_bias(b);
+        rt_log("dlss: texture mip bias %.2f", b);
+    }
     if (!dl_active()) return;
     if (!D.done) D.frames_missed++, D.prev_ok = 0;
     if (D.jit_used && !D.done) D.hold = 60, D.holds++;   // jittered but not resolved: that frame shook

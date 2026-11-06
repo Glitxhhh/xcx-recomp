@@ -167,5 +167,11 @@
  "lang.zh-TW": "Chinese (Traditional, Taiwan)",
  "lang.zh-Hans": "Chinese (Simplified)",
  "lang.zh-Hant": "Chinese (Traditional)",
- "phase.prepare.translator": "Copying the shader translator"
+ "phase.prepare.translator": "Copying the shader translator",
+ "step.dlss": "Downloading NVIDIA DLSS",
+ "phase.dlss.download": "Downloading nvngx_dlss.dll from NVIDIA's DLSS SDK",
+ "warn.dlss_kept": "A DLSS library is already in the install folder ({path}); the setup keeps it.",
+ "warn.dlss_download_failed": "NVIDIA DLSS could not be downloaded from {url}: {detail}. The game runs without it; the next setup run tries again.",
+ "ui.dlss": "Download NVIDIA DLSS (nvngx_dlss.dll) for NVIDIA RTX graphics cards",
+ "ui.dlss_help": "From NVIDIA's DLSS SDK on GitHub, under NVIDIA's RTX SDK license (github.com/NVIDIA/DLSS). It makes the DLSS upscaler setting work; without it the game uses FSR instead."
 }

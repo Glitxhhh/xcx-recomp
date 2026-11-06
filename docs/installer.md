@@ -20,6 +20,7 @@ The install folder (`main.c` `portable_paths()` reads this layout; it stays port
 ```
 <install folder>/
   xcx.exe, SDL3.dll, libopus-0.dll, xcx_xlate.exe
+  nvngx_dlss.dll                 NVIDIA DLSS, downloaded by the setup's DLSS step when the player keeps it ticked
   xcx.ini                       language; the other keys as commented defaults (xcx.ini.example)
   exefs/, romfs/                 extracted from the player's files
   profile/                       saves
@@ -51,7 +52,13 @@ keeps `profile/`. Saves carry over both ways: 1.4.3 converts a 1.2.1 save on loa
    them with the prebuilt runtime library into `xcx.exe` (`build_game.py --runtime-lib`; about 3 min on 24 cores).
 5. **Prepare** the RomFS patches and the shaders (`tools/make_romfs_patches.py`, `tools/prepare_shaders.py`,
    `xcx.exe --prepare-shaders`) in the install folder.
-6. **Clean up** the temp folder (generated C and objects, about 1.3 GB).
+6. **DLSS** (the window's tick box, on by default, or `--dlss`; Windows with an NVIDIA RTX GPU): download
+   `nvngx_dlss.dll` from NVIDIA's own DLSS SDK repository (github.com/NVIDIA/DLSS, a pinned tag, NVIDIA RTX SDK
+   license) into the install folder and check its size and SHA-256 (`steps.py`, `Dlss`). The release does not ship
+   the library; NGX loads it from the folder of xcx.exe for `upscaler = dlss`. A DLSS library already in the folder (a
+   newer one the player put there) is kept. Without an RTX GPU the step only logs and does nothing; a failed download
+   warns, the game runs without DLSS, and the next run of the setup tries again.
+7. **Clean up** the temp folder (generated C and objects, about 1.3 GB).
 
 A cancelled or failed setup resumes from the last finished step (`xcx-install.json`).
 
