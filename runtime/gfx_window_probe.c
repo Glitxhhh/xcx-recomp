@@ -155,6 +155,9 @@ int probe_window(void) {
         return fail("focus");
     }
     printf("probe-window: focus off/on pushed 2 messages (15)\n");
+    int held = wsys_probe_display_held();
+    if (held == 0) return fail("the screen saver is not held off while the window has the focus");
+    printf("probe-window: screen saver held off in focus: %s\n", held > 0 ? "yes" : "unknown");
 
     // Cursor release: Esc releases, a client click recaptures, a title bar activation releases (where the window system
     // reports one). The probe window may not be the foreground window, so this checks the release flag, not the capture.
