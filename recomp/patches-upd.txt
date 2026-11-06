@@ -83,6 +83,17 @@ site xcx60 main 23effc 1e212800 1e213800
 site xcx60 main 927e4c 1e201821 @page:x9 bd404121 1e220003 1e230821
 site xcx60 main 927e50 1e201840 1e210840
 
+# The sky's cloud turn and fade (issue #89): main+0xa16eec sets the render scene's step in 30 fps frames each frame
+# (+0x894 of the scene, 1.0, or 0.5 in the Switch 2 Edition's 60 fps mode). The sky update advances its cloud layers'
+# turn at +0x1c and +0x20 by speed * 1/30 s * step (main+0xa1116c and main+0xa11180) and its fade at +0x4c by
+# 1/30 * step (main+0xa1126c), so above 30 fps the clouds ran fast. Each load of the step is multiplied by the patch
+# page's +0x4c (30 / frame rate). The step itself stays 1.0: with it scaled, the water slowed down as the frame rate
+# rose, so some of its other readers already follow the frame time. x11 and s5 are unused in the rest of
+# main+0xa1116c's function; x8 and s2 are set again after main+0xa1126c.
+site xcx60 main a1116c bd489501 bd489501 @page:x11 bd404d65 1e250821
+site xcx60 main a11180 bd489501 bd489501 @page:x11 bd404d65 1e250821
+site xcx60 main a1126c bd489500 bd489500 @page:x8 bd404d02 1e220800
+
 # The mod's getter that returns false on Switch (1.0.1 +0x13eb280): true. Off: in 2.0.0 it crashes the title screen's
 # rendering (main+0x9530b0 reads through a bad pointer).
 site xcx60g main 13db618 2a1f03e0 52800020
