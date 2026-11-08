@@ -20,6 +20,7 @@ Report problems as issues, following [CONTRIBUTING.md](CONTRIBUTING.md).
 - Update 2.0.0 and the Exploration Support Package add-on content
 - XCX-Setup: builds the game from your own NSP files and `prod.keys`
 - In-game settings menu (F1) and performance overlay (F10)
+- HDR10 output with peak, game and HUD brightness settings
 - Keyboard, mouse and gamepad
 
 ## Planned

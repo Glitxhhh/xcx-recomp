@@ -95,15 +95,23 @@ static char *join(const char *dir, const char *name) {
 // Save in progress: a save-data file open for writing, or save data changed in the last 3 s and not committed yet
 // (XCX writes a slot's files back to back and then commits; between the files nothing is open for a moment).
 static volatile int32_t save_writers, save_dirty;
+static volatile int32_t commit_pending;   // the save commit thread runs (section "save transactions")
 static volatile int64_t save_changed_ns;
 static void save_wait_commit(void);
+// A save call that held its caller (the game) for 10 ms or more is logged, the first 60 of them: a freeze on saving
+// (#111) shows which step it comes from.
+static void slow_save(const char *what, uint64_t t0) {
+    static volatile int32_t n;
+    uint64_t us = (plat_now_ns() - t0) / 1000;
+    if (us >= 10000 && plat_inc32(&n) <= 60) rt_log("fs: %s held the game %.1f ms", what, us / 1000.0);
+}
+
 static void save_touched(void) {
-    save_wait_commit();   // every change to save data comes here first: none lands in a commit's snapshot
     plat_xchg64(&save_changed_ns, (int64_t)plat_now_ns());
     plat_xchg32(&save_dirty, 1);
 }
 int fs_save_busy(void) {
-    if (plat_cas32(&save_writers, 0, 0) > 0) return 1;
+    if (plat_cas32(&save_writers, 0, 0) > 0 || plat_cas32(&commit_pending, 0, 0)) return 1;
     return plat_cas32(&save_dirty, 0, 0) &&
            plat_now_ns() - (uint64_t)plat_cas64(&save_changed_ns, 0, 0) < 3000000000ull;
 }
@@ -154,31 +162,39 @@ static int remove_tree(const char *path) {
 //
 //   <profile>/save/<uid>/          committed save: what the next start loads
 //   <profile>/save-tx/work/        working copy, the save mount's root; deleted at the last Unmount and at start
+//   <profile>/save-tx/next/        the game's Commit's snapshot of the working copy, not flushed yet
 //   <profile>/save-tx/new/         Commit's staging copy of the working copy
 //   <profile>/save-tx/old/         the committed save a Commit replaced, on its way to save-backup
 //
-// Commit: (1) copy work to new and flush every file (FlushFileBuffers) and directory, a file equal to the committed
-// one as a hard link to it; (2) rename save/<uid> to old;
-// (3) rename new to save/<uid>, the commit point; (4) move old to save-backup/<UTC time> and keep the newest three.
-// Both renames are durable (plat_fs_rename). The game's Commit returns 0 once steps (1) to (4) are
-// queued; a thread runs them (95-135 ms on the game thread before, in the 1.4.3 fight save) while every change to the
-// working copy waits in save_touched, and Unmount and the next Commit wait too. A crash in that time loses this Commit
-// only, and a failed one is logged instead of returned. save/<uid> is renamed away only after new is complete
+// Commit: (1) copy work to next, a file equal to the committed one as a hard link to it (the game's Commit, on its
+// thread); rename next to new and flush every file (FlushFileBuffers) and directory of it, then create save-tx/new-ready, the mark that new is complete; (2) rename save/<uid> to old;
+// (3) rename new to save/<uid>, the commit point, and delete the mark; (4) move old to save-backup/<UTC time> and keep
+// the newest three. When save/<uid> cannot be renamed (another program holds the folder open: a sync client, a virus
+// scanner, a drive that refuses folder renames; #108), (2) and (3) become apply_in_place: old gets hard links to the
+// committed files, and every file of new replaces its counterpart in save/<uid> one at a time. If that fails as well,
+// new and the mark stay: the next Commit or start finishes it, and the next working copy starts from new, so a failed
+// Commit is never lost.
+// Both renames are durable (plat_fs_rename). The game's Commit returns 0 once next is written; a thread runs the rest
+// (commit_run: 10-20 ms on a fast drive, 1-3 s on a slow one) while the game goes on writing the working copy, and a
+// Mount waits for it. A crash in that time loses this Commit only, and a failed one is logged instead of returned. save/<uid> is renamed away only after new is complete
 // on disk, so the recovery rule at start (save_recover) is:
 //   save/<uid> present   it is the committed save (the old one if the crash came before (3), the new one after);
 //                        new, if present, is an unfinished copy and is deleted (rollback);
 //   save/<uid> absent    the crash came between (2) and (3) and new is complete: rename it to save/<uid> (roll
 //                        forward); with no new either, old goes back to save/<uid>.
-// Then old, if present, goes to save-backup, and work (changes no Commit took) is deleted.
+// Then old, if present, goes to save-backup, next (a Commit the thread had not taken) is deleted, and work (changes no Commit took) is deleted. Before these, a marked new
+// (new-ready present) is complete: it replaces save/<uid> as in (2) and (3), whether save/<uid> is there or not.
 #define SAVE_BACKUPS 3
 #define COPY_CHUNK (1u << 20)
 
-static char tx_root[1100], backup_root[1100], new_root[1100], old_root[1100];
+static char tx_root[1100], backup_root[1100], new_root[1100], old_root[1100], next_root[1100], ready_path[1100];
 static PlatMutex tx_lock = PLAT_MUTEX_INIT;   // taken before lock, never inside it
 static int save_mounts;                  // M_SAVE mounts: the working copy exists while this is above 0
 
 // Probe hook: Commit stops at its tx_crash_at-th step (from 1) and leaves the disk as a process killed there would.
 static int tx_crash_at, tx_step, tx_dead;
+static int tx_no_dir_move;   // probe hook: the committed save's folder cannot be renamed, as in #108
+static int tx_no_replace;    // probe hook: no file of it can be replaced either
 static int crashed(void) {
     if (tx_crash_at && ++tx_step == tx_crash_at) tx_dead = 1;
     return tx_dead;
@@ -189,12 +205,16 @@ static int exists(const char *p) { return plat_fs_kind(p) != PLAT_FS_MISSING; }
 // Rename a directory, durably; retried for up to 2 s while another process (a virus scanner, the indexer) holds a
 // file in it. 0 on success.
 static int move_dir(const char *from, const char *to) {
+    if (tx_no_dir_move && !strcmp(from, save_root)) return -1;
+    int e = PLAT_FS_ERROR;
     for (int i = 0; i < 40; i++) {
-        int e = plat_fs_rename(from, to, 1);
+        e = plat_fs_rename(from, to, 1);
         if (!e) return 0;
-        if (e != PLAT_FS_BUSY) return -1;
+        if (e != PLAT_FS_BUSY) break;
         plat_sleep_ms(50);
     }
+    rt_log("fs: cannot rename %s to %s (%s, system error %u)", from, to, e == PLAT_FS_BUSY ? "in use" : "refused",
+           plat_fs_os_error());
     return -1;
 }
 
@@ -315,11 +335,129 @@ static void rotate_backup(void) {
     }
 }
 
+// Whether a and b are the same file (hard links of one file); 0 when either cannot be opened.
+static int same_id(const char *a, const char *b) {
+    PlatFile *h[2] = {plat_fs_open(a, 0, NULL), plat_fs_open(b, 0, NULL)};
+    PlatFileId ia, ib;
+    int same = h[0] && h[1] && plat_file_id(h[0], &ia) && plat_file_id(h[1], &ib) && ia.volume == ib.volume &&
+               ia.file_id == ib.file_id;
+    for (int i = 0; i < 2; i++)
+        if (h[i]) plat_file_close(h[i]);
+    return same;
+}
+
+// Put the file src at dst, replacing what is there, and keep src: a hard link (a copy where the drive has none) at
+// dst.xcx-new, renamed over dst; retried for up to 2 s while dst is in use. 0 on success.
+static int replace_file(const char *src, const char *dst) {
+    if (same_id(src, dst)) return 0;   // a link to the committed file: unchanged, and already in place
+    if (tx_no_replace) return -1;
+    char *tmp = malloc(strlen(dst) + 9);
+    need(tmp != NULL, "path allocation");
+    strcpy(tmp, dst);
+    strcat(tmp, ".xcx-new");
+    uint64_t bytes = 0;
+    int e = PLAT_FS_OK;
+    if (remove_tree(tmp) || (plat_fs_link(src, tmp) && copy_file(src, tmp, 1, &bytes))) e = PLAT_FS_ERROR;
+    if (!e && plat_fs_kind(dst) == PLAT_FS_DIR && remove_tree(dst)) e = PLAT_FS_ERROR;
+    for (int i = 0; !e && i < 40; i++) {
+        e = plat_fs_replace(tmp, dst);
+        if (e != PLAT_FS_BUSY) break;
+        plat_sleep_ms(50);
+    }
+    if (e) {
+        rt_log("fs: cannot replace %s (system error %u)", dst, plat_fs_os_error());
+        remove_tree(tmp);
+    }
+    free(tmp);
+    return e ? -1 : 0;
+}
+
+// Make dst the same tree as src, file by file. src stays as it is, so a second run after a crash finishes the first.
+static int apply_tree(const char *src, const char *dst) {
+    if (plat_fs_kind(dst) != PLAT_FS_DIR && (remove_tree(dst) || plat_fs_mkdir(dst))) return -1;
+    Listing l;
+    if (list_dir(src, &l)) return -1;
+    int bad = 0;
+    for (int i = 0; i < l.n && !bad; i++) {
+        if (l.e[i].kind == PLAT_FS_LINK) continue;
+        char *s = join(src, l.e[i].name), *d = join(dst, l.e[i].name);
+        bad = l.e[i].kind == PLAT_FS_DIR ? apply_tree(s, d) : replace_file(s, d);
+        if (!bad && crashed()) bad = -1;
+        free(s);
+        free(d);
+    }
+    listing_free(l.e, l.n);
+    if (bad || list_dir(dst, &l)) return -1;
+    for (int i = 0; i < l.n && !bad; i++) {   // what src lacks: files the game deleted, a .xcx-new a crash left
+        char *s = join(src, l.e[i].name), *d = join(dst, l.e[i].name);
+        if (!exists(s) && remove_tree(d)) bad = -1;
+        free(s);
+        free(d);
+    }
+    listing_free(l.e, l.n);
+    if (!bad) plat_fs_sync_dir(dst);
+    return bad;
+}
+
+// The mark that new is complete on disk (save-tx/new-ready), and its removal. 0 on success.
+static int mark_ready(void) {
+    PlatFile *f = plat_fs_create(ready_path, NULL);
+    if (!f) return -1;
+    int ok = plat_file_fsync(f);
+    plat_file_close(f);
+    plat_fs_sync_dir(tx_root);
+    return ok ? 0 : -1;
+}
+
+static void clear_ready(void) {
+    plat_fs_unlink(ready_path);
+    plat_fs_sync_dir(tx_root);
+}
+
+// Steps (2) and (3) without renaming save/<uid>: old gets hard links to its files (the backup), then new is applied
+// onto it file by file and deleted. 0 on success.
+static int apply_in_place(void) {
+    int n = 0, linked = 0;
+    uint64_t bytes = 0;
+    if (remove_tree(old_root) || copy_tree(save_root, old_root, save_root, 1, &n, &linked, &bytes)) {
+        rt_log("fs: save commit: no backup of the save it replaces");
+        remove_tree(old_root);
+    }
+    if (crashed() || apply_tree(new_root, save_root) || crashed()) return -1;
+    clear_ready();
+    if (crashed()) return -1;
+    remove_tree(new_root);
+    return 0;
+}
+
+// Steps (2) and (3): the marked new becomes save/<uid> and the mark goes. 0 on success; on failure new and the mark
+// stay.
+static int swap_in_new(void) {
+    if (exists(save_root) && move_dir(save_root, old_root)) {
+        rt_log("fs: save commit: the save folder cannot be renamed; replacing its files one at a time");
+        return apply_in_place();
+    }
+    if (crashed()) return -1;
+    if (move_dir(new_root, save_root)) {
+        if (exists(old_root) && move_dir(old_root, save_root))
+            rt_fatal("fs: save commit: cannot swap in the new save; the next start completes it");
+        return crashed() ? -1 : apply_in_place();
+    }
+    if (crashed()) return -1;
+    clear_ready();
+    return 0;
+}
+
 // Startup: finish or roll back an interrupted Commit and drop uncommitted changes (the rule above).
 static void save_recover(void) {
     const char *did = "nothing to recover";
+    int ready = exists(ready_path) && exists(new_root);
+    if (!ready && exists(ready_path)) clear_ready();   // new went in before the mark was deleted
     int has_save = exists(save_root);
-    if (!has_save && exists(new_root)) {
+    if (ready) {
+        did = swap_in_new() ? "cannot finish the last commit yet; the game loads it from save-tx/new"
+                            : "finished the last commit";
+    } else if (!has_save && exists(new_root)) {
         if (move_dir(new_root, save_root)) rt_fatal("fs: cannot complete an interrupted save commit");
         did = "completed an interrupted commit";
     } else if (!has_save && exists(old_root)) {
@@ -331,6 +469,7 @@ static void save_recover(void) {
     } else if (exists(old_root))
         did = "moved the save an interrupted commit replaced to save-backup";
     rotate_backup();
+    if (exists(next_root) && remove_tree(next_root)) rt_fatal("fs: cannot delete an untaken save snapshot");
     if (exists(work_root)) {
         if (remove_tree(work_root)) rt_fatal("fs: cannot delete the old save working copy");
         if (!strcmp(did, "nothing to recover"))
@@ -343,7 +482,8 @@ static void save_recover(void) {
 static void work_create(void) {
     int n = 0, linked = 0;
     uint64_t bytes = 0;
-    if (remove_tree(work_root) || copy_tree(save_root, work_root, NULL, 0, &n, &linked, &bytes))
+    const char *from = exists(ready_path) && exists(new_root) ? new_root : save_root;   // a commit not finished yet
+    if (remove_tree(work_root) || copy_tree(from, work_root, NULL, 0, &n, &linked, &bytes))
         rt_fatal("fs: cannot make the save working copy");
     rt_log("host save working copy: %d files, %.1f MiB", n, bytes / 1048576.0);
 }
@@ -355,64 +495,106 @@ static void work_discard(void) {
 }
 
 // Commit of the save mount, tx_lock held. Steps (1) to (4) above; every failure before (3) leaves the committed save.
-static uint32_t save_commit_locked(void) {
-    uint64_t t0 = plat_now_ns(), bytes = 0;
-    int nfiles = 0, linked = 0;
-    tx_step = tx_dead = 0;
-    rotate_backup();   // an old left by a failed (4)
-    const char *base = exists(save_root) ? save_root : NULL;
-    if (remove_tree(new_root) || copy_tree(work_root, new_root, base, 1, &nfiles, &linked, &bytes)) {
+// Flush every file of the tree that is not a hard link to the committed save (those are on the disk already), then the
+// directories. 0 on success.
+static int flush_tree(const char *dir) {
+    Listing l;
+    if (list_dir(dir, &l)) return -1;
+    int bad = 0;
+    for (int i = 0; i < l.n && !bad; i++) {
+        if (l.e[i].kind == PLAT_FS_LINK) continue;
+        char *p = join(dir, l.e[i].name);
+        if (l.e[i].kind == PLAT_FS_DIR) bad = flush_tree(p);
+        else if (plat_fs_links(p) < 2) {
+            PlatFile *f = plat_fs_open(p, 1, NULL);
+            bad = !f || !plat_file_fsync(f) ? -1 : 0;
+            if (f) plat_file_close(f);
+            if (!bad && crashed()) bad = -1;
+        }
+        free(p);
+    }
+    listing_free(l.e, l.n);
+    if (!bad) plat_fs_sync_dir(dir);
+    return bad;
+}
+
+// The background commit. The game's Commit copies the working copy to save-tx/next on its own thread (no flush: the
+// files are in the system's cache, a few ms) and returns; one thread at a time (commit_pending) takes next as new and
+// runs steps (1) to (4) on it, flushes and renames that took 1-3 s on a slow drive. The game never waits for that
+// thread to save again (#111): the snapshot already holds what this Commit covers, and a Commit while the thread is
+// busy replaces a snapshot the thread has not taken yet. A start deletes a next it finds (that Commit is lost, as a
+// crash before (1) ended loses it).
+static PlatMutex pend_lock = PLAT_MUTEX_INIT;
+static PlatCond pend_cv = PLAT_COND_INIT;
+static int have_next, next_files, next_linked;   // pend_lock
+static uint64_t next_bytes, next_ns;
+
+static void save_wait_commit(void) {
+    if (!plat_cas32(&commit_pending, 0, 0)) return;
+    uint64_t t0 = plat_now_ns();
+    plat_mutex_lock(&pend_lock);
+    while (commit_pending) plat_cond_wait(&pend_cv, &pend_lock);
+    plat_mutex_unlock(&pend_lock);
+    slow_save("waiting for the save commit", t0);
+}
+
+void fs_save_flush(void) { save_wait_commit(); }
+
+// Steps (1) to (4) on the snapshot the thread took as new, tx_lock held.
+static uint32_t save_commit_locked(int nfiles, int linked, uint64_t bytes, uint64_t t0) {
+    if (flush_tree(new_root)) {
         if (tx_dead) return FS_R_INVALID_ARGUMENT;
-        rt_log("fs: save commit: copying the working copy failed; committed save unchanged");
+        rt_log("fs: save commit: flushing the new save failed (system error %u); committed save unchanged",
+               plat_fs_os_error());
         remove_tree(new_root);
         return FS_R_INVALID_ARGUMENT;
     }
     if (crashed()) return FS_R_INVALID_ARGUMENT;
-    if (exists(save_root) && move_dir(save_root, old_root)) {
-        rt_log("fs: save commit: cannot move the committed save; committed save unchanged");
+    if (mark_ready()) {
+        rt_log("fs: save commit: cannot mark the new save complete; committed save unchanged");
         remove_tree(new_root);
         return FS_R_INVALID_ARGUMENT;
     }
     if (crashed()) return FS_R_INVALID_ARGUMENT;
-    if (move_dir(new_root, save_root)) {
-        if (move_dir(old_root, save_root))
-            rt_fatal("fs: save commit: cannot swap in the new save; the next start completes it");
-        rt_log("fs: save commit: cannot swap in the new save; committed save unchanged");
-        remove_tree(new_root);
+    if (swap_in_new()) {
+        if (!tx_dead) rt_log("fs: save commit: not finished; kept in save-tx/new for the next Commit or start");
         return FS_R_INVALID_ARGUMENT;
     }
     if (crashed()) return FS_R_INVALID_ARGUMENT;
     rotate_backup();
-    plat_xchg32(&save_dirty, 0);
     rt_log("fs commit save: %d files, %d changed (%.1f MiB written), %d unchanged linked, in %.0f ms", nfiles,
            nfiles - linked, bytes / 1048576.0, linked, (plat_now_ns() - t0) / 1e6);
     return 0;
 }
 
-// The background commit: commit_pending from the game's Commit until the thread has run save_commit_locked.
-static PlatMutex pend_lock = PLAT_MUTEX_INIT;
-static PlatCond pend_cv = PLAT_COND_INIT;
-static volatile int32_t commit_pending;
-
-static void save_wait_commit(void) {
-    if (!plat_cas32(&commit_pending, 0, 0)) return;
-    plat_mutex_lock(&pend_lock);
-    while (commit_pending) plat_cond_wait(&pend_cv, &pend_lock);
-    plat_mutex_unlock(&pend_lock);
-}
-
-void fs_save_flush(void) { save_wait_commit(); }
-
+// Take the snapshots one after another until none is left. Returns the last one's result.
 static uint32_t commit_run(void) {
-    plat_mutex_lock(&tx_lock);
-    uint32_t r = save_commit_locked();
-    plat_dec32(&save_writers);
-    plat_mutex_unlock(&tx_lock);
-    plat_mutex_lock(&pend_lock);
-    commit_pending = 0;
-    plat_mutex_unlock(&pend_lock);
-    plat_cond_broadcast(&pend_cv);
-    return r;
+    uint32_t r = 0;
+    for (;;) {
+        plat_mutex_lock(&tx_lock);
+        plat_mutex_lock(&pend_lock);
+        int take = have_next && !tx_dead, nfiles = next_files, linked = next_linked;   // a probe crash: nothing more
+        uint64_t bytes = next_bytes, t0 = next_ns;
+        if (take && exists(ready_path) && (!exists(new_root) || swap_in_new()))
+            clear_ready();   // a Commit that could not finish: one more try, else this snapshot replaces it
+        if (take) rotate_backup();   // an old left by a failed (4)
+        if (take && (remove_tree(new_root) || move_dir(next_root, new_root))) {
+            rt_log("fs: save commit: cannot take the snapshot; committed save unchanged");
+            remove_tree(next_root);
+            take = 0, r = FS_R_INVALID_ARGUMENT;
+        }
+        have_next = 0;
+        if (!take) {
+            commit_pending = 0;
+            plat_mutex_unlock(&pend_lock);
+            plat_mutex_unlock(&tx_lock);
+            plat_cond_broadcast(&pend_cv);
+            return r;
+        }
+        plat_mutex_unlock(&pend_lock);
+        r = save_commit_locked(nfiles, linked, bytes, t0);
+        plat_mutex_unlock(&tx_lock);
+    }
 }
 
 static void commit_main(void *arg) {
@@ -422,17 +604,33 @@ static void commit_main(void *arg) {
 }
 
 static uint32_t save_commit(void) {
-    save_wait_commit();   // the previous Commit
     static int quiet;
     if (!plat_cas32(&save_dirty, 0, 0)) {
         if (!quiet++) rt_log("fs commit save: nothing changed (logged once)");
         return 0;
     }
-    plat_inc32(&save_writers);   // fs_save_busy until the thread is done
-    plat_xchg32(&commit_pending, 1);
-    if (plat_thread_spawn(commit_main, NULL, "save commit", 0)) {
-        return 0;
+    uint64_t t0 = plat_now_ns(), bytes = 0;
+    int nfiles = 0, linked = 0;
+    plat_mutex_lock(&pend_lock);
+    tx_step = tx_dead = 0;
+    // Hard links to the committed save only while the thread leaves it alone: one applying a commit in place
+    // replaces its files under the comparison.
+    const char *base = !commit_pending && exists(save_root) ? save_root : NULL;
+    if (remove_tree(next_root) || copy_tree(work_root, next_root, base, 0, &nfiles, &linked, &bytes)) {
+        rt_log("fs: save commit: copying the working copy failed (system error %u); committed save unchanged",
+               plat_fs_os_error());
+        remove_tree(next_root);
+        have_next = 0;
+        plat_mutex_unlock(&pend_lock);
+        return FS_R_INVALID_ARGUMENT;
     }
+    plat_xchg32(&save_dirty, 0);
+    have_next = 1, next_files = nfiles, next_linked = linked, next_bytes = bytes, next_ns = t0;
+    int start = !commit_pending && !crashed();
+    if (start) commit_pending = 1;
+    plat_mutex_unlock(&pend_lock);
+    slow_save("taking the save snapshot", t0);
+    if (!start || plat_thread_spawn(commit_main, NULL, "save commit", 0)) return 0;
     rt_log("fs: cannot start the save commit thread; committing on the game thread");
     return commit_run();
 }
@@ -457,6 +655,8 @@ static void storage_init(void *param) {
     make_dirs(backup_root);
     snprintf(new_root, sizeof new_root, "%s/new", tx_root);
     snprintf(old_root, sizeof old_root, "%s/old", tx_root);
+    snprintf(ready_path, sizeof ready_path, "%s/new-ready", tx_root);
+    snprintf(next_root, sizeof next_root, "%s/next", tx_root);
     save_recover();   // before save_root is created: an absent save_root means a commit to complete
     make_dirs(save_root);
     snprintf(p, sizeof p, "%s/temp", profile);
@@ -575,8 +775,11 @@ static int my_uid(const uint64_t *uid) {
 static uint32_t mount_save(const char *name, const uint64_t *uid) {
     ready();
     if (!my_uid(uid)) return FS_R_TARGET_NOT_FOUND;
+    save_wait_commit();   // the working copy starts from the newest Commit
+    uint64_t t0 = plat_now_ns();
     plat_mutex_lock(&tx_lock);
     if (!save_mounts) work_create();
+    slow_save("mounting the save", t0);
     uint32_t r = mount_add(name, M_SAVE, work_root);
     if (!r) save_mounts++;
     else if (!save_mounts) remove_tree(work_root);
@@ -703,7 +906,9 @@ static void unmount(const char *name) {
             int save = mounts[i].kind == M_SAVE;
             mounts[i].kind = M_FREE;
             plat_mutex_unlock(&lock);
+            uint64_t t0 = plat_now_ns();
             if (save && !--save_mounts) work_discard();
+            if (save) slow_save("unmounting the save", t0);
             plat_mutex_unlock(&tx_lock);
             rt_log("fs unmount %s", name);
             return;
@@ -815,6 +1020,7 @@ static uint32_t write_file(uint64_t h, int64_t offset, const void *buffer, uint6
     PlatFileId id;
     if (!plat_file_id(f, &id)) rt_fatal("fs: host save size");
     if ((uint64_t)offset + size > id.size && !(mode & FS_OPEN_APPEND)) return FS_R_APPEND_REQUIRED;
+    uint64_t t0 = plat_now_ns();
     if (file->save) save_touched();
     for (uint64_t done = 0; done < size;) {
         uint32_t chunk = size - done > 0x40000000 ? 0x40000000 : (uint32_t)(size - done);
@@ -822,7 +1028,9 @@ static uint32_t write_file(uint64_t h, int64_t offset, const void *buffer, uint6
         if (put <= 0) rt_fatal("fs: host save write failure");
         done += (uint64_t)put;
     }
-    if (option && (*option & 1)) plat_file_fsync(f);   // WriteOptionFlag_Flush
+    // WriteOptionFlag_Flush; never on the working copy, whose files only Commit's flushed copy makes durable
+    if (option && (*option & 1) && !file->save) plat_file_fsync(f);
+    if (file->save) slow_save("a save write", t0);
     return 0;
 }
 
@@ -848,8 +1056,9 @@ static uint32_t set_file_size(uint64_t h, int64_t size) {
 static uint32_t flush_file(uint64_t h) {
     PlatFile *f;
     int mode;
-    if (!file_of(h, &f, &mode)) return FS_R_INVALID_ARGUMENT;
-    if (mode & FS_OPEN_WRITE) plat_file_fsync(f);
+    File *file = file_of(h, &f, &mode);
+    if (!file) return FS_R_INVALID_ARGUMENT;
+    if ((mode & FS_OPEN_WRITE) && !file->save) plat_file_fsync(f);   // the working copy: as in write_file
     return 0;
 }
 
@@ -864,10 +1073,12 @@ static void close_file(uint64_t h) {
     int save = files[h - FILE_BASE].save;
     files[h - FILE_BASE] = (File){0};
     plat_mutex_unlock(&lock);
+    uint64_t t0 = plat_now_ns();
     plat_file_close(f);
     if (save) {
         save_touched();
         plat_dec32(&save_writers);
+        slow_save("closing a save file", t0);
     }
 }
 
@@ -1326,7 +1537,7 @@ static void probe_restart(const uint64_t *uid) {
     for (int i = 0; i < NMOUNTS; i++)
         if (mounts[i].kind == M_SAVE) mounts[i].kind = M_FREE;
     plat_mutex_unlock(&lock);
-    save_mounts = tx_crash_at = tx_dead = 0;
+    save_mounts = tx_crash_at = tx_dead = have_next = 0;
     plat_xchg32(&save_dirty, 0);
     save_recover();
     CHECK(RES(S_MOUNT_SAVE, U("save"), U(uid)) == 0, "MountSaveData after a restart");
@@ -1448,6 +1659,50 @@ static void probe_save_tx(const uint64_t *uid) {
     int backups = count_dirs(backup_root);
     CHECK(backups == SAVE_BACKUPS, "save-backup holds %d saves", backups);
 
+    // the same with a save folder that cannot be renamed (#108): the files are replaced one at a time
+    tx_no_dir_move = 1;
+    int steps_ip = 0, olds_ip = 0, news_ip = 0, mixed_ip = 0;
+    for (int k = 1; k < 64; k++) {
+        int next = ++gen, ok = tx_write(a, next) && tx_write(b, next);
+        tx_crash_at = k;
+        uint32_t r = tx_commit();
+        int died = tx_dead;
+        tx_crash_at = 0;
+        if (!died) {
+            steps_ip = k - 1;
+            CHECK(ok && r == 0 && tx_read_committed("tx_a.sav") == next && tx_read_committed("tx_b.sav") == next &&
+                      !exists(ready_path), "Commit in place after the crash points");
+            committed = next;
+            break;
+        }
+        probe_restart(uid);
+        int va = tx_read(a), vb = tx_read(b);
+        if (va == committed && vb == committed) olds_ip++;
+        else if (va == next && vb == next) news_ip++, committed = next;
+        else mixed_ip++;
+        CHECK(ok && va == vb && va == committed, "crash at in-place commit step %d: tx_a %d, tx_b %d (old %d, new %d)",
+              k, va, vb, committed, next);
+        CHECK(!exists(new_root) && !exists(old_root), "crash at in-place commit step %d: staging left", k);
+    }
+    CHECK(steps_ip >= 4 && olds_ip && news_ip && !mixed_ip, "in-place crash points: %d (%d old, %d new, %d mixed)",
+          steps_ip, olds_ip, news_ip, mixed_ip);
+    CHECK(count_dirs(backup_root) == SAVE_BACKUPS, "save-backup after commits in place");
+
+    // and with no file replaceable either: the Commit stays in save-tx/new, a restart loads it, and the first start
+    // that can finishes it
+    tx_no_replace = 1;
+    int stuck = ++gen;
+    CHECK(tx_write(a, stuck) && tx_write(b, stuck) && tx_commit() == 0 && exists(ready_path) && exists(new_root) &&
+              tx_read_committed("tx_a.sav") == committed, "a Commit that cannot finish stays marked");
+    probe_restart(uid);
+    CHECK(tx_read(a) == stuck && exists(ready_path), "a restart loads the unfinished Commit: tx_a %d, expected %d",
+          tx_read(a), stuck);
+    tx_no_replace = tx_no_dir_move = 0;
+    probe_restart(uid);
+    CHECK(tx_read_committed("tx_a.sav") == stuck && tx_read(a) == stuck && !exists(ready_path) && !exists(new_root),
+          "the next start finishes it: committed tx_a %d, expected %d", tx_read_committed("tx_a.sav"), stuck);
+    committed = stuck;
+
     // a Commit writes the changed file and links the unchanged one to the committed save it replaces
     int kept = committed;
     CHECK(tx_write(a, ++gen) && tx_commit() == 0 && tx_read_committed("tx_a.sav") == gen &&
@@ -1456,11 +1711,10 @@ static void probe_save_tx(const uint64_t *uid) {
           tx_links_committed("tx_a.sav"), tx_links_committed("tx_b.sav"));
     committed = gen;
 
-    // the background commit: a write right after Commit waits for it and stays out of it; an Unmount right after
-    // Commit waits for it and keeps it
+    // the background commit: a write right after Commit stays out of it; an Unmount right after Commit keeps it
     int queued = ++gen;
     CHECK(tx_write(a, queued) && RES(S_COMMIT, U("save")) == 0 && tx_write(a, ++gen) && tx_read(a) == gen &&
-          tx_read_committed("tx_a.sav") == queued, "a write right after Commit: committed tx_a %d, expected %d",
+          (fs_save_flush(), tx_read_committed("tx_a.sav")) == queued, "a write right after Commit: committed tx_a %d, expected %d",
           tx_read_committed("tx_a.sav"), queued);
     CHECK(RES(S_COMMIT, U("save")) == 0, "Commit before Unmount");
     CALL(S_UNMOUNT, U("save"));
@@ -1478,7 +1732,8 @@ static void probe_save_tx(const uint64_t *uid) {
           tx_read_committed("tx_a.sav") == -1, "Commit of deletions");
     printf("save tx: uncommitted writes visible to the game and dropped by a restart and by Unmount, commits kept; a "
            "crash at each of %d commit steps recovers to the old save %d times, the new one %d times, mixed %d "
-           "times; %d backups\n", steps, olds, news, mixed, backups);
+           "times; %d backups; with a save folder that cannot be renamed, %d steps (%d old, %d new); an unfinished "
+           "Commit kept and finished\n", steps, olds, news, mixed, backups, steps_ip, olds_ip, news_ip);
 }
 
 static void probe_storage(void) {

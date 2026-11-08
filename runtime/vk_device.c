@@ -55,6 +55,17 @@ static void mesa_cache_beside_exe(void) {
     plat_setenv("MESA_SHADER_CACHE_DIR", dir);
 }
 
+static int instance_ext_present(const char *name) {
+    uint32_t n = 0;
+    vkEnumerateInstanceExtensionProperties(NULL, &n, NULL);
+    VkExtensionProperties *e = calloc(n ? n : 1, sizeof *e);
+    vkEnumerateInstanceExtensionProperties(NULL, &n, e);
+    int found = 0;
+    for (uint32_t i = 0; i < n; i++) if (!strcmp(e[i].extensionName, name)) found = 1;
+    free(e);
+    return found;
+}
+
 static int create_instance(void) {
     mesa_cache_beside_exe();
     const char *ext[24];
@@ -66,6 +77,8 @@ static int create_instance(void) {
         validate = 0;
     }
     if (validate) ext[n_ext++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+    if (vk_hdr_wanted() && instance_ext_present(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME))   // HDR10 surface formats
+        ext[n_ext++] = VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME;
     vk_dlss_instance_exts(ext, &n_ext, 24);   // NGX's, with upscaler = dlss (vk_dlss.c)
     VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .pApplicationName = "XCX Recomp",
                              .pEngineName = "XCX Recomp", .apiVersion = VK_API_VERSION_1_3};
@@ -289,6 +302,10 @@ static int create_device(void) {
         CHAIN(lr, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_LOCAL_READ_FEATURES_KHR);
     }
     if (has_ext(ep, ne, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)) { g_vk.has_memory_budget = 1; ext[n_ext++] = VK_EXT_MEMORY_BUDGET_EXTENSION_NAME; }
+    if (vk_hdr_wanted() && has_ext(ep, ne, VK_EXT_HDR_METADATA_EXTENSION_NAME)) {   // the display's peak (vk_hdr_metadata)
+        g_vk.has_hdr_metadata = 1;
+        ext[n_ext++] = VK_EXT_HDR_METADATA_EXTENSION_NAME;
+    }
     // GPU breadcrumbs for a lost device (vk_crumbs.c): AMD's drivers and RADV report it.
     if (has_ext(ep, ne, VK_AMD_BUFFER_MARKER_EXTENSION_NAME)) { g_vk.has_buffer_marker = 1; ext[n_ext++] = VK_AMD_BUFFER_MARKER_EXTENSION_NAME; }
     vk_dlss_device_exts(ep, ne, ext, &n_ext, 46);   // NGX's (vk_dlss.c); the two slots after them stay for the library

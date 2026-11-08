@@ -1,5 +1,6 @@
 // The Win32 back end of the window (gfx_wsys.h): the window and its message loop on a thread of their own, F11
-// fullscreen, the settings XCX_WINDOW_SIZE and XCX_FULLSCREEN, the monitor's refresh rate, focus, the Vulkan surface.
+// fullscreen, the settings XCX_WINDOW_SIZE and XCX_FULLSCREEN, the monitor's refresh rate, focus, the screen saver, the
+// Vulkan surface.
 // The swapchain and the present are gfx_present.c's. The in-game menu's keyboard and mouse come from the window
 // procedure (ui/menu_win.cpp), and so do the game's (input_win.c).
 #include <stdio.h>
@@ -45,6 +46,7 @@ int gfx_window_vk_presentable(VkInstance inst, VkPhysicalDevice pd, uint32_t fam
 #define WND_STYLE WS_OVERLAPPEDWINDOW
 #define WM_APP_SETTINGS (WM_APP + 1)
 #define WM_APP_FULLSCREEN (WM_APP + 2)   // the fullscreen setting, held back until the window is first activated
+#define WM_APP_PROBE_DISPLAY (WM_APP + 3)   // --probe-window: the window thread's own execution state request
 
 static WINDOWPLACEMENT g_saved_place = {sizeof g_saved_place};   // the window behind fullscreen (window thread)
 
@@ -174,6 +176,15 @@ int gfx_window_monitor_size(int *w, int *h) {
     return 1;
 }
 
+// Controller input is not activity to Windows, so a player on a pad met the screen saver and the display's power off
+// (issue #79). While the game has the focus, the window thread asks Windows to keep the display on; out of focus Windows
+// may blank the screen as usual. The request belongs to the thread that makes it, so this runs on
+// the window thread (the window procedure).
+static void hold_display(int on) {
+    if (!SetThreadExecutionState(on ? ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED : ES_CONTINUOUS))
+        rt_log("gfx: SetThreadExecutionState failed");
+}
+
 static LRESULT CALLBACK wnd_proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     LRESULT input_res;
     if (input_window_msg(h, m, w, l, &input_res)) return input_res;
@@ -192,6 +203,11 @@ static LRESULT CALLBACK wnd_proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_APP_SETTINGS:
         apply_settings(h);
         return 0;
+    case WM_APP_PROBE_DISPLAY: {   // read by replacing it, then put back
+        EXECUTION_STATE s = SetThreadExecutionState(ES_CONTINUOUS);
+        SetThreadExecutionState(s);
+        return s;
+    }
     case WM_APP_FULLSCREEN:
         if (cfg_fullscreen() && !is_fullscreen(h)) {
             input_cursor_suspend(1);
@@ -209,9 +225,13 @@ static LRESULT CALLBACK wnd_proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_DISPLAYCHANGE:
         refresh_rate_update(h, 1);
         break;
+    case WM_SYSCOMMAND:   // the screen saver and the display's power off ask the foreground window first
+        if (((w & 0xfff0) == SC_SCREENSAVE || (w & 0xfff0) == SC_MONITORPOWER) && gfx_window_focused()) return 0;
+        break;
     case WM_ACTIVATEAPP: {
         int in = w != 0;
         gfx_window_focus_changed(in);
+        hold_display(in);
         if (in && g_fs_pending) {
             g_fs_pending = 0;
             PostMessageW(h, WM_APP_FULLSCREEN, 0, 0);
@@ -314,6 +334,12 @@ void wsys_resize(int cw, int ch) {
 void wsys_probe_focus(int in) { SendMessageW(g_hwnd, WM_ACTIVATEAPP, in ? TRUE : FALSE, 0); }
 
 void wsys_probe_escape(void) { SendMessageW(g_hwnd, WM_KEYDOWN, VK_ESCAPE, 0); }
+
+// The window thread's own request (other programs may hold the display on too, so the system's state would not tell).
+int wsys_probe_display_held(void) {
+    EXECUTION_STATE s = (EXECUTION_STATE)SendMessageW(g_hwnd, WM_APP_PROBE_DISPLAY, 0, 0);
+    return (s & (ES_CONTINUOUS | ES_DISPLAY_REQUIRED)) == (ES_CONTINUOUS | ES_DISPLAY_REQUIRED);
+}
 
 int wsys_probe_click(int where) {
     if (where == 0) SendMessageW(g_hwnd, WM_LBUTTONDOWN, MK_LBUTTON, 0);

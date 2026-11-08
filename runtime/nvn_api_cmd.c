@@ -733,6 +733,7 @@ static int ui_caller(const Cpu *c) {
 // stays on one side of the screen moves to that edge once narrowed; one that spans the centre, as world labels do, stays.
 #define UI_ROOT_LR (MOD_MAIN_BASE + 0xa434b4)
 #define UI_EDGE_SIDE 0.33f
+#define UI_EDGE_EXACT 0.002f   // an element end this close to a canvas edge is placed on the screen edge (ui_fit)
 #define UI_LIST_LR (MOD_MAIN_BASE + 0xa3b8cc)   // a node reached through the parent's list: made at run time, world labels
 static uint64_t ui_node(const Cpu *c) {
     uint64_t a = c->x[29], below = 0, lr = 0;
@@ -825,7 +826,18 @@ static void ui_fit(const Cpu *c, int st, uint64_t addr, uint64_t size) {
         if (!(rx > 0) || fabsf(ry / rx - 16.0f / 9.0f) > 0.02f) return;
         lo = hi = f[3];
     }
-    float shift = ui_shift(ui_node(c), lo, hi, k);
+    uint64_t nd = ui_node(c);
+    float shift = ui_shift(nd, lo, hi, k);
+    // An unturned element of a menu's own list (no node, so no shift) that ends on a canvas edge without reaching past the
+    // centre, such as the shade behind the map's survey rates, keeps that end on the screen edge; its inner end narrows like
+    // the rest. Otherwise it would stop at the 16:9 edge while the map behind it now reaches the screen edge.
+    int right = fabsf(hi - 1) < UI_EDGE_EXACT && lo >= -UI_EDGE_EXACT, left = fabsf(lo + 1) < UI_EDGE_EXACT && hi <= UI_EDGE_EXACT;
+    if (!nd && hi > lo && f[1] == 0 && f[4] == 0 && (right || left)) {
+        float p = right ? (1 - lo * k) / (hi - lo) : (hi * k + 1) / (hi - lo), q = right ? 1 - p * hi : -1 - p * lo;
+        f[0] *= p, f[3] = f[3] * p + q;
+        done[slot].addr = addr, done[slot].x = f[0];
+        return;
+    }
     f[0] *= k, f[1] *= k, f[3] = f[3] * k + shift;
     done[slot].addr = addr, done[slot].x = f[0];
 }

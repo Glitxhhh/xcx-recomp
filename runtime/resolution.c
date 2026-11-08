@@ -85,13 +85,17 @@ static void scene_scale(void) {
     rt_patch_switch(full, R.scale == 100);
 }
 
-// World positions projected for the narrowed interface (patches-upd.txt, uifit) spread by the inverse of res_ui_fit.
+// World positions projected for the narrowed interface (patches-upd.txt, uifit) spread by the inverse of res_ui_fit. The
+// interface's own test of what lies on screen takes the canvas x range that the narrowed canvas shows across the whole
+// frame, from +0x70 to +0x74.
 static void ui_fit_init(void) {
     int set = rt_patch_set("uifit");
     uint8_t *page = rt_patch_page();
-    float k = res_ui_fit(), f = 1 / k;
+    float k = res_ui_fit(), f = 1 / k, lo = (1 - f) / 2, hi = 1 - lo;
     if (set < 0 || !page) return;
     memcpy(page + 0x68, &f, sizeof f);
+    memcpy(page + 0x70, &lo, sizeof lo);
+    memcpy(page + 0x74, &hi, sizeof hi);
     rt_patch_switch(set, k < 1);
     rt_log("resolution: interface fit %.3f", k);
 }

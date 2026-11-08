@@ -299,6 +299,10 @@ int plat_fs_rmdir(const char *path);                      // an empty directory,
 int plat_fs_unlink(const char *path);                     // a file or a link; a read-only one too
 // Renames a file or directory; never replaces (PLAT_FS_EXISTS). durable: the change is on the disk at return.
 int plat_fs_rename(const char *from, const char *to, int durable);
+// Renames a file over the file at to, which it replaces; durable as plat_fs_rename.
+int plat_fs_replace(const char *from, const char *to);
+// The operating system's code (GetLastError, errno) of this thread's last plat_fs_* failure, for logs.
+unsigned plat_fs_os_error(void);
 int plat_fs_link(const char *existing, const char *path); // a hard link
 int plat_fs_links(const char *path);                      // the file's hard link count, 0 when unknown
 void plat_fs_sync_dir(const char *path);                  // a directory's entries to the disk, as far as the FS allows
