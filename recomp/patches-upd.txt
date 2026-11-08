@@ -141,6 +141,39 @@ set uifit XCX_UI_FIT 1
 site uifit main 56094c 1e323a23 @page:x9 bd406925 1e250a52 1e323a23
 site uifit main a17580 1e213801 @page:x9 bd406925 1e250821 1e213801
 
+# The narrowed canvas leaves room at both sides, but the interface draws only what overlaps the canvas, so the map (#90)
+# and the Affinity Chart (#91) stopped at its 16:9 edges. Two tests decide that:
+# - The map (main+0x7a7c60) and the chart (main+0x87f0d0) give their tile and portrait object a visible rect, the canvas
+#   centre plus and minus half the canvas over the zoom, through main+0x67f620. The half width there is copied by adding a
+#   register that was just zeroed (main+0x7a7d1c, main+0x87f144); the copy becomes the half width times +0x68, 1 / the
+#   narrowing, so the rect covers the whole frame. x8 and s6 are free: neither is read again before it is written.
+# - The interface engine skips an element whose bounds (element +0x1c0 max x, +0x1c8 min x, in canvas widths) lie wholly
+#   left of 0 or right of 1. Each copy of the test compares max x with 0 and min x with 1 (or with s8 holding 1); they
+#   compare with +0x70 and +0x74 instead, the canvas range the frame shows (resolution.c ui_fit_init). The y tests stay.
+#   x17 and s31 are free: no function in main+0xa20000..0xa48000 uses x17 near these tests or v31 at all.
+site uifit main 7a7d1c 1e222984 @page:x8 bd406904 1e240984
+site uifit main 87f144 1e232821 @page:x8 bd406906 1e260821
+site uifit main a256a4 1e202008 @page:x17 bd40723f 1e3f2000
+site uifit main a2f5c8 1e202008 @page:x17 bd40723f 1e3f2000
+site uifit main a32280 1e202008 @page:x17 bd40723f 1e3f2000
+site uifit main a3479c 1e202008 @page:x17 bd40723f 1e3f2000
+site uifit main a35900 1e202008 @page:x17 bd40723f 1e3f2000
+site uifit main a3608c 1e202008 @page:x17 bd40723f 1e3f2000
+site uifit main a361e4 1e202008 @page:x17 bd40723f 1e3f2000
+site uifit main a3cbd0 1e202008 @page:x17 bd40723f 1e3f2000
+site uifit main a3ccd8 1e202008 @page:x17 bd40723f 1e3f2000
+site uifit main a3ce30 1e202008 @page:x17 bd40723f 1e3f2000
+site uifit main a256c0 1e202020 @page:x17 bd40763f 1e3f2020
+site uifit main a2f5e4 1e202020 @page:x17 bd40763f 1e3f2020
+site uifit main a3229c 1e202020 @page:x17 bd40763f 1e3f2020
+site uifit main a347b8 1e202020 @page:x17 bd40763f 1e3f2020
+site uifit main a3591c 1e202020 @page:x17 bd40763f 1e3f2020
+site uifit main a360a8 1e202020 @page:x17 bd40763f 1e3f2020
+site uifit main a36200 1e202020 @page:x17 bd40763f 1e3f2020
+site uifit main a3cbe8 1e282000 @page:x17 bd40763f 1e3f2000
+site uifit main a3ccf0 1e282000 @page:x17 bd40763f 1e3f2000
+site uifit main a3ce48 1e282000 @page:x17 bd40763f 1e3f2000
+
 # viewsize (on above the shipped resolution, resolution.c): a menu with a 3D model asks for a second view, and the view
 # setup main+0x972ed0 takes that view's size from the request at +0x1a0, 1920x1080 for the menus, instead of the main
 # view's size at renderer +0x3c8 (issue #40). Its targets stayed 1920x1080 and the result was stretched over the frame.
