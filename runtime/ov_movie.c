@@ -87,10 +87,10 @@ static PlatMutex g_init = PLAT_MUTEX_INIT;
 static Movie *g_movies[MAX_MOVIES];
 static volatile int32_t g_count;                // live host decoders: movie_tick returns at once when 0
 static PlatMutex g_lock = PLAT_MUTEX_INIT;        // lock order: g_lock, then Movie.mu
-static uint64_t (*g_clock)(void) = kern_now_ns;
+static uint64_t (*g_clock)(void) = oe_clock_ns;   // stops while the game is out of focus (ov_system.c)
 static int g_pace = -1;
 
-void movie_set_clock(uint64_t (*clock)(void)) { g_clock = clock ? clock : kern_now_ns; }
+void movie_set_clock(uint64_t (*clock)(void)) { g_clock = clock ? clock : oe_clock_ns; }
 void movie_set_pace(int on) { g_pace = on; }
 static int pace_on(void) {
     if (g_pace < 0) {

@@ -55,6 +55,12 @@ site xcx60 main ab700 bd40b6a8 @page:x8 bd40b6a8 bd404d10 1e300908
 # x0 is reloaded right after the first, x8 is free at the second, and s1 is caller-saved at both (a call follows).
 site xcx60 main e5e8c 1e280800 @page:x0 bd404c01 1e280800 1e210800
 site xcx60 main e5860 1e214000 @page:x8 bd404d01 1e214000 1e210800
+# The hold's tick sound (main+0xe5ee8): a timer at +0x48 of the hold loses 1.0 a frame and, at 0, is reset to 10.0 and
+# plays the tick (main+0x35e6b0), so the tick came every 10 frames, 4 times as often at 120 fps. The step is the patch
+# page's +0x4c (30 / frame rate) instead: fmov s1, #-1.0 becomes its load and the fadd a fsub. x8 is rewritten at
+# main+0xe5f00 before its next use.
+site xcx60 main e5eec 1e3e1001 @page:x8 bd404d01
+site xcx60 main e5ef0 1e212800 1e213800
 
 # The small or big field jump (issue #64), decided by main+0x23ee90: big when the jump's hold time (VF_JumpInputDuration,
 # which counts from the takeoff) reaches min(VF_HighJumpInputFrame / 30, the PROG_SmallOrBigJump frame / 30 +
@@ -76,6 +82,17 @@ site xcx60 main 23effc 1e212800 1e213800
 # keep 2/60 s, and +0x904 is 30 times that step. x9 is unused in the function, s3 is caller-saved, w0 is the interval.
 site xcx60 main 927e4c 1e201821 @page:x9 bd404121 1e220003 1e230821
 site xcx60 main 927e50 1e201840 1e210840
+
+# The sky's cloud turn and fade (issue #89): main+0xa16eec sets the render scene's step in 30 fps frames each frame
+# (+0x894 of the scene, 1.0, or 0.5 in the Switch 2 Edition's 60 fps mode). The sky update advances its cloud layers'
+# turn at +0x1c and +0x20 by speed * 1/30 s * step (main+0xa1116c and main+0xa11180) and its fade at +0x4c by
+# 1/30 * step (main+0xa1126c), so above 30 fps the clouds ran fast. Each load of the step is multiplied by the patch
+# page's +0x4c (30 / frame rate). The step itself stays 1.0: with it scaled, the water slowed down as the frame rate
+# rose, so some of its other readers already follow the frame time. x11 and s5 are unused in the rest of
+# main+0xa1116c's function; x8 and s2 are set again after main+0xa1126c.
+site xcx60 main a1116c bd489501 bd489501 @page:x11 bd404d65 1e250821
+site xcx60 main a11180 bd489501 bd489501 @page:x11 bd404d65 1e250821
+site xcx60 main a1126c bd489500 bd489500 @page:x8 bd404d02 1e220800
 
 # The mod's getter that returns false on Switch (1.0.1 +0x13eb280): true. Off: in 2.0.0 it crashes the title screen's
 # rendering (main+0x9530b0 reads through a bad pointer).

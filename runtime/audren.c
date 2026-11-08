@@ -356,7 +356,7 @@ static void render_thread(void *p) {
     uint64_t next = kern_now_ns();
     while (plat_cas32(&r->running, 0, 0)) {
         plat_mutex_lock(&r->lock);
-        if (r->state == 0) {
+        if (r->state == 0 && !oe_suspended()) {   // out of focus: voices hold, as on a suspended console (ov_system.c)
             voices_prepare(r);
             audio_mixer_render(r, frame);
             for (int i = 0; i < r->param.voice_count; i++) advance_voice(r, &r->voices[i], frame);
