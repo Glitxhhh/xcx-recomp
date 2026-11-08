@@ -1,0 +1,50 @@
+#version 450
+// HDR10 encode on the present (runtime/vk_hdr.c vk_hdr_encode): the window texture's crop rectangle at offset, into an
+// RGBA16F image of PQ code values in Rec. 2020 that FSR 1 or the blit then scale into the HDR10 swapchain.
+// The window texture holds the game's 8-bit picture: FXAA drew the tonemapped scene into it, clipped to 1, and the HUD
+// went on top. scene (when q.x is 1) is the tonemapped scene itself, sRGB codes that go past 1 where shaders/
+// hdr_tonemap.frag kept a highlight. Where the window texture shows the scene (it equals the scene clipped to 1, up to
+// FXAA's blending), the part of the scene above 1 is added back and the picture is put at the game's white; where it
+// differs (the HUD, a menu, a fade drawn over the scene), it stays as it is, at the HUD's white.
+// p.x: nits of the HUD's white, p.y: the display's peak in nits, p.z: 1 when the window texture holds sRGB-encoded
+// values in a UNORM format, p.w: the game's white against the HUD's.
+// PQ: SMPTE ST 2084; the Rec. 709 to Rec. 2020 matrix: ITU-R BT.2087.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0) uniform sampler2D win;
+layout(binding = 1, rgba16f) uniform writeonly image2D dst;
+layout(binding = 2) uniform sampler2D scene;
+layout(push_constant) uniform P {
+    ivec2 offset;
+    ivec2 size;
+    vec4 p;
+    vec4 q;
+} pc;
+
+float maxc(vec3 c) { return max(c.r, max(c.g, c.b)); }
+
+vec3 srgb_decode(vec3 c) {
+    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), greaterThan(c, vec3(0.04045)));
+}
+
+vec3 pq(vec3 nits) {
+    const float m1 = 0.1593017578125, m2 = 78.84375, c1 = 0.8359375, c2 = 18.8515625, c3 = 18.6875;
+    vec3 y = pow(clamp(nits / 10000.0, 0.0, 1.0), vec3(m1));
+    return pow((c1 + c2 * y) / (1.0 + c3 * y), vec3(m2));
+}
+
+void main() {
+    ivec2 at = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(at, pc.size))) return;
+    ivec2 px = at + pc.offset;
+    vec3 w = clamp(texelFetch(win, px, 0).rgb, 0.0, 1.0);
+    vec3 c = pc.p.z > 0.5 ? srgb_decode(w) : w;
+    if (pc.q.x > 0.5) {
+        vec3 h = max(textureLod(scene, (vec2(px) + 0.5) / vec2(textureSize(win, 0)), 0.0).rgb, vec3(0.0));
+        vec3 hc = min(h, vec3(1.0));
+        float k = 1.0 - smoothstep(0.04, 0.16, maxc(abs(w - hc)));   // 1 where the window texture shows the scene
+        c = c * mix(1.0, pc.p.w, k) + (srgb_decode(h) - srgb_decode(hc)) * (pc.p.w * k);
+    }
+    const mat3 to2020 = mat3(0.6274, 0.0691, 0.0164, 0.3293, 0.9195, 0.0880, 0.0433, 0.0114, 0.8956);
+    vec3 nits = min(max(to2020 * c, vec3(0.0)) * pc.p.x, vec3(pc.p.y));
+    imageStore(dst, at, vec4(pq(nits), 1.0));
+}

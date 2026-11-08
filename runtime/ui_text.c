@@ -73,6 +73,21 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_SHARPNESS_DESC] = "Sharpening after FSR scaling; 0 turns it off.",
     [UI_MENU_BRIGHTNESS] = "Brightness",
     [UI_MENU_BRIGHTNESS_DESC] = "Lower it if daylight, water or white armour burn out to white. 100% is the game's own level.",
+    [UI_MENU_HDR_GROUP] = "HDR",
+    [UI_MENU_HDR] = "HDR output",
+    [UI_MENU_HDR_DESC] = "Bright highlights on an HDR display. Needs HDR turned on in Windows (\"Use HDR\") or in a "
+                         "Wayland compositor with colour management; without it the picture stays SDR. Applies after a "
+                         "restart.",
+    [UI_MENU_HDR_PEAK] = "Peak brightness",
+    [UI_MENU_HDR_PEAK_DESC] = "Your display's peak in nits; the brightest highlights stop there.",
+    [UI_MENU_HDR_GAME] = "Game brightness",
+    [UI_MENU_HDR_GAME_DESC] = "Nits of the picture's white (paper white). 203 is the HDR reference; raise it in a "
+                              "bright room.",
+    [UI_MENU_HDR_UI] = "HUD and menu brightness",
+    [UI_MENU_HDR_UI_DESC] = "Nits of the HUD's and this menu's white.",
+    [UI_MENU_HDR_HUE] = "Highlight hue",
+    [UI_MENU_HDR_HUE_DESC] = "How far bright colours turn towards white as they do in SDR (sun, fire, glowing armour); "
+                             "0 keeps them saturated.",
 
     [UI_MENU_FPS_LIMIT] = "Frame rate limit",
     [UI_MENU_FPS_LIMIT_DESC] = "The most frames per second the game draws; the game's clock follows it. Above 60 is "
@@ -308,6 +323,21 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_SHARPNESS_DESC] = "Повышение резкости после масштабирования FSR; 0 выключает его.",
     [UI_MENU_BRIGHTNESS] = "Яркость",
     [UI_MENU_BRIGHTNESS_DESC] = "Уменьшите, если дневной свет, вода или белая броня выгорают до белого. 100% — уровень самой игры.",
+    [UI_MENU_HDR_GROUP] = "HDR",
+    [UI_MENU_HDR] = "Вывод HDR",
+    [UI_MENU_HDR_DESC] = "Яркие блики на HDR-дисплее. Нужен включённый HDR в Windows («Использовать HDR») или "
+                         "Wayland-композитор с управлением цветом; без него картинка остаётся SDR. Применяется после "
+                         "перезапуска.",
+    [UI_MENU_HDR_PEAK] = "Пиковая яркость",
+    [UI_MENU_HDR_PEAK_DESC] = "Пик вашего дисплея в нитах; самые яркие блики останавливаются на нём.",
+    [UI_MENU_HDR_GAME] = "Яркость игры",
+    [UI_MENU_HDR_GAME_DESC] = "Ниты белого цвета картинки (paper white). 203 — эталон HDR; в светлой комнате "
+                              "поднимите.",
+    [UI_MENU_HDR_UI] = "Яркость интерфейса и меню",
+    [UI_MENU_HDR_UI_DESC] = "Ниты белого цвета интерфейса игры и этого меню.",
+    [UI_MENU_HDR_HUE] = "Оттенок бликов",
+    [UI_MENU_HDR_HUE_DESC] = "Насколько яркие цвета уходят в белый, как в SDR (солнце, огонь, светящаяся броня); "
+                             "0 оставляет их насыщенными.",
 
     [UI_MENU_FPS_LIMIT] = "Ограничение частоты кадров",
     [UI_MENU_FPS_LIMIT_DESC] = "Наибольшее число кадров в секунду; часы игры идут по нему. Выше 60 — экспериментальный "
