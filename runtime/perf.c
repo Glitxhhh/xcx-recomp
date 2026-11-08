@@ -227,6 +227,16 @@ int rt_knob(const char *name, const char *def) {
     return !strcmp(e, "ab") ? 2 : strcmp(e, "0") != 0;
 }
 
+// A knob with a number: XCX_<name> as a decimal integer, def when unset or not a number. rt_knob gives 0, 1 or 2 only.
+int rt_knob_n(const char *name, int def) {
+    char key[64];
+    snprintf(key, sizeof key, "XCX_%s", name);
+    const char *e = cfg_get(key);
+    char *end;
+    long v = e && *e ? strtol(e, &end, 10) : 0;
+    return e && *e && !*end ? (int)v : def;
+}
+
 // XCX_ONE_PER_CORE=1: the process keeps the first logical processor of each physical core, so busy threads (the
 // render thread, the guest cores, the job workers) never share a core's execution units with another; "ab" switches
 // it with the A/B blocks. Off by default until measured here; Savage Wind Recomp

@@ -22,3 +22,28 @@ void vk_dlss_viewport(VkViewport *v);
 // vk_exec_draw.c prepare_draw: 1 skips the draw (the game's FXAA scaling draw, whose target DLSS already wrote).
 int vk_dlss_skip_draw(VkExec *ex);
 void vk_dlss_frame(void);   // each present (vk_backend.c present_image)
+int vk_dlss_on(void);       // DLSS runs (NGX up, upscaler = dlss), as of the last present
+// A draw of the scene (with its depth, between the G-buffer and the post passes) on a frame DLSS runs on: the draws the
+// motion passes below look at.
+int vk_dlss_scene_draw(const VkExec *ex);
+
+// ---- per-object motion vectors (ported from TotK Recomp, see vk_exec_draw.c "per-object motion" and vk_mvprev.c)
+// vk_mvsurvey.c (XCX_MV_SURVEY): notes the uniform blocks of each scene draw, beside vk_dlss_draw; each present
+// compares them with the previous frames' and logs a summary now and then.
+void vk_mvsurvey_draw(VkExec *ex);
+void vk_mvsurvey_frame(void);
+void vk_mvprev_draw(VkExec *ex);   // vk_mvprev.c: notes the scene draw's object and bone blocks
+// vk_exec_draw.c: the moving scene draws are listed again during the replay with their vertex shader's last-frame
+// variant; vk_dlss.c mv_pass records them over the camera motion into ex->cb (and leaves every binding of the replay
+// to be set again; draws whose camera block is not cam are left out).
+// vk_dlss_prev_camera: last frame's camera block and this frame's jitter, 0 when there is no history.
+int vk_mvobj_execute(VkExec *ex, uint64_t cam, VkImageView mv, VkImageView depth, VkFormat depth_fmt, uint32_t w,
+                     uint32_t h);
+int vk_dlss_prev_camera(VkDescriptorBufferInfo *out, float jitter[2]);
+// vk_mvcheck.c (XCX_MV_CHECK, test): mv_pass hands it the motion image after the camera pass and, after the object
+// pass, the motion image again and the scene light target it ran on; it measures how well the vectors fit the picture.
+void vk_mvcheck_camera(VkCommandBuffer cb, VkImage mv, uint32_t w, uint32_t h, float jx, float jy);
+void vk_mvcheck_final(VkCommandBuffer cb, uint64_t fence, VkImage mv, VkImage cimg, VkFormat cfmt, uint32_t level,
+                      uint32_t layer, uint32_t w, uint32_t h, float jx, float jy);
+const char *vk_mvobj_frame_masks(void);   // vk_exec_draw.c: the last motion list, per position and changed banks
+void vk_mvcheck_output(VkCommandBuffer cb, VkImage out, uint32_t ow, uint32_t oh);   // after DLSS on a check frame

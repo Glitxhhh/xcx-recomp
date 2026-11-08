@@ -100,7 +100,12 @@ Every guest thread is a host thread. XCX assumes Horizon's scheduler: three appl
   writes the output-sized picture the interface is drawn over (DLAA at render scale 100, upscaling below). The scene's
   draws get a sub-pixel Halton viewport jitter (full-screen draws excepted); camera motion vectors are reprojected from
   the scene depth through this and last frame's view-projection of the scene camera block (vertex c3, 0x300 bytes), in
-  double precision on the CPU. Objects that move on their own get only the camera's motion.
+  double precision on the CPU. Objects that move on their own get their own motion (`vk_exec_draw.c`, `XCX_DLSS_OBJMV`,
+  on by default): the shader translator keeps last frame's position output (patch 0010), and a second pass redraws each
+  moving draw into the motion target with an equal depth test, reading last frame's place and bone palette from a GPU
+  copy taken after the frame's motion pass. A menu's model view (Ground Gear, Fashion Gear) is a G-buffer of its own and
+  gets a DLAA feature at its size; its scaling draw writes colour only, so `dlss_rgb.comp` puts DLSS's picture back under
+  the target's own alpha.
 - Occlusion queries never block the CPU; a result that is not ready counts as visible.
 - ASTC textures are uploaded as they are where the device reports `textureCompressionASTC_LDR`, and decoded by a compute shader everywhere else (`vk_astc.c`, `XCX_ASTC`). The CPU decoder (`tex_astc*.c`) is the fallback and the test oracle.
 - Draw state. A draw whose program, bound state and textures repeat reuses the previous draw's shaders and skips rebuilding its descriptor sets; descriptor sets are written through update templates (`vk_exec_draw.c`, `vk_pipeline.c`).
