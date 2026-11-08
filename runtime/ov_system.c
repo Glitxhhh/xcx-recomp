@@ -546,7 +546,7 @@ typedef struct {
     CalendarInfo user_info, network_info;
     SteadyClockTimePoint steady;
     char location[0x24];
-    uint8_t automatic_correction, type, pad[2];
+    uint8_t automatic_correction, valid, pad[2];   // valid: 1 once made from a clock, which the SDK's claim checks
 } ClockSnapshot;
 _Static_assert(sizeof(SteadyClockTimePoint) == 0x18 && sizeof(CalendarTime) == 8 && sizeof(CalendarInfo) == 0x18,
                "nn::time types");
@@ -722,6 +722,10 @@ static void ov_snapshot_create(Cpu *c) {
     n.steady = steady;
     location_name(n.location);
     n.automatic_correction = 1;
+    // nn::time::detail::ClaimPeriodicBenefitWithUserSystemClock takes a snapshot whose byte 0xCD is 0 for one never made
+    // and starts the claim context over, which grants the benefit again: XCX's Division Rewards could be taken any
+    // number of times (#110).
+    n.valid = 1;
     *s = n;
     ret_x(c, 0);
 }
