@@ -1034,7 +1034,12 @@ const void *plat_file_map(PlatFile *f) {
     return v == MAP_FAILED ? NULL : v;
 }
 
+static _Thread_local int fs_os_error;
+
+unsigned plat_fs_os_error(void) { return (unsigned)fs_os_error; }
+
 static int fs_err(int e) {
+    fs_os_error = e;
     switch (e) {
     case ENOENT: case ENOTDIR: return PLAT_FS_NOT_FOUND;
     case EEXIST: return PLAT_FS_EXISTS;
@@ -1073,6 +1078,13 @@ int plat_fs_rename(const char *from, const char *to, int durable) {
         sync_dir_of(from);
         sync_dir_of(to);
     }
+    return PLAT_FS_OK;
+}
+
+int plat_fs_replace(const char *from, const char *to) {
+    if (rename(from, to)) return fs_err(errno);
+    sync_dir_of(from);
+    sync_dir_of(to);
     return PLAT_FS_OK;
 }
 
