@@ -746,21 +746,41 @@ static uint64_t ui_node(const Cpu *c) {
     return 0;
 }
 
-// What a node's elements add to their clip-space x once narrowed. The average of the element centres seen so far decides,
-// so that one stray wide element in a node on the right does not hold the rest back.
+// What a node's elements add to their clip-space x once narrowed. The average of the node's element centres in the last
+// frame decides, so that one stray wide element in a node on the right does not hold the rest back, every element of a
+// node moves by the same amount within a frame, and a node follows its layout as it is now: an average over all frames
+// so far took 40 s to move the Affinity Chart's info pane to the edge (#91) once the pane had opened in a node drawn at
+// the centre before, and kept the Hint box at the 16:9 edge (#104). A node's first frame uses its running average. A
+// node on one side stays there until its average comes back within UI_EDGE_STAY of the centre, so that one near the
+// threshold does not flip from frame to frame.
+#define UI_EDGE_STAY 0.25f
+#define UI_NODE_STALE 30   // frames without the node: its last layout is forgotten
+static volatile uint32_t ui_frames;
+void nvn_ui_frame(void) { __atomic_add_fetch(&ui_frames, 1, __ATOMIC_RELAXED); }
+
 static float ui_shift(uint64_t node, float lo, float hi, float k) {
-    static _Thread_local struct { uint64_t node; float sum, n; } seen[32];
+    static _Thread_local struct { uint64_t node; uint32_t frame; float sum, n, last; int have, side; } seen[32];
     static _Thread_local unsigned next;
     if (!node) return 0;
+    uint32_t frame = __atomic_load_n(&ui_frames, __ATOMIC_RELAXED);
     int i = 0;
     while (i < 32 && seen[i].node != node) i++;
     if (i == 32) {
         i = next++ % 32;
-        seen[i].node = node, seen[i].sum = 0, seen[i].n = 0;
+        seen[i].node = node, seen[i].frame = frame, seen[i].sum = seen[i].n = 0, seen[i].have = seen[i].side = 0;
+    }
+    if (seen[i].frame != frame) {
+        int stale = frame - seen[i].frame > UI_NODE_STALE;
+        seen[i].have = !stale && seen[i].n > 0;
+        if (seen[i].have) seen[i].last = seen[i].sum / seen[i].n;
+        if (stale) seen[i].side = 0;
+        seen[i].frame = frame, seen[i].sum = seen[i].n = 0;
     }
     seen[i].sum += (lo + hi) / 2, seen[i].n += 1;
-    float mid = seen[i].sum / seen[i].n;
-    return mid < -UI_EDGE_SIDE ? k - 1 : mid > UI_EDGE_SIDE ? 1 - k : 0;
+    float mid = seen[i].have ? seen[i].last : seen[i].sum / seen[i].n;
+    if (!(seen[i].side && mid * seen[i].side > UI_EDGE_STAY))
+        seen[i].side = mid < -UI_EDGE_SIDE ? -1 : mid > UI_EDGE_SIDE ? 1 : 0;
+    return seen[i].side < 0 ? k - 1 : seen[i].side > 0 ? 1 - k : 0;
 }
 
 // A viewport or scissor of the interface narrows like its elements. Elements inside a smaller viewport are placed in that
