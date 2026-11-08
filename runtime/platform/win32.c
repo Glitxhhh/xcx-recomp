@@ -761,7 +761,12 @@ const void *plat_file_map(PlatFile *f) {
     return v;
 }
 
+static _Thread_local DWORD fs_os_error;
+
+unsigned plat_fs_os_error(void) { return fs_os_error; }
+
 static int fs_err(DWORD e) {
+    fs_os_error = e;
     switch (e) {
     case ERROR_FILE_NOT_FOUND: case ERROR_PATH_NOT_FOUND: case ERROR_DIRECTORY: return PLAT_FS_NOT_FOUND;
     case ERROR_FILE_EXISTS: case ERROR_ALREADY_EXISTS: return PLAT_FS_EXISTS;
@@ -804,6 +809,12 @@ int plat_fs_rename(const char *from, const char *to, int durable) {
     wchar_t a[WPATH], b[WPATH];
     if (!widen(from, a, WPATH) || !widen(to, b, WPATH)) return PLAT_FS_ERROR;
     return MoveFileExW(a, b, durable ? MOVEFILE_WRITE_THROUGH : 0) ? PLAT_FS_OK : fs_err(GetLastError());
+}
+
+int plat_fs_replace(const char *from, const char *to) {
+    wchar_t a[WPATH], b[WPATH];
+    if (!widen(from, a, WPATH) || !widen(to, b, WPATH)) return PLAT_FS_ERROR;
+    return MoveFileExW(a, b, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) ? PLAT_FS_OK : fs_err(GetLastError());
 }
 
 int plat_fs_link(const char *existing, const char *path) {
