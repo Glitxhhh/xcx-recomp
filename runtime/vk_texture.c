@@ -1749,11 +1749,34 @@ void vk_sampler_register(int id, const samp_par *s) {
     unlock();
 }
 
+// DLSS upscaling (vk_sampler_dlss_bias): the scene's material textures, the filtered mipmapped ones that repeat, are
+// sampled for the output's resolution; clamped ones (post effects, LUTs, the UI) keep the game's bias. Ported from TotK
+// Recomp runtime/vk_texture.c (dlss_biased, vk_sampler_dlss_bias, sampler_for; MIT, Copyright (c) 2026 Valiantsin
+// Dzerakh).
+static float dlss_bias;
+
+static int dlss_biased(const samp_par *k) {
+    int rep_s = k->ws == NVN_WRAP_MODE_REPEAT || k->ws == NVN_WRAP_MODE_MIRRORED_REPEAT;
+    int rep_t = k->wt == NVN_WRAP_MODE_REPEAT || k->wt == NVN_WRAP_MODE_MIRRORED_REPEAT;
+    return !k->cmp_mode && k->minf == NVN_MIN_FILTER_LINEAR_MIPMAP_LINEAR && (rep_s || rep_t);
+}
+
+void vk_sampler_dlss_bias(float b) {
+    lock();
+    if (b != dlss_bias) {
+        dlss_bias = b;
+        for (int i = 0; i < nsslots; i++) sslots[i].s = sslots[i].sp = VK_NULL_HANDLE;   // looked up again (the key moves)
+        samp_gen++;
+    }
+    unlock();
+}
+
 // Caller holds the lock.
 static VkSampler sampler_for(VkCtx *c, const samp_par *s) {
     samp_par k;
     memset(&k, 0, sizeof k);
     k = *s;
+    if (dlss_bias != 0 && dlss_biased(&k)) k.lod_bias += dlss_bias;   // part of the key: samplers live until shutdown
     VkSampler v = (VkSampler)nvn_hm_get(&samplers, &k);
     if (!v) {
         v = make_sampler(c, &k);

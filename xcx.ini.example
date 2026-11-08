@@ -123,7 +123,9 @@
 # start.
 # render_scale = game
 # Scaling to the window when it is larger than the game resolution: fsr (AMD FSR 1) or bilinear, and FSR's sharpening
-# from 0 (off) to 100. Changes while the game runs take effect at once.
+# from 0 (off) to 100. Changes while the game runs take effect at once. dlss (NVIDIA RTX cards, nvngx_dlss.dll next to
+# xcx.exe) also runs DLSS on the 3D scene in place of the game's FXAA: DLAA at render_scale game or 100, DLSS upscaling
+# below; the window scaling stays FSR 1. Switching to or from dlss takes effect after a restart.
 # upscaler = fsr
 # sharpness = 80
 # Picture brightness in percent, from 40 to 120: the gain of the game's final tonemap. Lower it if daylight, water or

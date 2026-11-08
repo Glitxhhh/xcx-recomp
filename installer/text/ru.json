@@ -167,5 +167,11 @@
  "lang.zh-TW": "Китайский (традиционный, Тайвань)",
  "lang.zh-Hans": "Китайский (упрощённый)",
  "lang.zh-Hant": "Китайский (традиционный)",
- "phase.prepare.translator": "Копирование транслятора шейдеров"
+ "phase.prepare.translator": "Копирование транслятора шейдеров",
+ "step.dlss": "Загрузка NVIDIA DLSS",
+ "phase.dlss.download": "Загрузка nvngx_dlss.dll из DLSS SDK от NVIDIA",
+ "warn.dlss_kept": "В папке установки уже есть библиотека DLSS ({path}); установка её оставляет.",
+ "warn.dlss_download_failed": "Не удалось загрузить NVIDIA DLSS с {url}: {detail}. Игра работает и без него; при следующем запуске установка попробует снова.",
+ "ui.dlss": "Загрузить NVIDIA DLSS (nvngx_dlss.dll) для видеокарт NVIDIA RTX",
+ "ui.dlss_help": "Из DLSS SDK от NVIDIA на GitHub, по лицензии NVIDIA RTX SDK (github.com/NVIDIA/DLSS). Без него настройка апскейлера DLSS не работает, и игра использует FSR."
 }

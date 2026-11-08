@@ -60,10 +60,13 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                   "For supersampling, set the game resolution above the window's. Takes effect after "
                                   "a restart.",
     [UI_MENU_RENDER_SCALE_GAME] = "Game (dynamic)",
-    [UI_MENU_UPSCALER] = "Scaling to the window",
+    [UI_MENU_UPSCALER] = "Upscaler",
     [UI_MENU_UPSCALER_DESC] = "How the picture is scaled when the window is larger than the game resolution. FSR keeps "
-                              "edges and detail sharper than bilinear.",
+                              "edges and detail sharper than bilinear. NVIDIA DLSS (RTX cards) also replaces the game's "
+                              "anti-aliasing: DLAA at a render scale of Game or 100, DLSS upscaling at 75, 67 or 50. "
+                              "Switching to DLSS takes effect after a restart.",
     [UI_MENU_UPSCALER_FSR] = "AMD FSR 1", [UI_MENU_UPSCALER_BILINEAR] = "Bilinear",
+    [UI_MENU_UPSCALER_DLSS] = "NVIDIA DLSS",
     [UI_MENU_PICTURE_FIT] = "Picture shape",
     [UI_MENU_PICTURE_FIT_DESC] = "When the window's shape differs from the game resolution's (a 16:9 game on the Steam "
                                  "Deck's 16:10 screen), keep the picture's proportions with black bars, or stretch it "
@@ -311,10 +314,13 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
                                   "Для суперсэмплинга задайте разрешение игры выше разрешения окна. Применяется после "
                                   "перезапуска.",
     [UI_MENU_RENDER_SCALE_GAME] = "Как в игре (динамически)",
-    [UI_MENU_UPSCALER] = "Масштабирование под окно",
+    [UI_MENU_UPSCALER] = "Масштабирование",
     [UI_MENU_UPSCALER_DESC] = "Как картинка растягивается, когда окно больше разрешения игры. FSR сохраняет края и "
-                              "детали чётче билинейного.",
+                              "детали чётче билинейного. NVIDIA DLSS (видеокарты RTX) также заменяет сглаживание игры: "
+                              "DLAA при масштабе рендеринга «Как в игре» или 100, апскейл DLSS при 75, 67 или 50. "
+                              "Переключение на DLSS применяется после перезапуска.",
     [UI_MENU_UPSCALER_FSR] = "AMD FSR 1", [UI_MENU_UPSCALER_BILINEAR] = "Билинейное",
+    [UI_MENU_UPSCALER_DLSS] = "NVIDIA DLSS",
     [UI_MENU_PICTURE_FIT] = "Пропорции картинки",
     [UI_MENU_PICTURE_FIT_DESC] = "Когда форма окна отличается от формы разрешения игры (игра 16:9 на экране Steam Deck "
                                  "16:10), сохранять пропорции картинки с чёрными полосами или растягивать её на всё окно.",

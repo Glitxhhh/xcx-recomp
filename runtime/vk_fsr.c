@@ -1,6 +1,6 @@
 // AMD FidelityFX Super Resolution 1 on the present path (gfx_present.c present_image): when the window is larger than
 // the game's output, EASU scales the game's crop rectangle to the swapchain size and RCAS sharpens it, in place of the
-// bilinear vkCmdBlitImage. XCX_UPSCALER=fsr|bilinear picks it, XCX_SHARPNESS (0..100, 0 = no RCAS pass) sets RCAS;
+// bilinear vkCmdBlitImage. XCX_UPSCALER=bilinear turns it off (fsr and dlss keep it), XCX_SHARPNESS (0..100, 0 = no RCAS pass) sets RCAS;
 // both apply at the next frame.
 //
 // Per frame: EASU reads the source through a view of its own format (the same colour conversion the blit does) and
@@ -158,7 +158,7 @@ static void bind_pass(VkCommandBuffer cb, VkPipeline p, VkImageView in, VkImageV
 int vk_fsr_record(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat fmt, int sw, int sh, const int crop[4],
                   VkImage dst, int dx, int dy, uint32_t dw, uint32_t dh) {
     int cw = crop[2], ch = crop[3];
-    if (strcmp(cfg_value("XCX_UPSCALER"), "fsr") || (dw <= (uint32_t)cw && dh <= (uint32_t)ch) || !fmt) return 0;
+    if (!strcmp(cfg_value("XCX_UPSCALER"), "bilinear") || (dw <= (uint32_t)cw && dh <= (uint32_t)ch) || !fmt) return 0;
     VkCtx *c = vk_ctx();
     if (!F.tried) init(c);
     if (!F.ok || !ensure_images(c, dw, dh)) return 0;

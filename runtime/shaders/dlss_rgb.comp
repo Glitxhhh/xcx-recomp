@@ -1,0 +1,17 @@
+#version 450
+// DLSS's picture into a copy of the game's target with the target's own alpha kept (vk_dlss.c put_output). A menu's
+// model view (Ground Gear, Fashion Gear) is scaled into a target whose alpha the menu then lays the model over its
+// backdrop with; the game's scaling draw writes red, green and blue only. A blit of DLSS's output would write alpha
+// too, and the backdrop around the model went black.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0, rgba16f) uniform readonly image2D dlss;   // DLSS's output
+layout(binding = 1, rgba8) uniform image2D keep;              // the target's contents, RGBA8 unorm
+layout(push_constant) uniform P {
+    vec2 size;   // output size in pixels
+} pc;
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= int(pc.size.x) || p.y >= int(pc.size.y)) return;
+    imageStore(keep, p, vec4(imageLoad(dlss, p).rgb, imageLoad(keep, p).a));
+}
