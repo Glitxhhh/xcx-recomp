@@ -312,6 +312,8 @@ void wsys_probe_focus(int in) {
     run_on_window(probe_event, &e);
 }
 
+int wsys_probe_display_held(void) { return !SDL_ScreenSaverEnabled(); }
+
 void wsys_probe_escape(void) {
     SDL_Event e = {.key = {.type = SDL_EVENT_KEY_DOWN, .scancode = SDL_SCANCODE_ESCAPE, .key = SDLK_ESCAPE, .down = true,
                            .windowID = SDL_GetWindowID(g_win)}};
