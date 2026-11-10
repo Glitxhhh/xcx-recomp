@@ -1,0 +1,124 @@
+From 15b2a78106f85a3f8ef2efe5683148d9dad84b33 Mon Sep 17 00:00:00 2001
+From: Roberto I <roberto@inf.puc-rio.br>
+Date: Thu, 15 Oct 2026 13:53:40 -0300
+Subject: [PATCH] Bug: Calling coroutine.close while closing after error
+
+A call to 'coroutine.close()' while closing the coroutine returns like
+'resume', with no errors, even if the coroutine previously had stopped
+due to an error.
+---
+ lcorolib.c           |  3 ++-
+ lstate.c             | 22 ++++++++++++++++++++--
+ manual/manual.of     |  3 ++-
+ testes/coroutine.lua | 20 ++++++++++++++++++--
+ 4 files changed, 42 insertions(+), 6 deletions(-)
+
+diff --git a/lcorolib.c b/lcorolib.c
+index eb30bf4da5..976ac6386c 100644
+--- a/lcorolib.c
++++ b/lcorolib.c
+@@ -78,7 +78,8 @@ static int luaB_auxwrap (lua_State *L) {
+     int stat = lua_status(co);
+     if (stat != LUA_OK && stat != LUA_YIELD) {  /* error in the coroutine? */
+       stat = lua_closethread(co, L);  /* close its tbc variables */
+-      lua_assert(stat != LUA_OK);
++      if (stat == LUA_OK)
++        return 0;  /* nothing to return */
+       lua_xmove(co, L, 1);  /* move error message to the caller */
+     }
+     if (stat != LUA_ERRMEM &&  /* not a memory error and ... */
+diff --git a/lstate.c b/lstate.c
+index ada0b8566a..08179357e6 100644
+--- a/lstate.c
++++ b/lstate.c
+@@ -319,18 +319,36 @@ TStatus luaE_resetthread (lua_State *L, TStatus status) {
+   status = luaD_closeprotected(L, 1, status);
+   if (status != LUA_OK)  /* errors? */
+     luaD_seterrorobj(L, status, L->stack.p + 1);
+-  else
++  else  /* keep in the stack only the fake function-entry for basic ci */
+     L->top.p = L->stack.p + 1;
+   luaD_reallocstack(L, cast_int(L->ci->top.p - L->stack.p), 0);
+   return status;
+ }
+ 
+ 
++/*
++** Auxiliary function to call luaE_resetthread in protected mode.
++** That function closes all tbc variables in protected mode, so the
++** only possible "error" is when a tbc variable closes the thread being
++** closed and therefore calls 'luaD_throwbaselevel'; in that case,
++** control goes directly back to the first call to lua_closethread (not
++** to the second), to properly return it.
++*/
++static void resetthread_aux (lua_State *L, void *ud) {
++  TStatus status = *cast(TStatus*, ud);
++  status = luaE_resetthread(L, status);
++  if (status != LUA_OK)
++    luaD_throw(L, status);
++}
++
++
+ LUA_API int lua_closethread (lua_State *L, lua_State *from) {
+   TStatus status;
+   lua_lock(L);
+   L->nCcalls = (from) ? getCcalls(from) : 0;
+-  status = luaE_resetthread(L, L->status);
++  status = luaD_rawrunprotected(L, resetthread_aux, &L->status);
++  /* stack has error message iff there was an error */
++  lua_assert(L->top.p == L->stack.p + (status == LUA_OK ? 1 : 2));
+   if (L == from)  /* closing itself? */
+     luaD_throwbaselevel(L, status);
+   lua_unlock(L);
+diff --git a/manual/manual.of b/manual/manual.of
+index 7cdc1ce31d..0288249271 100644
+--- a/manual/manual.of
++++ b/manual/manual.of
+@@ -7048,7 +7048,8 @@ The given coroutine must be dead, suspended,
+ or be the running coroutine.
+ For the running coroutine,
+ this function does not return.
+-Instead, the resume that (re)started the coroutine returns.
++Instead, the resume that (re)started the coroutine returns
++with no error and no results.
+ 
+ For other coroutines,
+ in case of error
+diff --git a/testes/coroutine.lua b/testes/coroutine.lua
+index ba394e0c46..953c157baf 100644
+--- a/testes/coroutine.lua
++++ b/testes/coroutine.lua
+@@ -156,8 +156,6 @@ do
+   st, msg = coroutine.close(co)
+   assert(st and msg == nil)
+ 
+-  local main = coroutine.running()
+-
+   -- cannot close 'main'
+   local st, msg = pcall(coroutine.close, main);
+   assert(not st and string.find(msg, "main"))
+@@ -184,6 +182,24 @@ do
+     assert(st and msg == nil)
+   end
+ 
++
++  do
++    -- again close a coroutine while closing it, but with the
++    -- coroutine in error mode.
++
++    -- after the error, the function created by 'wrap' will close the
++    -- coroutine. The close inside 'a' overrides the original close
++    -- and finishes the coroutine with no errors.
++    local co = coroutine.wrap(function()
++        local a <close> = func2close(function()
++            coroutine.close()
++        end)
++        error("y")
++      end)
++    co()  -- no errors
++  end
++
++
+   -- to-be-closed variables in coroutines
+   local X
+ 

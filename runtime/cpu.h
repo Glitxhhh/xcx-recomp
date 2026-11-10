@@ -32,6 +32,11 @@ _Static_assert(offsetof(Cpu, v) == 512, "v");
 typedef void (*GuestFn)(Cpu *);
 
 // ---- runtime services (runtime/*.c)
+int rt_mod_menu_select(uint64_t controller);
+void rt_mod_menu_install(uint64_t controller);
+void rt_mod_menu_invalidate(void);
+uint64_t rt_mod_menu_label(uint64_t view,uint64_t level,uint64_t visible,uint64_t message);
+uint64_t rt_mod_menu_message(uint64_t view,uint64_t level,uint64_t span,uint64_t offset,uint64_t original);
 void rt_dispatch(Cpu *c);                 // call function at c->pc
 void rt_spin_gate(Cpu *c, uint64_t head);  // a pass of a spin wait loop (kernel.c, recomp/patches.py `spin`)
 void rt_svc(Cpu *c, uint32_t imm, uint64_t pc);

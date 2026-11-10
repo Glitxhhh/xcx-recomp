@@ -1,0 +1,68 @@
+From e8533201cd2448d668c9b64758fc44205544b27f Mon Sep 17 00:00:00 2001
+From: Roberto I <roberto@inf.puc-rio.br>
+Date: Mon, 12 Oct 2026 16:14:08 -0300
+Subject: [PATCH] Bug: Wrong semantics in numeric for loop with NaN
+
+A numeric for loop with a NaN (Not a Number) limit should never run,
+as the initial value is neither smaller or equal nor greater or equal
+to that limit.
+---
+ lvm.c              |  7 ++++---
+ testes/nextvar.lua | 16 ++++++++++++++++
+ 2 files changed, 20 insertions(+), 3 deletions(-)
+
+diff --git a/lvm.c b/lvm.c
+index 46170534c3..cd3a36653b 100644
+--- a/lvm.c
++++ b/lvm.c
+@@ -190,10 +190,11 @@ static int forlimit (lua_State *L, lua_Integer init, const TValue *lim,
+       if (step < 0) return 1;  /* initial value must be less than it */
+       *p = LUA_MAXINTEGER;  /* truncate */
+     }
+-    else {  /* it is less than min integer */
++    else if (luai_numgt(0, flim)) {  /* if it is negative, it is too small */
+       if (step > 0) return 1;  /* initial value must be greater than it */
+       *p = LUA_MININTEGER;  /* truncate */
+     }
++    else return 1;  /* limit is NaN (neither 0 nor positive nor negative) */
+   }
+   return (step > 0 ? init > *p : init < *p);  /* not to run? */
+ }
+@@ -251,8 +252,8 @@ static int forprep (lua_State *L, StkId ra) {
+       luaG_forerror(L, pinit, "initial value");
+     if (step == 0)
+       luaG_runerror(L, "'for' step is zero");
+-    if (luai_numlt(0, step) ? luai_numlt(limit, init)
+-                            : luai_numlt(init, limit))
++    if (!(luai_numge(0, step) ? luai_numge(init, limit)
++                              : luai_numge(limit, init)))
+       return 1;  /* skip the loop */
+     else {
+       /* make sure all values are floats */
+diff --git a/testes/nextvar.lua b/testes/nextvar.lua
+index 098e7891c9..beb2e632c9 100644
+--- a/testes/nextvar.lua
++++ b/testes/nextvar.lua
+@@ -734,6 +734,22 @@ do
+   a = 0; for i=1.0, 0.99999, -1 do a=a+1 end; assert(a==1)
+ end
+ 
++do  print("testing NaN in numeric for")
++  local NaN = 0/0
++
++  for i = 1, NaN, 1 do error("should not run the loop") end
++  for i = 1, NaN, -1 do error("should not run the loop") end
++  for i = 1.0, NaN do error("should not run the loop") end
++  for i = 1.0, NaN, -1 do error("should not run the loop") end
++  for i = NaN, 1 do error("should not run the loop") end
++  for i = NaN, 1, -1 do error("should not run the loop") end
++
++  -- NaN is not negative, so the loop must be ascending
++  -- (that's somewhat arbitrary)
++  for i = 2, 1, NaN do error("should not run the loop") end
++  local s = 0; for i = 1, 5, NaN do s = s + 1 end; assert(s == 1)
++end
++
+ do   -- attempt to change the control variable
+   local st, msg = load "for i = 1, 10 do i = 10 end"
+   assert(not st and string.find(msg, "assign to const variable 'i'"))

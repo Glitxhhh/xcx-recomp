@@ -30,6 +30,7 @@ from .runner import InstallError, Step
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'tools'))
 import extract  # noqa: E402
+from mod_support import source_files  # noqa: E402
 from extract_exefs import (common_tickets, container_entries, load_keys, nca_ctr_key, nca_inventory)  # noqa: E402
 from package_select import program_nca  # noqa: E402
 from extract_update_romfs import copy_range, hactool_prod_keys  # noqa: E402
@@ -627,7 +628,7 @@ class Lift(Step):
     transient = True
 
     def key(self, ctx):
-        return fingerprint('lift-2', ctx.keys['extract'], ctx.layout.recomp)
+        return fingerprint('lift-3', ctx.keys['extract'], ctx.layout.recomp)
 
     def current(self, ctx, record):
         gen = ctx.temp / 'gen'
@@ -645,6 +646,8 @@ class Lift(Step):
                 rep.progress('lift', 'emit', int(m.group(1)), int(m.group(2)), 'chunks')
 
         args = ['--exefs', ctx.dest / 'exefs', '--out', gen]
+        if game_version(ctx) == '2.0.0':
+            args += ['--mod-menu-hook']
         table = layout.recomp / PATCHES
         if table.is_file():   # the 60 fps sites (XCX_FPS60 switches them at run time)
             args += ['--patches', table]
@@ -732,11 +735,14 @@ class Prepare(Step):
 
     def key(self, ctx):
         layout = ctx.layout
-        return fingerprint('prepare-2', ctx.keys['compile'], layout.xlate, layout.xlate.with_suffix('.id'))
+        return fingerprint('prepare-3', ctx.keys['compile'], layout.xlate, layout.xlate.with_suffix('.id'),
+                           *[src for src, _ in source_files(layout.root, layout.dev)])
 
     def current(self, ctx, record):
         xlate = ctx.dest / XLATE
-        return xlate.is_file() and file_sha256(xlate) == record.get('xlate_sha256')
+        return (xlate.is_file() and file_sha256(xlate) == record.get('xlate_sha256')
+                and all((ctx.dest / relative).is_file() and file_sha256(ctx.dest / relative) == file_sha256(src)
+                        for src, relative in source_files(ctx.layout.root, ctx.layout.dev)))
 
     def run(self, ctx):
         layout, dest = ctx.layout, ctx.dest
@@ -750,6 +756,10 @@ class Prepare(Step):
             replace_file(xlate_id, xlate.with_suffix('.id'))
         else:
             remove(xlate.with_suffix('.id'))
+        for src, relative in source_files(layout.root, layout.dev):
+            destination = dest / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            replace_file(src, destination)
         return {'xlate_sha256': file_sha256(xlate)}
 
 

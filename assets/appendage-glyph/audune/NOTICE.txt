@@ -1,0 +1,28 @@
+Audune Prompts created by Audune. Licensed under the Creative Commons BY-SA 4.0 license.
+
+The PNG files in this folder are adaptations of Audune Prompts 1.3.1 and are shared under the same license, CC BY-SA 4.0
+(https://creativecommons.org/licenses/by-sa/4.0/). They are not covered by the MIT license of the rest of this repository.
+
+Original work: Audune Prompts 1.3.1 by Audune, https://audune.itch.io/audune-prompts
+Package:       audune-prompts-1.3.1.zip, SHA-256 9b94d0cf744b73f2d43ca328d8ebf6ad14f382ec4d04f1a03543a074db4cf55c
+Used members:  "Audune Prompts Light.png" and "Audune Prompts Dark.png" (768x1408 sprite sheets of 64x64 cells); the SHA-256 of
+               each sheet and, for every tile here, its source cell, are in ../styles/provenance.json.
+
+Changes made to the original (CC BY-SA 4.0 section 3(a)(1)(B)):
+  * Each tile is a single 64x64 cell cut out of the "Light" sheet, without scaling. The PlayStation + and - tiles
+    (audune_playstation_start.png and audune_playstation_back.png) are the sheet's DualShock 4 Options and Share cells.
+  * The D-pad tiles that name directions (up, down, left, right, up and down, left and right) have the white and the dim arms
+    exchanged, so the pressed directions are the bright ones; Audune draws them dim.
+  * The four PlayStation "colored" face tiles (audune_playstation_*_colored.png) have the dark symbol of the Light-sheet tile
+    repainted in the symbol color that the "Dark" sheet uses for the same button; the white disc and the alpha are unchanged.
+  * At run time the tiles are fitted into the game's own icon cells (cropped to their visible box, scaled to fit, aspect kept).
+    That scaling and the compressed copy in runtime/glyph_art.inc (made by tools/make_glyph_styles.py) are mechanical; the tiles
+    are not otherwise altered.
+  * Reproduce the tiles with tools/make_audune_tiles.py and the original package.
+
+The pack's own notes name three further sources used in its artwork: the AAP-64 palette by Adigun A. Polack
+(https://lospec.com/palette-list/aap-64), the Work Sans font (SIL Open Font License,
+https://scripts.sil.org/cms/scripts/page.php?site_id=nrsi&id=OFL) and some icons of the Font Awesome Free icon set
+(https://fontawesome.com/license/free).
+
+The Kenney Input Prompts tiles used for the keyboard and Steam styles are CC0 and are in ../styles/.

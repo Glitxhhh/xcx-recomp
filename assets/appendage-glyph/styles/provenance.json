@@ -1,0 +1,1494 @@
+{
+  "name": "Kenney Input Prompts",
+  "version": "1.5A",
+  "license": "CC0-1.0",
+  "source": "https://kenney.nl/assets/input-prompts",
+  "package_sha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+  "assets": [
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_SOUTH",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        0
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_south.png",
+      "sha256": "58d22e2fc7aeccec51157521ef68a81baf15a4af9fb614257ffe6ae090dce2b9"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_EAST",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        1
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_east.png",
+      "sha256": "96b0905e11376938fb82896de28be29cb92a1b8dfba4325a658d1ce10fdd836f"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_WEST",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        2
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_west.png",
+      "sha256": "8fa89b57e467481fb78a11141ee7465fd4d105c1ef859f6b60effd33bd0378e2"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_NORTH",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        3
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_north.png",
+      "sha256": "ea8fb7b48842db550809d66a4d69bdd268a9b974f1a7c13c4c1c8699649973f2"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_L",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        6
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_l.png",
+      "sha256": "2bc2117e6af9ce0718ef8daa83dd34c020a310a5c3dcce5cec919b0af63a088a"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_R",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        7
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_r.png",
+      "sha256": "75568a8b56464a3d5642d8045878b817b19c670e921769d9ef1ab5fea8be526e"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_ZL",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        8
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_zl.png",
+      "sha256": "e213463773e5d92ef3537b0b3b8697b0ac0eba2e8c28fa3e8f9bf27d89f70a3a"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_ZR",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        9
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_zr.png",
+      "sha256": "b3b249149d46959e91c011e09bf480332d64095d490d6602f825f1940eebf0c2"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_SOUTH",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        19,
+        1
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_south.png",
+      "sha256": "50b03e50ed0c8fc5ebbe3d825906357e7cd0e9f02a89d4f332a0d62a1fdf705e"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_EAST",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        19,
+        0
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_east.png",
+      "sha256": "0c1e9adfdd2b46a0d71df6a3a2ffd1178b6efe3a35f9a1180ff043f4a5ce582d"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_WEST",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        19,
+        3
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_west.png",
+      "sha256": "91c1a6007cc4101923b183c8c42271dd71175cfb572bf5f41272686832bf0b36"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_NORTH",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        19,
+        2
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_north.png",
+      "sha256": "172e0b0430fb93af96612dc4fd04353e49147e22fe18ecde0d350c3fd8b921fb"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_L",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        13,
+        6
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_l.png",
+      "sha256": "7a258ffbd2e0936e752ce6c2e9446c8bd23200499c3e8e9d00d9a78713c1b14a"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_R",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        13,
+        7
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_r.png",
+      "sha256": "7f7d05fd4fa0b1b2e1141f67c8c36d3cbfe8021511a00cb437d8efa26d626ffc"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_ZL",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        13,
+        8
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_zl.png",
+      "sha256": "762ab79b4fa3639443e94cdaab51b1d48c18ff6f5609fcbfae851c0d5cc80eca"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_ZR",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        13,
+        9
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_zr.png",
+      "sha256": "713eaff80fd070defa678a55bce72ebe1f7adf59627717edb5bca113536345c7"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_SOUTH",
+      "member": "Steam Controller/Default/steam_button_a.png",
+      "sha256": "c24af67ce34d3116e4750f052221d6bfe8a87cb0de8364bb23a573a85391fb10",
+      "file": "steam_button_a.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_EAST",
+      "member": "Steam Controller/Default/steam_button_b.png",
+      "sha256": "5d95680fcfbf59ba94a3cc696fd8251e4fe292b421716b90b5272ca5b32d91bf",
+      "file": "steam_button_b.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_WEST",
+      "member": "Steam Controller/Default/steam_button_x.png",
+      "sha256": "90f1f195dd70724a605408bd60359c04b4013d8c5236442655256f43ea0cc043",
+      "file": "steam_button_x.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_NORTH",
+      "member": "Steam Controller/Default/steam_button_y.png",
+      "sha256": "133e98bbd388d29d7325b20b729518c98bb96707d743f2e142882b528bcf6263",
+      "file": "steam_button_y.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_L",
+      "member": "Steam Controller/Default/controller_button_l1.png",
+      "sha256": "800473d9d567c6b73ef2c96cfa6595914cbe931147a603048ea0ab6eb93672a7",
+      "file": "controller_button_l1.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_R",
+      "member": "Steam Controller/Default/controller_button_r1.png",
+      "sha256": "8874d68511054f3a04ca48a2d913115f37b631b0d75f1198cef763cbc67026a2",
+      "file": "controller_button_r1.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_ZL",
+      "member": "Steam Controller/Default/controller_button_l2.png",
+      "sha256": "351600f87c07439936a643cadd40a41d56554ed261539049044eefe848d88adb",
+      "file": "controller_button_l2.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_ZR",
+      "member": "Steam Controller/Default/controller_button_r2.png",
+      "sha256": "c1976e59c8f8fea10e84ad975cffb9da08c1215025476bb13c1a6df0b250659b",
+      "file": "controller_button_r2.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_A",
+      "member": "Keyboard & Mouse/Default/keyboard_a.png",
+      "sha256": "bb3b1d410bf8d05b34eed5e64cd22d28ecd5b40c2b69e8784da207241dc4caec",
+      "file": "keyboard_a.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_B",
+      "member": "Keyboard & Mouse/Default/keyboard_b.png",
+      "sha256": "458695caf54511bd75005a90e966eb07e09cd294ad7f780ae9bed7df51176687",
+      "file": "keyboard_b.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_C",
+      "member": "Keyboard & Mouse/Default/keyboard_c.png",
+      "sha256": "bf55030da49deb4c7beef3eac7e1280dc3095cd46616aeb3bd5b5585bf2fe010",
+      "file": "keyboard_c.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_D",
+      "member": "Keyboard & Mouse/Default/keyboard_d.png",
+      "sha256": "6ca4515b5f56dd2730cb9acec3b183c8b2800ae641d75b434edd753e12bc36ad",
+      "file": "keyboard_d.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_E",
+      "member": "Keyboard & Mouse/Default/keyboard_e.png",
+      "sha256": "1008502780281c8c2e06bebbc477a60f485d2260072b04611fbd294340f266d7",
+      "file": "keyboard_e.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_F",
+      "member": "Keyboard & Mouse/Default/keyboard_f.png",
+      "sha256": "f22179ebd67f153dadc524e12bde0997078ded09bbaba545c37cd1bd86b84331",
+      "file": "keyboard_f.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_G",
+      "member": "Keyboard & Mouse/Default/keyboard_g.png",
+      "sha256": "93b9c2122890824b0780501f052473e5f3f8c3fb998638540c857b14df60f0d8",
+      "file": "keyboard_g.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_H",
+      "member": "Keyboard & Mouse/Default/keyboard_h.png",
+      "sha256": "ec16cfa5949b7e28dd9ffba3b4789de9712d7b43c3a7046f14d47f41f519669c",
+      "file": "keyboard_h.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_I",
+      "member": "Keyboard & Mouse/Default/keyboard_i.png",
+      "sha256": "6ceff3312b4569537f29992538febeb093a7b46f1881dbed4284dc1733e276b5",
+      "file": "keyboard_i.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_J",
+      "member": "Keyboard & Mouse/Default/keyboard_j.png",
+      "sha256": "1e8a128a15d54f0a56a1ced558b904f9354661494b9c61cf0c288eaebfbc9f68",
+      "file": "keyboard_j.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_K",
+      "member": "Keyboard & Mouse/Default/keyboard_k.png",
+      "sha256": "867973f7d90ddd5b8c78034a29bde6e6119c7eb36369c1aad9a8f05ae5eb6202",
+      "file": "keyboard_k.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_L",
+      "member": "Keyboard & Mouse/Default/keyboard_l.png",
+      "sha256": "43756a1422a8900c2cf2a9583949aa6fdb2d2a56a03c2e1c7f05b8c1fb99829f",
+      "file": "keyboard_l.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_M",
+      "member": "Keyboard & Mouse/Default/keyboard_m.png",
+      "sha256": "f0ddf6f6b9f22b715dc79db27ee28556be9b0e933d311a7201278634b5edfd55",
+      "file": "keyboard_m.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_N",
+      "member": "Keyboard & Mouse/Default/keyboard_n.png",
+      "sha256": "616c99448c357fbe219b5c9e726645c2a21ebcb81651f97b131c8cddc838b36c",
+      "file": "keyboard_n.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_O",
+      "member": "Keyboard & Mouse/Default/keyboard_o.png",
+      "sha256": "4b106fe36c7a12e0c2fa1ce50d17eeabd3e255c7be16752c41371af898d68cda",
+      "file": "keyboard_o.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_P",
+      "member": "Keyboard & Mouse/Default/keyboard_p.png",
+      "sha256": "045d191e05815c0fe7e098ff300f1479b5ea31d65a9f8027ce318869d7288587",
+      "file": "keyboard_p.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_Q",
+      "member": "Keyboard & Mouse/Default/keyboard_q.png",
+      "sha256": "cee375cefc9e2f19089bbd669153af9099fe71e08b6c577d48eb2a32bc567c96",
+      "file": "keyboard_q.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_R",
+      "member": "Keyboard & Mouse/Default/keyboard_r.png",
+      "sha256": "153d158ec02c5b40cdded08fbf74389d1713fadf5b22029e77f2c518dd4c4973",
+      "file": "keyboard_r.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_S",
+      "member": "Keyboard & Mouse/Default/keyboard_s.png",
+      "sha256": "09a945652d571fd165bb92d0d1238d2007be569b80220ae06514aba2cfc9a7f3",
+      "file": "keyboard_s.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_T",
+      "member": "Keyboard & Mouse/Default/keyboard_t.png",
+      "sha256": "f7414b680d13c89c1b41174f29c79ce292167767aefa47b856fa99ef83ef32cc",
+      "file": "keyboard_t.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_U",
+      "member": "Keyboard & Mouse/Default/keyboard_u.png",
+      "sha256": "148c25c991fbe63182e7d107f6e86a4bde7941967cf4c58a04e619c1aa9591d5",
+      "file": "keyboard_u.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_V",
+      "member": "Keyboard & Mouse/Default/keyboard_v.png",
+      "sha256": "ccd44479d7a15db853f47cfbb1b0239a12faf68b29e3ac524ee081756d5be35b",
+      "file": "keyboard_v.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_W",
+      "member": "Keyboard & Mouse/Default/keyboard_w.png",
+      "sha256": "17bbf72eccf90f548bcd039de007e77998f76d0b2010ce3b4450663a99521e26",
+      "file": "keyboard_w.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_X",
+      "member": "Keyboard & Mouse/Default/keyboard_x.png",
+      "sha256": "fc4cb6a35566cf46e83efb5243bf42a11669554b1d0305d6b60a712a031e609f",
+      "file": "keyboard_x.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_Y",
+      "member": "Keyboard & Mouse/Default/keyboard_y.png",
+      "sha256": "6ad1dd0e4c80af12ba4f860c9d09f7fd8af9b44c45847aa33330b0e8080adfab",
+      "file": "keyboard_y.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_Z",
+      "member": "Keyboard & Mouse/Default/keyboard_z.png",
+      "sha256": "c0981ecffd93edf02dc7c8d15a1dc5a13e9c5a98523c736cb9a3ced299e060ee",
+      "file": "keyboard_z.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_0",
+      "member": "Keyboard & Mouse/Default/keyboard_0.png",
+      "sha256": "6a3f14a9e9bd2b53ee97b72ecd1e63d97890c3a1436bccdc0925a3f4a62b5ded",
+      "file": "keyboard_0.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_1",
+      "member": "Keyboard & Mouse/Default/keyboard_1.png",
+      "sha256": "38b0d8aa68eac92789b06dca010e569900dab33abd340c4cbcd693ae6be0d868",
+      "file": "keyboard_1.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_2",
+      "member": "Keyboard & Mouse/Default/keyboard_2.png",
+      "sha256": "40f90380387dfaad34ba9e9702e63cd11d3e247ac362905a53574421e102047e",
+      "file": "keyboard_2.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_3",
+      "member": "Keyboard & Mouse/Default/keyboard_3.png",
+      "sha256": "35821e855d18a5c89a0cd1552426cd94a379ee3e49bc39869ffc28e0a0c3ddc5",
+      "file": "keyboard_3.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_4",
+      "member": "Keyboard & Mouse/Default/keyboard_4.png",
+      "sha256": "5835cd49ce2d3f3deefc4e582778eb0d73586f6d5d605437f976d383d940a98e",
+      "file": "keyboard_4.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_5",
+      "member": "Keyboard & Mouse/Default/keyboard_5.png",
+      "sha256": "f8023805a1e3cbdb1f5ea8f53541a58bbec353f5c6c744e33f3bebcb205fbdc5",
+      "file": "keyboard_5.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_6",
+      "member": "Keyboard & Mouse/Default/keyboard_6.png",
+      "sha256": "67aa6d740acca887f04d96b590d89009ded4e4e4a6073ab45918675016187224",
+      "file": "keyboard_6.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_7",
+      "member": "Keyboard & Mouse/Default/keyboard_7.png",
+      "sha256": "d0f450702c745668d7978cd923e11e2d090fb07f0c83ce2e98c580d8aeff2f84",
+      "file": "keyboard_7.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_8",
+      "member": "Keyboard & Mouse/Default/keyboard_8.png",
+      "sha256": "938b81cd0ed422e6de3954a4b63d8e25de7f3c73e3fd9b640a2682255be2d587",
+      "file": "keyboard_8.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_9",
+      "member": "Keyboard & Mouse/Default/keyboard_9.png",
+      "sha256": "ae43560e72e8a8d6f9a169df7c786a43a10fd5a3f4a16289ecb462781d752726",
+      "file": "keyboard_9.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_MOUSE_L",
+      "member": "Keyboard & Mouse/Default/mouse_left.png",
+      "sha256": "80101392b423671e2812d2b64310bbd17f7c95c796f0c704dcf6c1a70d98cf35",
+      "file": "mouse_left.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_MOUSE_R",
+      "member": "Keyboard & Mouse/Default/mouse_right.png",
+      "sha256": "da09ac410a994483f25d750a67765cfdc1166b14cdafd52e8ab9cf6f9a125c6e",
+      "file": "mouse_right.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_SPACE",
+      "member": "Keyboard & Mouse/Default/keyboard_space.png",
+      "sha256": "8ce6f043b05888bd1655f7660f8f7cc02acb6c763fecf358fef20405239524bf",
+      "file": "keyboard_space.png"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_SOUTH",
+      "appearance": "COLORED",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        0
+      ],
+      "change": "cell cut from the sheet; dark symbol recolored to the symbol color of the Dark sheet",
+      "file": "audune_playstation_south_colored.png",
+      "sha256": "0a74aa3209999f5c2a0e8e22dd60b77aacf306b4ad6acc957c624c2ecccf1313",
+      "color_sheet": "Audune Prompts Dark.png"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_EAST",
+      "appearance": "COLORED",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        1
+      ],
+      "change": "cell cut from the sheet; dark symbol recolored to the symbol color of the Dark sheet",
+      "file": "audune_playstation_east_colored.png",
+      "sha256": "d3dbb9efe35137b991da1adab9fe4041549ad6f9962f436504035e8291e00c99",
+      "color_sheet": "Audune Prompts Dark.png"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_WEST",
+      "appearance": "COLORED",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        2
+      ],
+      "change": "cell cut from the sheet; dark symbol recolored to the symbol color of the Dark sheet",
+      "file": "audune_playstation_west_colored.png",
+      "sha256": "00f0ffba3f8572ff6bb809ff3bbeff8e60fce8f83216165055aac93b0d6cd7f5",
+      "color_sheet": "Audune Prompts Dark.png"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_NORTH",
+      "appearance": "COLORED",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        3
+      ],
+      "change": "cell cut from the sheet; dark symbol recolored to the symbol color of the Dark sheet",
+      "file": "audune_playstation_north_colored.png",
+      "sha256": "5629c162d28743bcca2140823554d2229c7c76614dd46836534b3c29383cb655",
+      "color_sheet": "Audune Prompts Dark.png"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_SOUTH",
+      "appearance": "COLORED",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        13,
+        0
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_south_colored.png",
+      "sha256": "03a38802bdefabc681a8dc58e3e6008916748c0d043190bf49fbce9eaedf6834"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_EAST",
+      "appearance": "COLORED",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        13,
+        1
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_east_colored.png",
+      "sha256": "b10f23636d0c5db96369338cc0207daa56bb868810033e075990bec8c7d4a8a7"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_WEST",
+      "appearance": "COLORED",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        13,
+        2
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_west_colored.png",
+      "sha256": "3409d5e4d94163b01e40b0b783f6f929c9e68ee54574fbff959e07d6bf2a5c4d"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_NORTH",
+      "appearance": "COLORED",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        13,
+        3
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_north_colored.png",
+      "sha256": "340e3e5451e9dcc423c4600457551bb85747236d4cfc2fd6f6fa6c1dd02025a9"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_SOUTH",
+      "member": "Steam Controller/Default/steam_button_color_a.png",
+      "sha256": "e4158c16e2aca817503819bba998dc4d749327b8168ddd9dd19090860563badf",
+      "file": "steam_button_color_a.png",
+      "appearance": "COLORED"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_EAST",
+      "member": "Steam Controller/Default/steam_button_color_b.png",
+      "sha256": "89292cbfe1bd0eb977021e43281bd3e2be8dde35754b65f4b16b3a6d39355343",
+      "file": "steam_button_color_b.png",
+      "appearance": "COLORED"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_WEST",
+      "member": "Steam Controller/Default/steam_button_color_x.png",
+      "sha256": "1f33f62d907046f5c3a5d3e1b5171d68f30d46c9a81c2424e4e5e5d817636a70",
+      "file": "steam_button_color_x.png",
+      "appearance": "COLORED"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_NORTH",
+      "member": "Steam Controller/Default/steam_button_color_y.png",
+      "sha256": "b094eed6dca5de043597e7b3b24caf89d811a3e7711ebdf831992f70aa711a99",
+      "file": "steam_button_color_y.png",
+      "appearance": "COLORED"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_START",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        4
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_start.png",
+      "sha256": "2e946988af9e26a5c478fedcc87922960caa44cd2f3ebf8e550a14a7885cca25"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_BACK",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        5
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_back.png",
+      "sha256": "c52d8e8ce2cd1c268b0325aa0de97a7271969521c67ff2e26397eb438f10c0b1"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "GLYPH_IN_DPAD",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        18,
+        2
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_dpad.png",
+      "sha256": "45ce7cd590007be63db536a6a099aec19c85911efc46a1f47187ddce79fd1b2d"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_DPAD_UP",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        18,
+        5
+      ],
+      "change": "cell cut from the sheet; white and dim arms swapped so the pressed directions are bright",
+      "file": "audune_playstation_dpad_up.png",
+      "sha256": "9086ab1ac2c1bf0d4f221446c7bb3ee2ef722e3efb203639efb2cd1c0dee490d"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_DPAD_DOWN",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        18,
+        6
+      ],
+      "change": "cell cut from the sheet; white and dim arms swapped so the pressed directions are bright",
+      "file": "audune_playstation_dpad_down.png",
+      "sha256": "e2a03ae9aff642b20ea9af55c4a018bce4faf936b59751a0e86f6301c845c99c"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_DPAD_LEFT",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        18,
+        3
+      ],
+      "change": "cell cut from the sheet; white and dim arms swapped so the pressed directions are bright",
+      "file": "audune_playstation_dpad_left.png",
+      "sha256": "b60422b3528c8bd05ba5c4c262c280aea9338ef94ee78af8e07a7494744da065"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_DPAD_RIGHT",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        18,
+        4
+      ],
+      "change": "cell cut from the sheet; white and dim arms swapped so the pressed directions are bright",
+      "file": "audune_playstation_dpad_right.png",
+      "sha256": "a6cac677ccb5d27f69e96c5e6398626dbbf68bdeeec691dde5de02980c291935"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "GLYPH_IN_DPAD_V",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        18,
+        8
+      ],
+      "change": "cell cut from the sheet; white and dim arms swapped so the pressed directions are bright",
+      "file": "audune_playstation_dpad_v.png",
+      "sha256": "055717e8a7dc5613dc5570b3b3bc57fb5b336dab2230ca1cea529e846c11bb3b"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "GLYPH_IN_DPAD_H",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        18,
+        7
+      ],
+      "change": "cell cut from the sheet; white and dim arms swapped so the pressed directions are bright",
+      "file": "audune_playstation_dpad_h.png",
+      "sha256": "3d5cfaf218d77c33f621cd9970ee4d43f9ab99a033549fd4658540ff64afb80e"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "GLYPH_IN_STICK_L",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        17,
+        0
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_stick_l.png",
+      "sha256": "1aa38e482b7eca6b3a501d84ca2e7d1b3e30ebb6e2e14c8d807891454a17a197"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "GLYPH_IN_STICK_R",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        17,
+        7
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_stick_r.png",
+      "sha256": "903685ed5ec21ed0d5400659c071489d36193d0061c1d6d2cffaa961b2a11c52"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_LSTICK",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        10
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_lstick.png",
+      "sha256": "552181e4db5ae17395c04074f5f0abf9636db864b37dd53f1f8bc80bff1f7bd6"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "PAD_RSTICK",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        16,
+        11
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_rstick.png",
+      "sha256": "acfc957e4f02646084d10ca9c8b0ad68cd551c808bae7ea88ad0856f54e04ff3"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_START",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        13,
+        4
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_start.png",
+      "sha256": "15dcd602e044679bad9c62b7fcf007a9f2f690e6f880fbf26befc8b718fea3b5"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_BACK",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        13,
+        5
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_back.png",
+      "sha256": "5bb050b9788e21ed02f00b1a441d8e9bd6dd78bbec4dfcc7af55e490c9809f56"
+    },
+    {
+      "style": "XBOX",
+      "input": "GLYPH_IN_DPAD",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        15,
+        2
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_dpad.png",
+      "sha256": "84ec79545a6973239e1c56b5caf7996de58e502696d031ddc75fdc07d03569f5"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_DPAD_UP",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        15,
+        5
+      ],
+      "change": "cell cut from the sheet; white and dim arms swapped so the pressed directions are bright",
+      "file": "audune_xbox_dpad_up.png",
+      "sha256": "8cb1a48ddc1c4aecbfc0f5d972245e07f87ad6109ff58bf15cd8d54cbeccc771"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_DPAD_DOWN",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        15,
+        6
+      ],
+      "change": "cell cut from the sheet; white and dim arms swapped so the pressed directions are bright",
+      "file": "audune_xbox_dpad_down.png",
+      "sha256": "c0803f1d559287c8bc3ddf2eb801ad3582be7011a59b27481e365d8be2abbd17"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_DPAD_LEFT",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        15,
+        3
+      ],
+      "change": "cell cut from the sheet; white and dim arms swapped so the pressed directions are bright",
+      "file": "audune_xbox_dpad_left.png",
+      "sha256": "b90d485e52c23fe35bb9c59b6cc5c25804a737cb6129859934e1ea91a864111b"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_DPAD_RIGHT",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        15,
+        4
+      ],
+      "change": "cell cut from the sheet; white and dim arms swapped so the pressed directions are bright",
+      "file": "audune_xbox_dpad_right.png",
+      "sha256": "2f945643371e3172e5da31a7fab5774361e7ca0b97f2a3d487b278f6b9c89a32"
+    },
+    {
+      "style": "XBOX",
+      "input": "GLYPH_IN_DPAD_V",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        15,
+        8
+      ],
+      "change": "cell cut from the sheet; white and dim arms swapped so the pressed directions are bright",
+      "file": "audune_xbox_dpad_v.png",
+      "sha256": "caaafe3f516cfac3155496b1ba781684696cdcaf6991d387a1a005d661cb606b"
+    },
+    {
+      "style": "XBOX",
+      "input": "GLYPH_IN_DPAD_H",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        15,
+        7
+      ],
+      "change": "cell cut from the sheet; white and dim arms swapped so the pressed directions are bright",
+      "file": "audune_xbox_dpad_h.png",
+      "sha256": "cf0d205d555abd6af472eb9bb8f3432fc41032b8f8f19984016e41dc9b22af07"
+    },
+    {
+      "style": "XBOX",
+      "input": "GLYPH_IN_STICK_L",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        14,
+        0
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_stick_l.png",
+      "sha256": "2eea86af2b677d61696f5abad9db30acee9f31c98a8f562e27010d021d4bc7c3"
+    },
+    {
+      "style": "XBOX",
+      "input": "GLYPH_IN_STICK_R",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        14,
+        7
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_stick_r.png",
+      "sha256": "fb4740e23ec3f082ea93f8b3aacf57c0d89ecf1d31c109eec10b6b129834f3b2"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_LSTICK",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        13,
+        10
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_lstick.png",
+      "sha256": "5ecf59313f91dc4afed15f2f5ca457322a31bee1ae6f7aa28c332809e6a03033"
+    },
+    {
+      "style": "XBOX",
+      "input": "PAD_RSTICK",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        13,
+        11
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_rstick.png",
+      "sha256": "a3210bd804867d835f3543050a12ec94a3d234cc6fb4182ff8c05e94dc3b2142"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_START",
+      "member": "Steam Controller/Default/controller_button_options.png",
+      "sha256": "af52063894c6f2e09777d0e32f4e2853511ca60dd870f701b4d8d5d71e021ad8",
+      "file": "controller_button_options.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_BACK",
+      "member": "Steam Controller/Default/controller_button_view.png",
+      "sha256": "7c57ddfd8bac9f1073b03422d759396f6bd98c86f9a5a6cd43ae0feb9b5abdec",
+      "file": "controller_button_view.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "GLYPH_IN_DPAD",
+      "member": "Steam Controller/Default/steam_dpad.png",
+      "sha256": "0c25146c1378235245b4764952ebfac03d8df3ac21c0a503ba4e2258bca88861",
+      "file": "steam_dpad.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_DPAD_UP",
+      "member": "Steam Controller/Default/steam_dpad_up_outline.png",
+      "sha256": "176264dfe62a2a5b847b4828d18c6aaf2601eb253eea0087b6f4338a0104d3f3",
+      "file": "steam_dpad_up_outline.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_DPAD_DOWN",
+      "member": "Steam Controller/Default/steam_dpad_down_outline.png",
+      "sha256": "38c24febb77de9999e3fed5a519df43890a3cf3cffcf262ec86ac2d8cc266e42",
+      "file": "steam_dpad_down_outline.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_DPAD_LEFT",
+      "member": "Steam Controller/Default/steam_dpad_left_outline.png",
+      "sha256": "18662afc753f4ad7c8b38c550bfa3c7131de0614c1d93b2ff0f7daba20f84f7c",
+      "file": "steam_dpad_left_outline.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_DPAD_RIGHT",
+      "member": "Steam Controller/Default/steam_dpad_right_outline.png",
+      "sha256": "ef159491b4eb465a08ff5d7876ba84d4e333b9058eeea601386d3cb4b833bf37",
+      "file": "steam_dpad_right_outline.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "GLYPH_IN_DPAD_V",
+      "member": "Steam Controller/Default/steam_dpad_vertical_outline.png",
+      "sha256": "314576228f06c63365b1c3373e8bc2930fbb1ab3473d1b875bd102b3ac1f4333",
+      "file": "steam_dpad_vertical_outline.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "GLYPH_IN_DPAD_H",
+      "member": "Steam Controller/Default/steam_dpad_horizontal_outline.png",
+      "sha256": "ec1db58ccdfd65fca8c3acdadd626eebd67c9ba560ac09b01b8efd7c43b07b29",
+      "file": "steam_dpad_horizontal_outline.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "GLYPH_IN_STICK_L",
+      "member": "Steam Deck/Default/steamdeck_stick_l.png",
+      "sha256": "8d2dc664f862155ddfecd7eaf082345da7c8099881c4cd595f0aa01ecfb2c47f",
+      "file": "steamdeck_stick_l.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "GLYPH_IN_STICK_R",
+      "member": "Steam Deck/Default/steamdeck_stick_r.png",
+      "sha256": "61d98a35a5360fa66cd74743b0f63d32b8204bfc0ec58c0bf08fe3e55b8ea90b",
+      "file": "steamdeck_stick_r.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_LSTICK",
+      "member": "Steam Deck/Default/steamdeck_stick_l_press.png",
+      "sha256": "6ce290d2cd7c38768e7c16b114c702da31d994d541bd4e0464bfeb13d697710e",
+      "file": "steamdeck_stick_l_press.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "PAD_RSTICK",
+      "member": "Steam Deck/Default/steamdeck_stick_r_press.png",
+      "sha256": "c9b9bdd53fd412240328df8e81a20673a774af9ba395bccb7923d584f2fad0a1",
+      "file": "steamdeck_stick_r_press.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_TAB",
+      "member": "Keyboard & Mouse/Default/keyboard_tab.png",
+      "sha256": "2a759f1f70edb9fd8b1464098def1b096831e128d7b312eead7a3ba39870393f",
+      "file": "keyboard_tab.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_LCTRL",
+      "member": "Keyboard & Mouse/Default/keyboard_ctrl.png",
+      "sha256": "9f5339e48f9663aa1022791155ff09158e5caba5f2e93723adfbf804c1d9f24e",
+      "file": "keyboard_ctrl.png"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "GLYPH_IN_STICK_L_V",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        17,
+        6
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_stick_l_v.png",
+      "sha256": "b35a197001d99ec83514e801202c83803febf71c5572a9b4bb68e022bfa600c1"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "GLYPH_IN_STICK_L_H",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        17,
+        5
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_stick_l_h.png",
+      "sha256": "8d3dc2006def3c65526c6df188ea4b9da19d0bff13559a5568a06e7df6df80a7"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "GLYPH_IN_STICK_R_V",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        18,
+        1
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_stick_r_v.png",
+      "sha256": "647ca87bb893cecbc2495e7e059fccf7532b4bd79a2b09286e07b1fe831c958c"
+    },
+    {
+      "style": "PLAYSTATION",
+      "input": "GLYPH_IN_STICK_R_H",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        18,
+        0
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_playstation_stick_r_h.png",
+      "sha256": "07475134b4667b074b0346b3cbfd5916afc0fe274c15564eeebad23b3b0fd8b1"
+    },
+    {
+      "style": "XBOX",
+      "input": "GLYPH_IN_STICK_L_V",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        14,
+        6
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_stick_l_v.png",
+      "sha256": "b35a197001d99ec83514e801202c83803febf71c5572a9b4bb68e022bfa600c1"
+    },
+    {
+      "style": "XBOX",
+      "input": "GLYPH_IN_STICK_L_H",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        14,
+        5
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_stick_l_h.png",
+      "sha256": "8d3dc2006def3c65526c6df188ea4b9da19d0bff13559a5568a06e7df6df80a7"
+    },
+    {
+      "style": "XBOX",
+      "input": "GLYPH_IN_STICK_R_V",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        15,
+        1
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_stick_r_v.png",
+      "sha256": "647ca87bb893cecbc2495e7e059fccf7532b4bd79a2b09286e07b1fe831c958c"
+    },
+    {
+      "style": "XBOX",
+      "input": "GLYPH_IN_STICK_R_H",
+      "pack": "audune",
+      "sheet": "Audune Prompts Light.png",
+      "cell": [
+        15,
+        0
+      ],
+      "change": "cell cut from the sheet",
+      "file": "audune_xbox_stick_r_h.png",
+      "sha256": "99601f10153644fc109fd5a807ff3e47cb7bbc67e6d49789cf7e1889cfb88c6e"
+    },
+    {
+      "style": "STEAM",
+      "input": "GLYPH_IN_STICK_L_V",
+      "member": "Steam Deck/Default/steamdeck_stick_l_vertical.png",
+      "sha256": "b96cb6c9e721f075b33a2c75ffe7196efe523e8f01a26f9d8a3b6e93dbf7839f",
+      "file": "steamdeck_stick_l_vertical.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "GLYPH_IN_STICK_L_H",
+      "member": "Steam Deck/Default/steamdeck_stick_l_horizontal.png",
+      "sha256": "e1417365531655d2f6368a808abacfef8dba253bdedd0c5149faebeef9c5b079",
+      "file": "steamdeck_stick_l_horizontal.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "GLYPH_IN_STICK_R_V",
+      "member": "Steam Deck/Default/steamdeck_stick_r_vertical.png",
+      "sha256": "3ce3c98befb61b7e5b1a61040f09222d9a46a234869240e2e90a1009ec9020b4",
+      "file": "steamdeck_stick_r_vertical.png"
+    },
+    {
+      "style": "STEAM",
+      "input": "GLYPH_IN_STICK_R_H",
+      "member": "Steam Deck/Default/steamdeck_stick_r_horizontal.png",
+      "sha256": "d499154f910558d5a0b4b10a5aea7590181012afd7600d42d9bebfe72526ebd7",
+      "file": "steamdeck_stick_r_horizontal.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "KEY_LSHIFT",
+      "member": "Keyboard & Mouse/Default/keyboard_shift.png",
+      "sha256": "0c63e9e7d1175d72ee559d9a036ab4ee9bf099262b882f60049a499fb24cd247",
+      "file": "keyboard_shift.png"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "GLYPH_IN_KB_ARROWS",
+      "derived": true,
+      "file": "keyboard_cluster_arrows.png",
+      "members": [
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_arrow_left.png",
+          "sha256": "fae118df3d06bdf8850133bcd8c2f270b653aa4acc4e168cc3738670c32f8108"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_arrow_up.png",
+          "sha256": "0506574ae05242a46478afb607be75a37026687835443c4d90bd57d459a7f4d4"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_arrow_right.png",
+          "sha256": "6bdc83ab726280ebf73e91f602e2c2e3fe0fbe152fa94a1af7eefcb311d10995"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_arrow_down.png",
+          "sha256": "4ede88ceeda8cbf62c9f41db4a51f128db6018d624fd7a4253b1be3052ac06d1"
+        }
+      ],
+      "sha256": "c6910c4126675499d9fcfa03ffebb0f61f862f42703429a038dd7170d892aaf2"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "GLYPH_IN_KB_ARROWS_V",
+      "derived": true,
+      "file": "keyboard_cluster_arrows_vertical.png",
+      "members": [
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_arrow_up.png",
+          "sha256": "0506574ae05242a46478afb607be75a37026687835443c4d90bd57d459a7f4d4"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_arrow_down.png",
+          "sha256": "4ede88ceeda8cbf62c9f41db4a51f128db6018d624fd7a4253b1be3052ac06d1"
+        }
+      ],
+      "sha256": "08e1d3c191fc00cb8ca0f05792c976514fc912299623d40740441ed356ada32e"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "GLYPH_IN_KB_ARROWS_H",
+      "derived": true,
+      "file": "keyboard_cluster_arrows_horizontal.png",
+      "members": [
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_arrow_left.png",
+          "sha256": "fae118df3d06bdf8850133bcd8c2f270b653aa4acc4e168cc3738670c32f8108"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_arrow_right.png",
+          "sha256": "6bdc83ab726280ebf73e91f602e2c2e3fe0fbe152fa94a1af7eefcb311d10995"
+        }
+      ],
+      "sha256": "70bc6d235dba6119fa4c123b292338085640a2b76da40d8956be2d5999b67cfe"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "GLYPH_IN_KB_WASD",
+      "derived": true,
+      "file": "keyboard_cluster_wasd.png",
+      "members": [
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_a.png",
+          "sha256": "bb3b1d410bf8d05b34eed5e64cd22d28ecd5b40c2b69e8784da207241dc4caec"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_w.png",
+          "sha256": "17bbf72eccf90f548bcd039de007e77998f76d0b2010ce3b4450663a99521e26"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_d.png",
+          "sha256": "6ca4515b5f56dd2730cb9acec3b183c8b2800ae641d75b434edd753e12bc36ad"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_s.png",
+          "sha256": "09a945652d571fd165bb92d0d1238d2007be569b80220ae06514aba2cfc9a7f3"
+        }
+      ],
+      "sha256": "1b6ed7152416bec23bd4f90a4d67d2e58cf551070f4d581bef7af65b852e78ae"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "GLYPH_IN_KB_WASD_V",
+      "derived": true,
+      "file": "keyboard_cluster_wasd_vertical.png",
+      "members": [
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_w.png",
+          "sha256": "17bbf72eccf90f548bcd039de007e77998f76d0b2010ce3b4450663a99521e26"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_s.png",
+          "sha256": "09a945652d571fd165bb92d0d1238d2007be569b80220ae06514aba2cfc9a7f3"
+        }
+      ],
+      "sha256": "9bd4b379ad833c3490f8450551861cafc91c7aeb0b5c62b96b3599c59be0de68"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "GLYPH_IN_KB_WASD_H",
+      "derived": true,
+      "file": "keyboard_cluster_wasd_horizontal.png",
+      "members": [
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_a.png",
+          "sha256": "bb3b1d410bf8d05b34eed5e64cd22d28ecd5b40c2b69e8784da207241dc4caec"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_d.png",
+          "sha256": "6ca4515b5f56dd2730cb9acec3b183c8b2800ae641d75b434edd753e12bc36ad"
+        }
+      ],
+      "sha256": "b0e4e2f9cbf13ac246e9a2d2bbb40c55cf1263e5e365dbb301d17a52e7b93314"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "GLYPH_IN_KB_NUM",
+      "derived": true,
+      "file": "keyboard_cluster_1234.png",
+      "members": [
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_1.png",
+          "sha256": "38b0d8aa68eac92789b06dca010e569900dab33abd340c4cbcd693ae6be0d868"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_2.png",
+          "sha256": "40f90380387dfaad34ba9e9702e63cd11d3e247ac362905a53574421e102047e"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_3.png",
+          "sha256": "35821e855d18a5c89a0cd1552426cd94a379ee3e49bc39869ffc28e0a0c3ddc5"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_4.png",
+          "sha256": "5835cd49ce2d3f3deefc4e582778eb0d73586f6d5d605437f976d383d940a98e"
+        }
+      ],
+      "sha256": "b1a57cabe7dfb733b8aa14164953849a9b35d399183927183691ae5dd5d83026"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "GLYPH_IN_KB_NUM_V",
+      "derived": true,
+      "file": "keyboard_cluster_1234_vertical.png",
+      "members": [
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_2.png",
+          "sha256": "40f90380387dfaad34ba9e9702e63cd11d3e247ac362905a53574421e102047e"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_4.png",
+          "sha256": "5835cd49ce2d3f3deefc4e582778eb0d73586f6d5d605437f976d383d940a98e"
+        }
+      ],
+      "sha256": "201bedf4305e3a9de33e3d856681f96be828a3e9970ddb51162f37aaa2ae7ecd"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "GLYPH_IN_KB_NUM_H",
+      "derived": true,
+      "file": "keyboard_cluster_1234_horizontal.png",
+      "members": [
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_1.png",
+          "sha256": "38b0d8aa68eac92789b06dca010e569900dab33abd340c4cbcd693ae6be0d868"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_3.png",
+          "sha256": "35821e855d18a5c89a0cd1552426cd94a379ee3e49bc39869ffc28e0a0c3ddc5"
+        }
+      ],
+      "sha256": "cb2975be1ccee8f49358e24d384a1ac3979546982a0befb9838af30f63c923c9"
+    },
+    {
+      "style": "KEYBOARD",
+      "input": "GLYPH_IN_KB_ARROWS_LIT_H",
+      "derived": true,
+      "file": "keyboard_cluster_arrows_lit_horizontal.png",
+      "note": "the arrow cluster with the up and down keys at 38% opacity",
+      "members": [
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_arrow_left.png",
+          "sha256": "fae118df3d06bdf8850133bcd8c2f270b653aa4acc4e168cc3738670c32f8108"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_arrow_up.png",
+          "sha256": "0506574ae05242a46478afb607be75a37026687835443c4d90bd57d459a7f4d4"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_arrow_right.png",
+          "sha256": "6bdc83ab726280ebf73e91f602e2c2e3fe0fbe152fa94a1af7eefcb311d10995"
+        },
+        {
+          "member": "Keyboard & Mouse/Default/keyboard_arrow_down.png",
+          "sha256": "4ede88ceeda8cbf62c9f41db4a51f128db6018d624fd7a4253b1be3052ac06d1"
+        }
+      ],
+      "sha256": "4156e96b229470af37ca8e157524fdaa02b6c0a56207b4273783f5027c1c45be"
+    }
+  ],
+  "audune": {
+    "name": "Audune Prompts",
+    "version": "1.3.1",
+    "license": "CC-BY-SA-4.0",
+    "author": "Audune",
+    "source": "https://audune.itch.io/audune-prompts",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "package_sha256": "9b94d0cf744b73f2d43ca328d8ebf6ad14f382ec4d04f1a03543a074db4cf55c",
+    "sheet_sha256": {
+      "Audune Prompts Light.png": "83224e7973234e756f885a3839a51b1242aaf303bc0eaec2a615c2b51a2ca737",
+      "Audune Prompts Dark.png": "1c8f29e6429fa244f8d5f89648475db53acdcbc5dca6bbe203cebafefbc23183"
+    },
+    "notice": "assets/appendage-glyph/audune/NOTICE.txt",
+    "folder": "assets/appendage-glyph/audune"
+  }
+}

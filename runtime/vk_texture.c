@@ -19,6 +19,9 @@
 #include <string.h>
 
 #include "cfg.h"
+#include "appendage_glyph.h"
+#include "inline_glyph.h"
+#include "input_glyphs.h"
 #include "gfx.h"
 #include "host.h"
 #include "nvn_api.h"
@@ -28,6 +31,7 @@
 #include "vk.h"
 #include "vk_exec.h"
 #include "platform/platform.h"
+#include "sha256.h"
 
 typedef struct {
     uint64_t addr;
@@ -124,6 +128,12 @@ static void rbq_remove(struct Tex *e);
 static uint32_t tex_gen = 1;
 // Bumped with tex_gen and whenever a slot is registered: what vk_texture_by_id returns for any slot may have changed.
 static uint32_t slots_gen = 1;
+// The mini-map hint is drawn through a plain handle the guest never changes, so the draw memos (which key on the handle and the slot's
+// token) would keep the image of the first style forever. The hint slot's token therefore carries an epoch that moves whenever the
+// style gives the hint another signature (see vk_appendage_texture_locked).
+enum { PLAIN_KINDS = 3 };   // the baked images recognized by content: the mini-map hint, the Soul Challenge button, the held field-action button
+static int plain_slot[PLAIN_KINDS] = {-1, -1};
+static uint32_t plain_epoch[PLAIN_KINDS], plain_last_sig[PLAIN_KINDS];
 static uint32_t samp_gen = 1;   // bumped whenever a sampler slot is registered: vk_sampler_by_id may answer otherwise
 static uint64_t n_checks;    // draw-binding storage checks (make_fresh_snap) since the last perf line
 // tex_gen per storage address (hashed): a slot resolves through the entries at its own address only (slot_resolve), so
@@ -320,7 +330,7 @@ static void init_image(Tex *e, VkCommandBuffer cb) {
 }
 
 // defer_init: the caller records the image's first transition (init_image or alias_copy).
-static Tex *create_tex(const tex_t *t, const TexKey *k, int defer_init) {
+static Tex *create_tex(const tex_t *t, const TexKey *k, int defer_init, int optional) {
     static volatile int32_t n_unmapped, n_unsupported, n_failed, n_unbound;
     VkCtx *c = vk_ctx();
     const nvn_texdesc *d = &t->d;
@@ -394,7 +404,10 @@ static Tex *create_tex(const tex_t *t, const TexKey *k, int defer_init) {
                    (usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
     if (fb_usage) ci.usage = usage |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
     Tex *e = calloc(1, sizeof *e);
-    if (!e) rt_fatal("vk: out of memory for a texture");
+    if (!e) {
+        if (optional) return NULL;
+        rt_fatal("vk: out of memory for a texture");
+    }
     e->key = *k;
     e->t = *t;
     e->f = f;
@@ -849,7 +862,7 @@ static Tex *entry_of(const tex_t *t) {
             tex_alias = cfg_bool("XCX_TEX_ALIAS");
             rt_log("vk: texture aliases: %s", tex_alias ? "a new image takes the live image's content" : "a new image starts empty");
         }
-        if (!(e = create_tex(t, &k, tex_alias))) return NULL;
+        if (!(e = create_tex(t, &k, tex_alias, 0))) return NULL;
         perf_count(PERF_CNT_TEX_NEW);
         // released entries of another descriptor at this address are replaced by the new one; a live one holding
         // GPU-written content is the alias source, preferring the one that differs only in swizzle (same_but_swizzle)
@@ -1078,7 +1091,10 @@ uint64_t vk_texture_slot_token(int id) {
     const uint64_t *si = __atomic_load_n(&sinfo, __ATOMIC_ACQUIRE);
     if (!si || id < 0 || id >= (1 << 20)) return 0;
     uint64_t v = __atomic_load_n(&si[id], __ATOMIC_ACQUIRE);
-    return v ? (v >> 16) << 32 | __atomic_load_n(&agen[v & 0xffff], __ATOMIC_ACQUIRE) : 0;
+    uint64_t t = v ? (v >> 16) << 32 | __atomic_load_n(&agen[v & 0xffff], __ATOMIC_ACQUIRE) : 0;
+    for (int k = 0; t && k < PLAIN_KINDS; k++)
+        if (id == __atomic_load_n(&plain_slot[k], __ATOMIC_ACQUIRE)) { t ^= (uint64_t)__atomic_load_n(&plain_epoch[k], __ATOMIC_ACQUIRE) << (8 * k); if (!t) t = 1; }
+    return t;
 }
 uint32_t vk_sampler_gen(void) { return __atomic_load_n(&samp_gen, __ATOMIC_RELAXED); }
 
@@ -1115,6 +1131,303 @@ const VkTexImage *vk_texture_by_id_locked(int id, view_t *view, int *has_view) {
     if (view) *view = has_view ? s->cview : s->v;
     if (has_view) *has_view = view ? s->chas_view : s->has_view;
     return e ? &e->pub : NULL;
+}
+
+// One immutable, module-owned image. It is never inserted into guest texture slots or the alias cache.
+static Tex *appendage_image[GLYPH_ART_MAX];
+static uint32_t *appendage_pixels[GLYPH_ART_MAX];
+static uint8_t appendage_attempted[GLYPH_ART_MAX];
+
+void vk_glyph_resource_observe(uint64_t handle, unsigned event) {
+    unsigned id=(unsigned)(handle&0xfffff);
+    lock();
+    if (!(handle>>32) && id<(unsigned)ntslots && tslots[id].used) {
+        const tex_t *t=&tslots[id].t;
+        rt_log("glyph resource probe %u: original handle %llx texture %u serial %llu storage %llx size %ux%u format %u view %d",
+               event,(unsigned long long)handle,id,(unsigned long long)t->serial,
+               (unsigned long long)(uintptr_t)t->mem,t->d.width,t->d.height,t->d.format,tslots[id].has_view);
+    } else rt_log("glyph resource probe %u: original handle %llx has no plain registered texture",event,(unsigned long long)handle);
+    unlock();
+}
+
+// Snapshot registration identity at recording, before a command copy can outlive or reuse its slot.
+int vk_appendage_capture_source(uint64_t handle) {
+    int id = (int)(handle & 0xfffff), valid = 0;
+    lock();
+    if (appendage_glyph_tagged(handle) && id < ntslots && tslots[id].used) {
+        const tex_t *t = &tslots[id].t;
+        if (t->d.width == 512 && t->d.height == 192 && t->d.format == 77 && !tslots[id].has_view)
+            valid = appendage_glyph_source(handle, t->serial, (uint64_t)(uintptr_t)t->mem);
+    }
+    unlock();
+    return valid;
+}
+
+static Tex *appendage_upload(unsigned art) {
+    if (art >= glyph_art_count() || art >= GLYPH_ART_MAX) return NULL;
+    if (appendage_attempted[art]) return appendage_image[art];
+    appendage_attempted[art] = 1;
+    VkCtx *c = vk_ctx();
+    const size_t bytes = 512 * 192 * 4;
+    uint32_t *pixels = appendage_glyph_failure("pixels") ? NULL : calloc(1, bytes);
+    if (!pixels) { appendage_glyph_note_fallback(); return NULL; }
+    if (!glyph_art_pixels(art, pixels)) { free(pixels); appendage_glyph_note_fallback(); return NULL; }
+    static pool_t pool = {.flags = NVN_MEMORY_POOL_FLAGS_CPU_CACHED};
+    tex_t t = {.d = {.target = NVN_TEXTURE_TARGET_2D, .format = 0x25,
+                     .flags = NVN_TEXTURE_FLAGS_LINEAR, .width = 512, .height = 192,
+                     .depth = 1, .levels = 1, .stride = 2048}, .mem = (uint8_t *)pixels, .pool = &pool};
+    nvn_tex_layout(&t.d, &t.L);
+    TexKey key;
+    make_key(&t, &key);
+    Tex *e = appendage_glyph_failure("image") ? NULL : create_tex(&t, &key, 1, 1);
+    if (!e) { free(pixels); appendage_glyph_note_fallback(); return NULL; }
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VmaAllocation allocation = NULL;
+    VmaAllocationInfo info = {0};
+    VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = bytes,
+                             .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT};
+    VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO,
+                                  .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                                           VMA_ALLOCATION_CREATE_MAPPED_BIT};
+    if (appendage_glyph_failure("upload") ||
+        vmaCreateBuffer(c->vma, &bi, &ai, &buffer, &allocation, &info) != VK_SUCCESS || !info.pMappedData)
+        goto failed;
+    memcpy(info.pMappedData, pixels, bytes);
+    if (vmaFlushAllocation(c->vma, allocation, 0, bytes) != VK_SUCCESS) goto failed;
+    VkCommandBuffer cb = vk_upload_begin();
+    init_image(e, cb);
+    VkBufferImageCopy region = {.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                                .imageExtent = {512, 192, 1}};
+    vkCmdCopyBufferToImage(cb, buffer, e->pub.image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
+    barrier(cb, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, ALL_RW);
+    // Captures the current upload sequence and queue fence before releasing the batch lock.
+    vk_defer_buffer(buffer, allocation);
+    vk_upload_end();
+    e->uploaded = 1;
+    appendage_pixels[art] = pixels;
+    appendage_image[art] = e;
+    rt_log("appendage glyph: owned image %u uploaded: %s (512x192 RGBA)", art, glyph_art_name(art));
+    return e;
+failed:
+    if (buffer) vmaDestroyBuffer(c->vma, buffer, allocation);
+    destroy_tex(e);
+    free(pixels);
+    appendage_glyph_note_fallback();
+    rt_log("appendage glyph: optional upload failed; original texture retained");
+    return NULL;
+}
+
+// ---------------------------------------------------------------- inline text-icon atlas and icon_button sheet (runtime/inline_glyph.h)
+// The shared 368x300 text atlas and the 512x192 icon_button sheet are BC7 images that are never written. For each signature (a
+// layout and a set of art choices) one module-owned RGBA8 image of the same size is built on the GPU: the native image is
+// blitted into it, which decodes the BC7 blocks without a CPU decoder (Vulkan requires BLIT_SRC for BC formats), then the
+// licensed tiles are copied over the verified replaceable cells only. Every other texel is the native pixel. The images live
+// until shutdown, so copied draw commands may reference them; no native pixel reaches the CPU or any file.
+typedef struct { unsigned width, height, cell_w, cell_h, columns, records; const char *name; unsigned format; } InlineGeom;
+static const InlineGeom inline_geoms[INLINE_LAYOUTS] = {
+    {INLINE_ATLAS_W, INLINE_ATLAS_H, INLINE_CELL_W, INLINE_CELL_H, INLINE_COLUMNS, INLINE_RECORDS, "text atlas", INLINE_NVN_FORMAT},
+    {SHEET_W, SHEET_H, SHEET_CELL, SHEET_CELL, SHEET_COLUMNS, SHEET_RECORDS, "button sheet", INLINE_NVN_FORMAT},
+    {STICKS_W, STICKS_H, STICKS_CELL, STICKS_CELL, STICKS_COLUMNS, STICKS_RECORDS, "stick-direction image", INLINE_NVN_FORMAT},
+    {HINT_W, HINT_H, HINT_CELL_W, HINT_CELL_H, 1, HINT_CELLS, "mini-map hint image", HINT_NVN_FORMAT},   // cell slots; the cells are placed by hint_origins
+    {SOUL_W, SOUL_H, SOUL_W, SOUL_H, 1, 1, "soul challenge button image", HINT_NVN_FORMAT},   // one cell: the whole image
+    {HOLD_W, HOLD_H, HOLD_W, HOLD_H, 1, 1, "field action hold button image", INLINE_NVN_FORMAT},   // one cell: the whole image
+};
+// The policy symbol a cell of a layout stands for, and its native glyph box.
+static unsigned inline_cell_symbol(int layout, unsigned k) {
+    return layout == INLINE_LAYOUT_STICKS ? SYM_SLV + k : layout == INLINE_LAYOUT_HINT ? (k ? SYM_CRS : SYM_R) : layout == INLINE_LAYOUT_SOUL ? SYM_B : layout == INLINE_LAYOUT_HOLD ? SYM_A : k % SYM_PER_SHEET;
+}
+static const InlineBox *inline_cell_box(int layout, unsigned k) {
+    return layout == INLINE_LAYOUT_HOLD ? &hold_box : layout == INLINE_LAYOUT_SOUL ? &soul_box : layout == INLINE_LAYOUT_HINT ? &hint_boxes[k] : layout == INLINE_LAYOUT_STICKS ? &inline_stick_boxes[k] : layout == INLINE_LAYOUT_SHEET ? &inline_sheet_boxes[k] :
+           &inline_font_boxes[k / SYM_PER_SHEET][k % SYM_PER_SHEET];
+}
+static Tex *inline_image[INLINE_SIGNATURES];
+static uint32_t *inline_cells[INLINE_SIGNATURES];   // packed cells; also the unique key memory of the image
+static uint8_t inline_attempted[INLINE_SIGNATURES];
+
+// Snapshot registration identity at recording, like vk_appendage_capture_source. For the text atlas storage is the texture
+// address the guest's own bind entry names; the registered texture at this slot must be the verified atlas at exactly that
+// address. The sheet has no such pointer (storage 0): the registered texture's own address is recorded.
+int vk_inline_capture_source(uint64_t handle, uint64_t storage) {
+    int id = (int)(handle & 0xfffff), valid = 0, layout = 0;
+    int16_t art[GLYPH_SYMBOLS];
+    lock();
+    if (appendage_inline_tagged(handle) && id < ntslots && tslots[id].used &&
+        appendage_inline_signature(appendage_inline_id(handle), art, &layout) && layout >= 0 && layout < INLINE_LAYOUTS) {
+        const tex_t *t = &tslots[id].t;
+        const InlineGeom *g = &inline_geoms[layout];
+        uint64_t mem = (uint64_t)(uintptr_t)t->mem;
+        if (t->d.width == g->width && t->d.height == g->height && t->d.format == g->format && !tslots[id].has_view &&
+            (storage ? mem == storage : layout != INLINE_LAYOUT_FONT))
+            valid = appendage_inline_source(handle, t->serial, mem);
+    }
+    unlock();
+    return valid;
+}
+
+static Tex *inline_upload(unsigned sig, const Tex *native, int layout, const int16_t art[GLYPH_SYMBOLS]) {
+    if (inline_attempted[sig]) return inline_image[sig];
+    if (!native->uploaded) return NULL;   // its upload is not recorded yet; a later resolution retries
+    inline_attempted[sig] = 1;
+    VkCtx *c = vk_ctx();
+    const InlineGeom *g = &inline_geoms[layout];
+    const size_t cell_bytes = (size_t)g->cell_w * g->cell_h * 4;
+    uint32_t *cells = appendage_glyph_failure("pixels") ? NULL : calloc(g->records, cell_bytes);
+    if (!cells) { appendage_glyph_note_fallback(); return NULL; }
+    VkBufferImageCopy regions[INLINE_MAX_CELLS];
+    unsigned n = 0;
+    for (unsigned k = 0; k < g->records; k++) {
+        unsigned sym = inline_cell_symbol(layout, k);
+        int a = art[sym];
+        if (a < 0 || !inline_symbol_replaceable(sym)) continue;
+        const InlineBox *box = inline_cell_box(layout, k);
+        const unsigned cw = layout == INLINE_LAYOUT_HINT ? hint_cell_dims[k][0] : g->cell_w, ch = layout == INLINE_LAYOUT_HINT ? hint_cell_dims[k][1] : g->cell_h;
+        uint32_t *dst = cells + (size_t)n * g->cell_w * g->cell_h;
+        // The face buttons of the sheet are discs: a tile with corners (a keyboard key) must stay inside the circle.
+        const int round_cell = layout == INLINE_LAYOUT_SHEET && (sym == SYM_X || sym == SYM_Y || sym == SYM_A || sym == SYM_B);
+        if (!(round_cell ? glyph_art_cell_round : glyph_art_cell)((unsigned)a, (int)cw, (int)ch, box->x, box->y, box->w, box->h, dst)) { free(cells); appendage_glyph_note_fallback(); return NULL; }
+        if (layout == INLINE_LAYOUT_HINT) glyph_art_shadowed(dst, (int)cw, (int)ch);
+        if (layout == INLINE_LAYOUT_HOLD) glyph_art_hold_button(dst, (int)cw, (int)ch);
+        if (layout == INLINE_LAYOUT_SOUL) glyph_art_to_mask(dst, (int)(cw * ch));   // the disc is white and the letter a hole, like the native image
+        regions[n] = (VkBufferImageCopy){.bufferOffset = (VkDeviceSize)n * cell_bytes, .bufferRowLength = cw,
+                                         .bufferImageHeight = ch,
+                                         .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                                         .imageOffset = layout == INLINE_LAYOUT_HINT ? (VkOffset3D){hint_origins[k][0], hint_origins[k][1], 0} :
+                                                        (VkOffset3D){(int32_t)(k % g->columns) * (int32_t)g->cell_w,
+                                                                     (int32_t)(k / g->columns) * (int32_t)g->cell_h, 0},
+                                         .imageExtent = {cw, ch, 1}};
+        n++;
+    }
+    if (!n) { free(cells); return NULL; }
+    static int blit_ok = -1;
+    if (blit_ok < 0) {
+        blit_ok = (features_of(native->f.vk) & VK_FORMAT_FEATURE_BLIT_SRC_BIT) &&
+                  (features_of(VK_FORMAT_R8G8B8A8_UNORM) & VK_FORMAT_FEATURE_BLIT_DST_BIT);
+        if (!blit_ok) rt_log("inline glyph: this device cannot blit from the atlas format; native icons kept");
+    }
+    if (!blit_ok || appendage_glyph_failure("blit")) { free(cells); appendage_glyph_note_fallback(); return NULL; }
+    static pool_t pool = {.flags = NVN_MEMORY_POOL_FLAGS_CPU_CACHED};
+    tex_t t = {.d = {.target = NVN_TEXTURE_TARGET_2D, .format = 0x25, .flags = NVN_TEXTURE_FLAGS_LINEAR,
+                     .width = g->width, .height = g->height, .depth = 1, .levels = 1, .stride = g->width * 4},
+               .mem = (uint8_t *)cells, .pool = &pool};
+    nvn_tex_layout(&t.d, &t.L);
+    TexKey key;
+    make_key(&t, &key);
+    Tex *e = appendage_glyph_failure("image") ? NULL : create_tex(&t, &key, 1, 1);
+    if (!e) { free(cells); appendage_glyph_note_fallback(); return NULL; }
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VmaAllocation allocation = NULL;
+    VmaAllocationInfo info = {0};
+    const size_t bytes = (size_t)n * cell_bytes;
+    VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = bytes, .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT};
+    VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO,
+                                  .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT};
+    if (appendage_glyph_failure("upload") ||
+        vmaCreateBuffer(c->vma, &bi, &ai, &buffer, &allocation, &info) != VK_SUCCESS || !info.pMappedData)
+        goto failed;
+    memcpy(info.pMappedData, cells, bytes);
+    if (vmaFlushAllocation(c->vma, allocation, 0, bytes) != VK_SUCCESS) goto failed;
+    VkCommandBuffer cb = vk_upload_begin();
+    init_image(e, cb);
+    barrier(cb, ALL_RW, ALL_RW);   // the native image's upload, recorded earlier in this batch or a previous one
+    VkImageBlit blit = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .srcOffsets = {{0, 0, 0}, {(int32_t)g->width, (int32_t)g->height, 1}},
+                        .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .dstOffsets = {{0, 0, 0}, {(int32_t)g->width, (int32_t)g->height, 1}}};
+    vkCmdBlitImage(cb, native->pub.image, VK_IMAGE_LAYOUT_GENERAL, e->pub.image, VK_IMAGE_LAYOUT_GENERAL, 1, &blit, VK_FILTER_NEAREST);
+    barrier(cb, ALL_RW, ALL_RW);
+    vkCmdCopyBufferToImage(cb, buffer, e->pub.image, VK_IMAGE_LAYOUT_GENERAL, n, regions);
+    barrier(cb, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, ALL_RW);
+    vk_defer_buffer(buffer, allocation);
+    vk_upload_end();
+    memcpy(e->pub.swz, native->pub.swz, sizeof e->pub.swz);   // sample exactly as the native image is sampled
+    e->uploaded = 1;
+    inline_cells[sig] = cells;
+    inline_image[sig] = e;
+    rt_log("inline glyph: owned %s %u built: %u cells replaced, native pixels elsewhere (%ux%u RGBA)", g->name, sig + 1, n, g->width, g->height);
+    return e;
+failed:
+    if (buffer) vmaDestroyBuffer(c->vma, buffer, allocation);
+    destroy_tex(e);
+    free(cells);
+    appendage_glyph_note_fallback();
+    rt_log("inline glyph: optional %s build failed; native icons kept", g->name);
+    return NULL;
+}
+
+// The mini-map hint and the Soul Challenge button are drawn through no bind this build intercepts, so they are recognized where draws
+// resolve their textures: a plain handle whose registered texture has the image's exact size and format and whose texture memory hashes
+// to the pinned image. A texture is judged once per (serial, address); a failed judgement is retried a few times (the memory may not hold
+// the data yet) and logs the actual hash, so a log can say why the native image stayed.
+static const struct { int layout; unsigned width, height, bytes, format; const char *name; uint8_t sha[32]; } plain_kinds[PLAIN_KINDS] = {
+    {INLINE_LAYOUT_HINT, HINT_W, HINT_H, HINT_BYTES, HINT_NVN_FORMAT, "the mini-map hint", HINT_NATIVE_SHA256},
+    {INLINE_LAYOUT_SOUL, SOUL_W, SOUL_H, SOUL_BYTES, HINT_NVN_FORMAT, "the Soul Challenge button", SOUL_NATIVE_SHA256},
+    {INLINE_LAYOUT_HOLD, HOLD_W, HOLD_H, HOLD_BYTES, INLINE_NVN_FORMAT, "the held field-action button", HOLD_NATIVE_SHA256},
+};
+static int plain_verified(int id, int kind) {
+    const tex_t *t = &tslots[id].t;
+    if (t->d.width != plain_kinds[kind].width || t->d.height != plain_kinds[kind].height || t->d.format != plain_kinds[kind].format ||
+        tslots[id].has_view || !t->mem) return 0;
+    static struct { uint64_t serial, mem; int ok; unsigned tries; } cache[PLAIN_KINDS][64];
+    static unsigned next[PLAIN_KINDS], mismatch_logs;
+    uint64_t mem = (uint64_t)(uintptr_t)t->mem;
+    unsigned i;
+    for (i = 0; i < 64; i++) if (cache[kind][i].serial == t->serial && cache[kind][i].mem == mem && cache[kind][i].serial) break;
+    if (i == 64) { i = next[kind]++ % 64; cache[kind][i].serial = t->serial; cache[kind][i].mem = mem; cache[kind][i].ok = 0; cache[kind][i].tries = 0; }
+    if (cache[kind][i].ok > 0 || cache[kind][i].tries >= 3) return cache[kind][i].ok > 0;
+    cache[kind][i].tries++;
+    uint8_t hash[32];
+    if (!plat_mem_readable(mem, plain_kinds[kind].bytes)) return 0;
+    sha256((const void *)(uintptr_t)mem, plain_kinds[kind].bytes, hash);
+    cache[kind][i].ok = !memcmp(hash, plain_kinds[kind].sha, sizeof hash);
+    if (cache[kind][i].ok || mismatch_logs++ < 12)
+        rt_log("inline glyph: a %ux%u image (texture %d) %s %s (content hash %02x%02x%02x%02x%02x%02x%02x%02x, try %u)",
+               plain_kinds[kind].width, plain_kinds[kind].height, id, cache[kind][i].ok ? "is" : "is not", plain_kinds[kind].name,
+               hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7], cache[kind][i].tries);
+    if (!cache[kind][i].ok) cache[kind][i].ok = -1;
+    return cache[kind][i].ok > 0;
+}
+
+const VkTexImage *vk_appendage_texture_locked(uint64_t handle, view_t *view, int *has_view) {
+    int id = (int)(handle & 0xfffff);
+    if (!(handle >> 32) && id < ntslots && tslots[id].used) {
+        for (int k = 0; k < PLAIN_KINDS; k++) {
+            if (tslots[id].t.d.width != plain_kinds[k].width || tslots[id].t.d.height != plain_kinds[k].height || !plain_verified(id, k)) continue;
+            unsigned sig = appendage_plain_signature(plain_kinds[k].layout);
+            if (sig != plain_last_sig[k] || id != plain_slot[k]) {   // another style (or slot): the draw memos must look this handle up again
+                plain_last_sig[k] = sig;
+                __atomic_store_n(&plain_slot[k], id, __ATOMIC_RELEASE);
+                __atomic_add_fetch(&plain_epoch[k], 1, __ATOMIC_RELEASE);
+                slots_gen++;
+            }
+            if (sig) handle = INLINE_GLYPH_TAG | (uint64_t)sig << 32 | handle;
+            break;
+        }
+    }
+    const VkTexImage *original = vk_texture_by_id_locked(id, view, has_view);
+    if (appendage_inline_tagged(handle) && original && id < ntslots) {
+        const tex_t *t = &tslots[id].t;
+        unsigned sig = appendage_inline_id(handle);
+        int16_t art[GLYPH_SYMBOLS];
+        int layout = 0;
+        if (!sig || sig > INLINE_SIGNATURES || !appendage_inline_signature(sig, art, &layout) || layout < 0 || layout >= INLINE_LAYOUTS ||
+            t->d.width != inline_geoms[layout].width || t->d.height != inline_geoms[layout].height ||
+            t->d.format != inline_geoms[layout].format || tslots[id].has_view || appendage_glyph_failure("source") ||
+            ((layout < INLINE_LAYOUT_HINT) && !appendage_inline_source(handle, t->serial, (uint64_t)(uintptr_t)t->mem))) {   // these images are judged by their content
+            appendage_glyph_note_fallback();
+            return original;
+        }
+        // The slot's own view and swizzle selection stay as resolved for the native image: the owned image is sampled the same way.
+        Tex *e = inline_upload(sig - 1, (const Tex *)original, layout, art);
+        return e ? &e->pub : original;
+    }
+    if (!appendage_glyph_tagged(handle) || !original || id >= ntslots) return original;
+    const tex_t *t = &tslots[id].t;
+    if (t->d.width != 512 || t->d.height != 192 || t->d.format != 77 ||
+        tslots[id].has_view || appendage_glyph_failure("source") ||
+        !appendage_glyph_source(handle, t->serial, (uint64_t)(uintptr_t)t->mem)) { appendage_glyph_note_fallback(); return original; }
+    Tex *e = appendage_upload(appendage_glyph_art(handle));
+    if (!e) return original;
+    if (view) memset(view, 0, sizeof *view);
+    if (has_view) *has_view = 0;
+    return &e->pub;
 }
 
 // vk_dump: the swizzle selectors of the descriptor registered in slot id; 0 when the slot is empty.
@@ -1868,6 +2181,16 @@ void vk_texture_census(VkTexCensus *s) {
 void vk_texture_shutdown(void) {
     VkCtx *c = vk_ctx();
     lock();
+    for (unsigned i = 0; i < INLINE_SIGNATURES; i++) {
+        if (inline_image[i]) destroy_tex(inline_image[i]);
+        inline_image[i] = NULL;
+        free(inline_cells[i]); inline_cells[i] = NULL; inline_attempted[i] = 0;
+    }
+    for (unsigned i = 0; i < GLYPH_ART_MAX; i++) {
+        if (appendage_image[i]) destroy_tex(appendage_image[i]);
+        appendage_image[i] = NULL;
+        free(appendage_pixels[i]); appendage_pixels[i] = NULL; appendage_attempted[i] = 0;
+    }
     Tex **list = malloc(sizeof *list * (size_t)(by_key.n + 1));
     int n = 0;
     for (uint32_t i = 0; i < by_key.cap; i++)

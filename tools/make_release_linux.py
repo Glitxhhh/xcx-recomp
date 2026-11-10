@@ -5,9 +5,9 @@
     .venv/bin/python tools/make_release_linux.py --out build/release/XCX-Setup-linux --prove
 
 The same model as the Windows release (tools/make_release.py, whose download cache, unpacking and checks this reuses): the
-folder carries the setup and a toolchain, never game code; the player's machine builds the game. Everything that runs on
-the player's machine is built against the Steam Runtime 3 "sniper" SDK sysroot (glibc 2.31), so the AppImage and the
-game it builds run on SteamOS and on any distribution at least as new. Needs network access on the first run, make,
+folder carries the setup and a toolchain, never game code; the player's machine builds the game. The runtime and game
+link against the Steam Runtime 3 "sniper" SDK sysroot (glibc 2.31). Bundled LLVM/Python dependencies require glibc 2.34;
+check_glibc verifies that package floor. Needs network access on the first run, Git, make, pkg-config, file,
 the .NET 10 SDK and Python 3.12+ with Pillow (.venv). The folder holds:
 
     python/    python-build-standalone 3.14 (with tkinter) + the packages of tools/requirements-installer.txt; a .pth
@@ -15,11 +15,11 @@ the .NET 10 SDK and Python 3.12+ with Pillow (.venv). The folder holds:
     llvm/      LLVM 23 (clang, lld, llvm-ar, the clang resource headers) and llvm/sysroot: the files of the sniper SDK
                sysroot the game's compile and link read, nothing else (recorded while building the runtime library)
     runtime/   libxcxrt.a and libxcxrt-v2.a (build_game.py --make-runtime-lib --sysroot, --cpu x86-64-v3 and -v2), the
-               runtime headers, romfs.c, patches.c and ov_zstd.c (compiled per install),
+               runtime headers, romfs.c, patches.c, ov_zstd.c and mod_menu_adapter.c (compiled per install),
                xcx.png (the window icon), deps/ (Vulkan headers 1.4.363, VMA, zstd
                built static; SDL3, Opus and libvpx come from the sysroot)
     bin/       xcx_xlate (+ .id), hactool, ninja, libSDL3.so.0 (the sysroot's; the game finds it beside itself)
-    recomp/, tools/, data/, installer/, licenses/, THIRD_PARTY_NOTICES.md, xcx.ini.example, VERSION
+    recomp/, tools/, data/, installer/, licenses/, THIRD_PARTY_NOTICES.md, xcx.ini.example, docs/mods/, public API references and examples/mods/hello/, VERSION
     AppRun, xcx-setup.desktop, xcx-setup.png   the AppImage entry: python/bin/python3 -m installer.gui
 
 --appimage packs the folder with appimagetool and the static type-2 runtime (no libfuse2 on the host). --prove compiles

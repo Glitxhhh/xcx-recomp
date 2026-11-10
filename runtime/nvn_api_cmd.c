@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "gfx.h"
+#include "appendage_glyph.h"
 #include "host.h"
 #include "layout.h"
 #include "nvn_api.h"
@@ -904,6 +905,7 @@ static void bind_handle_array(const Cpu *c, uint32_t op, int deferred, int wide)
 }
 static void bind_one_handle(const Cpu *c, uint32_t op, size_t hw_bytes) {   // (cmd, stage, index, handle)
     uint64_t v = arg_x(c, 3);
+    if (op == OP_BIND_TEX && !hw_bytes) v = appendage_glyph_handle(c, v);
     bind_handles(cmd_of(c), op, (int)arg_x(c, 1), (int)arg_x(c, 2), 1, &v, 0, hw_bytes);
 }
 // Combined texture handles share the texture slots with separate textures (sampler id in bits 20 and up). Images

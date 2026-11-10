@@ -1,0 +1,97 @@
+From 0b29f408433e92953cc72b1d3e06c7ac8139e439 Mon Sep 17 00:00:00 2001
+From: Roberto I <roberto@inf.puc-rio.br>
+Date: Wed, 16 Sep 2026 14:18:11 -0300
+Subject: [PATCH] Bug: UB when applying GC parameter
+
+When computing whether Lua should return from gen-major to gen-minor,
+the difference between the total memory and the previous total memory
+can be negative, which can result in that negative value being
+left-shifted (UB).
+---
+ lgc.c            |  3 ++-
+ lobject.c        |  1 +
+ testes/gengc.lua | 45 +++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 48 insertions(+), 1 deletion(-)
+
+diff --git a/lgc.c b/lgc.c
+index a463e41e6d..cf4160c1dc 100644
+--- a/lgc.c
++++ b/lgc.c
+@@ -1472,7 +1472,8 @@ static int checkmajorminor (lua_State *L, global_State *g) {
+   if (g->gckind == KGC_GENMAJOR) {  /* generational mode? */
+     l_mem numbytes = gettotalbytes(g);
+     l_mem addedbytes = numbytes - g->GCmajorminor;
+-    l_mem limit = applygcparam(g, MAJORMINOR, addedbytes);
++    l_mem limit = (addedbytes < 0) ? 0
++                                   : applygcparam(g, MAJORMINOR, addedbytes);
+     l_mem tobecollected = numbytes - g->GCmarked;
+     if (tobecollected > limit) {
+       atomic2gen(L, g);  /* return to generational mode */
+diff --git a/lobject.c b/lobject.c
+index 763b484609..6997cfd021 100644
+--- a/lobject.c
++++ b/lobject.c
+@@ -89,6 +89,7 @@ lu_byte luaO_codeparam (unsigned int p) {
+ l_mem luaO_applyparam (lu_byte p, l_mem x) {
+   int m = p & 0xF;  /* mantissa */
+   int e = (p >> 4);  /* exponent */
++  lua_assert(x >= 0);
+   if (e > 0) {  /* normalized? */
+     e--;  /* correct exponent */
+     m += 0x10;  /* correct mantissa; maximum value is 0x1F */
+diff --git a/testes/gengc.lua b/testes/gengc.lua
+index 6509e39d8a..84c1a8eec0 100644
+--- a/testes/gengc.lua
++++ b/testes/gengc.lua
+@@ -162,6 +162,51 @@ end
+ assert(collectgarbage'isrunning')
+ 
+ 
++do
++  -- bug in 5.0: when computing whether it should return from gen-major
++  -- to gen-minor, the difference between the total memory and the
++  -- previous total memory can be negative, which results in that
++  -- negative value being left-shifted (UB)
++
++  local lim = 1e6
++
++  -- make major collections non-incremental
++  local oldsm = collectgarbage("param", "stepmul", 0)
++
++  -- make "majorminor" large enough to force a left-shift
++  -- when applying the parameter (internal details)
++  local oldmm = collectgarbage("param", "majorminor", 2000)
++
++  collectgarbage(); collectgarbage()
++  assert(not T or T.gcquery() == "genminor")
++
++  local M = collectgarbage"count" * 1024
++
++  -- create a large table
++  local t = {}
++  for i = 1, lim do t[i] = true end
++  assert(collectgarbage"count" * 1024 > M + lim * string.packsize"j")
++
++  -- force collector to "generational major" mode, doing several
++  -- minor collections that recover no memory
++  collectgarbage"step"; collectgarbage"step"; collectgarbage"step"
++  assert(not T or T.gcquery() == "genmajor")
++
++  -- shrink the table
++  for i = 1, lim do t[i] = nil end
++  t[2 * lim] = true
++  assert(collectgarbage"count" < M * 5/4)
++
++  -- bug was here, an assert violation when checking whether to
++  -- return to 'genminor'
++  collectgarbage"step"
++
++  -- restore previous parameters
++  collectgarbage("param", "stepmul", oldsm)
++  collectgarbage("param", "majorminor", oldmm)
++end
++
++
+ do  print"testing stop-the-world collection"
+   local step = collectgarbage("param", "stepsize", 0);
+   collectgarbage("incremental")

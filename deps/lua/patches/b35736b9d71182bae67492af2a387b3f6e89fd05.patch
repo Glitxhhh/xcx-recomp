@@ -1,0 +1,54 @@
+From b35736b9d71182bae67492af2a387b3f6e89fd05 Mon Sep 17 00:00:00 2001
+From: Roberto I <roberto@inf.puc-rio.br>
+Date: Mon, 12 Oct 2026 16:27:02 -0300
+Subject: [PATCH] Bug: wrong result for (-0.0 - 0)
+
+(exp - i) was being optimized to (exp + (-i)), to use OP_ADDI, but
+(-0.0 - 0) is -0.0, while (-0.0 + 0) is +0.0, so the case (exp - 0)
+was excluded from the optimization.
+---
+ lcode.c         | 6 +++++-
+ testes/math.lua | 5 +++++
+ 2 files changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/lcode.c b/lcode.c
+index 8b61d5de92..791ec02ee4 100644
+--- a/lcode.c
++++ b/lcode.c
+@@ -1542,15 +1542,19 @@ static void codebinK (FuncState *fs, BinOpr opr,
+ 
+ /* Try to code a binary operator negating its second operand.
+ ** For the metamethod, 2nd operand must keep its original value.
++** As a special case, avoid the optimization for (exp - 0), because
++** (-0.0 - 0) is -0.0, while (-0.0 + 0) is +0.0.
+ */
+ static int finishbinexpneg (FuncState *fs, expdesc *e1, expdesc *e2,
+-                             OpCode op, int line, TMS event) {
++                            OpCode op, int line, TMS event) {
+   if (!isKint(e2))
+     return 0;  /* not an integer constant */
+   else {
+     lua_Integer i2 = e2->u.ival;
+     if (!(fitsC(i2) && fitsC(-i2)))
+       return 0;  /* not in the proper range */
++    if (event == TM_SUB && i2 == 0)
++      return 0;  /* do not optimize (exp - 0) */
+     else {  /* operating a small integer constant */
+       int v2 = cast_int(i2);
+       finishbinexpval(fs, e1, e2, op, int2sC(-v2), 0, line, OP_MMBINI, event);
+diff --git a/testes/math.lua b/testes/math.lua
+index ab74676a89..d09b4202c6 100644
+--- a/testes/math.lua
++++ b/testes/math.lua
+@@ -838,6 +838,11 @@ do
+   local a1, a2, a3, a4, a5 = 0, 0, "\0\0\0\0\0\0\0\0", 0, "\0\0\0\0\0\0\0\0"
+   assert(a1 == a2 and a2 == a4 and a1 ~= a3)
+   assert(a3 == a5)
++
++  -- Bug since 5.4: Results differ for constant 0 versus variable 0;
++  -- (mz - 0) should be -0.0, but it resulted in +0.0
++  local zi = 0
++  assert(1/(mz - 0) == 1/(mz - zi))
+ end
+ 
+ 

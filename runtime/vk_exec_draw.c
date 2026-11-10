@@ -27,6 +27,7 @@
 #include "nvn_api.h"
 #include "nvn_hmap.h"
 #include "vk.h"
+#include "appendage_glyph.h"
 #include "vk_exec.h"
 #include "vk_dlss.h"
 #include "platform/platform.h"
@@ -667,7 +668,7 @@ static void slot_mask_learn(uint64_t serial, int st, const GfxShader *s) {
 static uint8_t type_of_handle(uint64_t h) {   // texture lock held
     view_t v;
     int hv;
-    const VkTexImage *img = h ? vk_texture_by_id_locked((int)(h & 0xfffff), &v, &hv) : NULL;
+    const VkTexImage *img = h ? vk_appendage_texture_locked(h, &v, &hv) : NULL;
     return img ? (uint8_t)gfx_type_of(img, &v, hv) : 0;
 }
 
@@ -1056,7 +1057,7 @@ static struct { uint64_t h, tok; uint32_t gen; SubRange r; } FM[FM_N];
 static SubRange sampled_sub(uint64_t h) {   // texture lock held
     view_t v;
     int hv;
-    const VkTexImage *img = vk_texture_by_id_locked((int)(h & 0xfffff), &v, &hv);
+    const VkTexImage *img = vk_appendage_texture_locked(h, &v, &hv);
     return img ? sub_of(img, &v, hv) : (SubRange){0};
 }
 
@@ -1172,7 +1173,7 @@ static void tex_info(VkExec *ex, const GfxShaderRes *r, uint64_t h, int storage,
     if (m->valid && m->h == h && m->type == r->type && m->separate == separate && m->sgen == sg &&
         slot_still(&m->gen, m->tok, h, gen)) {
         if (m->epoch != ep) {   // the slot's first binding in this submission: only its storage check is due
-            vk_texture_by_id_locked((int)(h & 0xfffff), NULL, NULL);
+            vk_appendage_texture_locked(h, NULL, NULL);
             m->epoch = ep;
         }
         *out = m->out;
@@ -1203,8 +1204,14 @@ static void tex_info_full(VkExec *ex, const GfxShaderRes *r, uint64_t h, int sto
     if (h) {
         view_t v;
         int hv;
-        const VkTexImage *img = vk_texture_by_id_locked((int)(h & 0xfffff), &v, &hv);
-        if (img) view = get_view(ex, img, &v, hv, r->type, storage), *image = img->image;
+        const VkTexImage *img = vk_appendage_texture_locked(h, &v, &hv);
+        if (img && !(appendage_handle_tagged(h) && appendage_glyph_failure("view")))
+            view = get_view(ex, img, &v, hv, r->type, storage), *image = img->image;
+        if (!view && appendage_handle_tagged(h)) {
+            appendage_glyph_note_fallback();
+            img = vk_texture_by_id_locked((int)(h & 0xfffff), &v, &hv);
+            if (img) view = get_view(ex, img, &v, hv, r->type, storage), *image = img->image;
+        }
         if (img && storage) vk_texture_storage_bound_locked(img);
         if (img && !storage && ex->nfbl && in_fbl(ex, img->image)) layout = VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT;
         if (!storage && !separate) {

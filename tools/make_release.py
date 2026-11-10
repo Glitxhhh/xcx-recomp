@@ -12,10 +12,10 @@ cached in toolchain/release-dl/ and checked against the sha256 in PINS; a mismat
                the installer is never run)
     llvm/      llvm-mingw, x86_64 only, the files clang and lld need to compile and link xcx.exe
     runtime/   libxcxrt.a and libxcxrt-v2.a (build_game.py --make-runtime-lib with llvm/, --cpu x86-64-v3 and -v2), the
-               runtime headers, romfs.c, patches.c and ov_zstd.c (compiled per install),
+               runtime headers, romfs.c, patches.c, ov_zstd.c and mod_menu_adapter.c (compiled per install),
                deps/ (headers and import libraries of SDL3, Opus, libvpx, Vulkan and VMA)
     bin/       xcx_xlate.exe (+ .id), hactool.exe, SDL3.dll (upstream), libopus-0.dll, ninja.exe
-    recomp/, tools/, data/, installer/, licenses/, THIRD_PARTY_NOTICES.md, xcx.ini.example
+    recomp/, tools/, data/, installer/, licenses/, THIRD_PARTY_NOTICES.md, xcx.ini.example, docs/mods/, public API references and examples/mods/hello/
     VERSION    the repository's VERSION plus the commit, 0.1.0+973c626 (VERSION alone outside a git checkout); the
                installer's release string
     XCX-Setup.exe  installer/launcher/launcher.c built with llvm/ (-mwindows): starts python/pythonw.exe -m installer.gui
@@ -106,7 +106,7 @@ LLVM_SKIP_DIRS = {'aarch64-w64-mingw32', 'armv7-w64-mingw32', 'i686-w64-mingw32'
 LLVM_SKIP_SUFFIXES = {'.idl', '.tlb'}
 
 # tools/ files the installer steps run (and what they import), copied from the repo.
-TOOLS_FILES = ['build_game.py', 'build_shaders.py', 'check_content.py', 'extract.py', 'package_select.py', 'romfs_index.py']
+TOOLS_FILES = ['build_game.py', 'build_shaders.py', 'check_content.py', 'extract.py', 'package_select.py', 'romfs_index.py', 'mod_support.py']
 TOOLS_DIRS = ['vendor/macnativegames', 'data']   # data/: expected hashes
 RUNTIME_LAYOUT = ROOT / 'tools' / 'runtime-layout'   # build_game.py --gen of libxcxrt.a
 # The runtime libraries a release ships, by build_game.py --cpu: the installer picks by the host's x86-64 level
@@ -395,7 +395,8 @@ def runtime_lib(out, llvm):
         if p.suffix in RUNTIME_SUFFIXES and p.is_file():
             (rt / p.relative_to(ROOT / 'runtime')).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(p, rt / p.relative_to(ROOT / 'runtime'))
-    for name in ('romfs.c', 'patches.c', 'ov_zstd.c'):   # build_game.py INSTALL_SIDE
+    from build_game import INSTALL_SIDE
+    for name in sorted(INSTALL_SIDE):
         shutil.copy2(ROOT / 'runtime' / name, rt / name)
 
 
@@ -408,7 +409,11 @@ def build_sources(out):
         copy_tree(ROOT / 'tools' / d, out / 'tools' / d, lambda r: '__pycache__' in r or r.endswith('.md'))
     copy_tree(ROOT / 'installer', out / 'installer', lambda r: '__pycache__' in r or r.startswith('launcher/'))
     shutil.copy2(ROOT / 'xcx.ini.example', out / 'xcx.ini.example')
-    shutil.copy2(ROOT / 'THIRD_PARTY_NOTICES.md', out / 'THIRD_PARTY_NOTICES.md')
+    from mod_support import source_files
+    for src, relative in source_files(ROOT, development=True):
+        dest = out / relative
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
     (out / 'VERSION').write_text(version() + '\n', encoding='utf-8')
 
 

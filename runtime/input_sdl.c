@@ -18,8 +18,9 @@
 #include "platform/platform.h"
 
 static SDL_Window *win;
-static volatile uint8_t key_held[KEY_COUNT];
+static volatile uint8_t key_held[KEY_COUNT], intent_held[KEY_COUNT];
 static volatile int32_t esc_held, f8_held, focused;
+static volatile int32_t intent_dx, intent_dy;
 static volatile int32_t mouse_dx, mouse_dy;   // relative motion since the last ikb_mouse_take, whole counts
 static float rem_x, rem_y;                    // window thread: the fractions SDL reported beyond them
 static volatile int32_t captured;             // relative mouse mode is on
@@ -177,7 +178,7 @@ void input_sdl_event(const SDL_Event *e) {
         }
         if (e->key.scancode == SDL_SCANCODE_F8) plat_xchg32(&f8_held, down);
         int k = key_of_sc(e->key.scancode);
-        if (k) key_held[k] = (uint8_t)down;
+        if (k) key_held[k] = intent_held[k] = (uint8_t)down;
         break;
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -185,6 +186,8 @@ void input_sdl_event(const SDL_Event *e) {
         int down = e->type == SDL_EVENT_MOUSE_BUTTON_DOWN;
         int k = mouse_key(e->button.button);
         if (k) key_held[k] = (uint8_t)down;
+        if (k && e->button.which != SDL_TOUCH_MOUSEID && e->button.which != SDL_PEN_MOUSEID)
+            intent_held[k] = (uint8_t)down;
         if (down && (cur_rel & CUR_REL)) plat_xchg32(&cur_rel, 0);   // a click in the window captures again
         break;
     }
@@ -194,6 +197,10 @@ void input_sdl_event(const SDL_Event *e) {
             rem_y += e->motion.yrel;
             int32_t dx = (int32_t)rem_x, dy = (int32_t)rem_y;
             rem_x -= (float)dx, rem_y -= (float)dy;
+            if (e->motion.which != SDL_TOUCH_MOUSEID && e->motion.which != SDL_PEN_MOUSEID) {
+                if (dx) plat_add32(&intent_dx, dx);
+                if (dy) plat_add32(&intent_dy, dy);
+            }
             if (dx) plat_add32(&mouse_dx, dx);
             if (dy) plat_add32(&mouse_dy, dy);
         }
@@ -204,6 +211,7 @@ void input_sdl_event(const SDL_Event *e) {
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         plat_xchg32(&focused, 0);
         plat_xchg32(&cur_rel, 0);   // coming back (Alt+Tab) captures again
+        memset((void *)intent_held, 0, sizeof intent_held);
         memset((void *)key_held, 0, sizeof key_held);   // the key-ups go elsewhere
         plat_xchg32(&esc_held, 0);
         plat_xchg32(&f8_held, 0);
@@ -222,3 +230,24 @@ void ikb_mouse_take(int32_t *dx, int32_t *dy) {
     *dx = plat_xchg32(&mouse_dx, 0);
     *dy = plat_xchg32(&mouse_dy, 0);
 }
+
+void ikb_intent_mouse_take(int32_t *dx, int32_t *dy) {
+    *dx = plat_xchg32(&intent_dx, 0); *dy = plat_xchg32(&intent_dy, 0);
+}
+
+int ikb_glyph_key(int key) {
+    // The right Shift and Ctrl show the same cap as the left ones (one Shift tile, one Ctrl tile).
+    if (key == KEY_RSHIFT) return KEY_LSHIFT;
+    if (key == KEY_RCTRL) return KEY_LCTRL;
+    // Keys whose cap does not change with the layout keep their identity: they have no letter or digit label to look up.
+    if (key == KEY_MOUSE_L || key == KEY_MOUSE_R || key == KEY_SPACE || key == KEY_TAB || key == KEY_LSHIFT || key == KEY_LCTRL ||
+        key == KEY_UP || key == KEY_DOWN || key == KEY_LEFT || key == KEY_RIGHT) return key;
+    SDL_Scancode sc = key_sc(key);
+    if (sc == SDL_SCANCODE_UNKNOWN) return KEY_NONE;
+    SDL_Keycode label = SDL_GetKeyFromScancode(sc, SDL_KMOD_NONE, false);
+    if (label >= SDLK_A && label <= SDLK_Z) return KEY_A + (int)(label - SDLK_A);
+    if (label >= SDLK_0 && label <= SDLK_9) return KEY_0 + (int)(label - SDLK_0);
+    return KEY_NONE;
+}
+
+int ikb_intent_down(int key) { return key > 0 && key < KEY_COUNT && intent_held[key]; }

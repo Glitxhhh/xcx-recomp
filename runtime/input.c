@@ -15,6 +15,7 @@
 #include "cfg.h"
 #include "host.h"
 #include "input.h"
+#include "input_glyphs.h"
 #include "input_map.h"
 #include "input_wsys.h"
 #include "nvn_api.h"
@@ -26,6 +27,10 @@ enum { STICK_MAX = 32767, STICK_DEAD = 2500, STICK_DIR = 16384, TRIGGER_ON = 163
 
 static PlatMutex lock = PLAT_MUTEX_INIT;
 static int state;                    // 0 not started, 1 running, -1 disabled or SDL failed
+static GlyphIntent glyph_intent;
+static int glyph_family;
+static GlyphIntentSample glyph_sample;
+static volatile int32_t g_block, g_menu;
 static SDL_Gamepad *pad;
 static uint64_t next_scan;
 static int pad_rumble;               // the open gamepad has rumble motors
@@ -273,6 +278,7 @@ static void scan_pads(void) {
         SDL_CloseGamepad(pad); pad = NULL; sensor_pad = 0; sensor_ok = 0;
         plat_xchg32(&pad_layout_shown, -1);
         for (int i = 0; i < 4; i++) plat_xchg32(&pad_labels[i], PAD_LABEL_NONE);
+        glyph_family = GLYPH_PAD_UNKNOWN;
         rt_log("input: gamepad disconnected");
     }
     int n = 0;
@@ -294,6 +300,14 @@ static void scan_pads(void) {
                                             : lb == SDL_GAMEPAD_BUTTON_LABEL_TRIANGLE ? PAD_LABEL_TRIANGLE
                                                                                       : PAD_LABEL_NONE);
     }
+    SDL_GamepadType family = SDL_GetGamepadType(pad);
+    glyph_family = family == SDL_GAMEPAD_TYPE_PS3 || family == SDL_GAMEPAD_TYPE_PS4 || family == SDL_GAMEPAD_TYPE_PS5 ? GLYPH_PAD_PS :
+                   family == SDL_GAMEPAD_TYPE_XBOX360 || family == SDL_GAMEPAD_TYPE_XBOXONE ? GLYPH_PAD_XBOX :
+                   family == SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO || family == SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR ||
+                   family == SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT || family == SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT ? GLYPH_PAD_SWITCH : GLYPH_PAD_UNKNOWN;
+#if SDL_VERSION_ATLEAST(3, 4, 0)
+    if (family == SDL_GAMEPAD_TYPE_STEAM) glyph_family = GLYPH_PAD_STEAM;
+#endif
     pad_layout = -1;
     int motion = SDL_GamepadHasSensor(pad, SDL_SENSOR_GYRO) && SDL_GamepadHasSensor(pad, SDL_SENSOR_ACCEL);
     rt_log("input: gamepad \"%s\" (%s, %s, east button %s)", SDL_GetGamepadName(pad), pad_rumble ? "rumble" : "no rumble",
@@ -376,7 +390,14 @@ static int pad_physical(uint8_t pd[PAD_COUNT]) {
 // sticks; 0 without a connected gamepad.
 static int pad_read(uint64_t *b, int32_t sl[2], int32_t sr[2]) {
     uint8_t pd[PAD_COUNT] = {0};
+    glyph_sample.device = 0; glyph_sample.buttons = 0;
+    memset(glyph_sample.axes, 0, sizeof glyph_sample.axes);
     if (!pad_physical(pd)) return 0;
+    glyph_sample.device = SDL_GetJoystickID(SDL_GetGamepadJoystick(pad));
+    for (int i = 1; i < PAD_ZL; i++) if (pd[i]) glyph_sample.buttons |= 1u << i;
+    static const SDL_GamepadAxis ax[6] = {SDL_GAMEPAD_AXIS_LEFTX,SDL_GAMEPAD_AXIS_LEFTY,
+        SDL_GAMEPAD_AXIS_RIGHTX,SDL_GAMEPAD_AXIS_RIGHTY,SDL_GAMEPAD_AXIS_LEFT_TRIGGER,SDL_GAMEPAD_AXIS_RIGHT_TRIGGER};
+    for (int i = 0; i < 6; i++) glyph_sample.axes[i] = SDL_GetGamepadAxis(pad,ax[i]);
     *b |= input_map_pad_buttons(pd, pad_layout_get());
     sl[0] = axis(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX));
     sl[1] = -axis(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTY));
@@ -390,6 +411,9 @@ static void poll_merged(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx
     int32_t sl[2] = {0, 0}, sr[2] = {0, 0};
     plat_mutex_lock(&lock);
     if (!state) start();
+    memset(glyph_sample.keys, 0, sizeof glyph_sample.keys);
+    glyph_sample.device = glyph_sample.buttons = 0;
+    memset(glyph_sample.axes, 0, sizeof glyph_sample.axes);
     if (state > 0) {
         binds_refresh();
         if (state == 1) pad_read(&b, sl, sr);
@@ -408,6 +432,7 @@ static void poll_merged(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx
                 if (!cap || mouse_ignore[k]) down[k] = 0;
             }
             was_captured = cap;
+            for (int k = 1; k < KEY_COUNT; k++) glyph_sample.keys[k] = down[k] && ikb_intent_down(k);
             b |= input_map_buttons(down);
             int32_t k[2];
             input_map_stick(down, 0, k);
@@ -418,6 +443,17 @@ static void poll_merged(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx
             pick(&sr[0], &sr[1], k[0], k[1]);
         }
     }
+    glyph_sample.active = state > 0 && ikb_foreground() && !menu_is_open() && !g_block && !g_menu;
+    glyph_sample.captured = ikb_captured(); glyph_sample.now = plat_now_ns();
+    ikb_intent_mouse_take(&glyph_sample.mouse_x, &glyph_sample.mouse_y);
+    // Classify the copied pre-merge physical states; scripts cannot select the display source.
+    int previous_source = glyph_intent.source;
+    glyph_intent_sample(&glyph_intent, &glyph_sample);
+    static unsigned source_messages;
+    if (previous_source != glyph_intent.source && source_messages++ < 32)
+        rt_log("glyph input: intentional source %s, exposed controller family %d",
+               glyph_intent.source == GLYPH_SOURCE_PAD ? "controller" : glyph_intent.source == GLYPH_SOURCE_KEYBOARD ? "keyboard/mouse" : "none",
+               glyph_family);
     script_apply(&b, sl, sr);
     rec_apply(b, sl, sr);
     // Minus and Plus held together (gamepad or keys) open or close the menu and never reach the game
@@ -438,8 +474,6 @@ static void poll_merged(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx
 // Text entry (swkbd_*.c): while it is open the game reads no input, as behind the keyboard applet; after it closes
 // the game reads none until every button and stick direction is released, so the press that closed it stays there.
 // g_block: 0 off, 1 text entry open, 2 closed, waiting for the release. The cursor is released while it is open.
-static volatile int32_t g_block;
-static volatile int32_t g_menu;   // the in-game menu, the same way (input_menu)
 
 int input_cursor_allowed(void) {
     const char *in = cfg_get("XCX_INPUT");
@@ -503,6 +537,21 @@ int input_pad_layout(void) {
 int input_pad_label(int pad_id) {
     if (pad_id < PAD_SOUTH || pad_id > PAD_NORTH) return PAD_LABEL_NONE;
     return (int)plat_cas32(&pad_labels[pad_id - PAD_SOUTH], 0, 0);
+}
+
+void input_glyph_snapshot(int *source, int *family, int *layout, InputMap *map) {
+    plat_mutex_lock(&lock);
+    if (!state) start();
+    if (state > 0) binds_refresh();
+    *source = glyph_intent.source;
+    int connected = pad && SDL_GamepadConnected(pad);
+    *family = connected ? glyph_family : GLYPH_PAD_UNKNOWN;
+    *layout = connected ? pad_layout_get() : -1;
+    *map = input_map;
+    // Translate only this display copy; emitted inputs and the rebinding editor retain their canonical key IDs.
+    for (int i = 0; i < map->nkeys; i++) map->keys[i].key = (uint8_t)ikb_glyph_key(map->keys[i].key);
+    if (!connected && *source == GLYPH_SOURCE_PAD) *source = GLYPH_SOURCE_NONE;
+    plat_mutex_unlock(&lock);
 }
 
 void input_map_snapshot(InputMap *m) {

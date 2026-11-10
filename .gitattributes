@@ -6,3 +6,6 @@
 
 *.png binary
 *.jpg binary
+
+# Preserve the upstream CC0 license bytes used by the asset provenance check.
+assets/appendage-glyph/License.txt -text whitespace=cr-at-eol,-blank-at-eol

@@ -82,6 +82,7 @@ uint32_t input_key_char(int key) {
 }
 
 // ---- mouse camera: raw motion accumulated by the window thread, one stick sample per presented frame
+static volatile LONG intent_dx, intent_dy;
 static volatile LONG mouse_dx, mouse_dy;   // raw counts since the last frame sample
 static volatile LONG cur_captured;         // cursor hidden and confined to the client area
 static volatile LONG cur_active;           // WM_ACTIVATEAPP: the window's application is active
@@ -139,6 +140,10 @@ int input_window_msg(HWND h, UINT m, WPARAM w, LPARAM l, LRESULT *res) {
         UINT sz = sizeof ri;
         if (cur_captured && GetRawInputData((HRAWINPUT)l, RID_INPUT, &ri, &sz, sizeof(RAWINPUTHEADER)) != (UINT)-1 &&
             ri.header.dwType == RIM_TYPEMOUSE && !(ri.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE)) {
+            if (ri.header.hDevice) {
+                InterlockedAdd(&intent_dx, ri.data.mouse.lLastX);
+                InterlockedAdd(&intent_dy, ri.data.mouse.lLastY);
+            }
             InterlockedAdd(&mouse_dx, ri.data.mouse.lLastX);
             InterlockedAdd(&mouse_dy, ri.data.mouse.lLastY);
         }
@@ -211,3 +216,22 @@ void ikb_mouse_take(int32_t *dx, int32_t *dy) {
 void ikb_cursor_update(void) { cursor_update(gfx_window_handle()); }
 
 void ikb_menu_closed(void) { cur_rel_update(rel_menu_closed); }
+
+void ikb_intent_mouse_take(int32_t *dx, int32_t *dy) {
+    *dx = InterlockedExchange(&intent_dx, 0); *dy = InterlockedExchange(&intent_dy, 0);
+}
+
+int ikb_glyph_key(int key) {
+    // The right Shift and Ctrl show the same cap as the left ones (one Shift tile, one Ctrl tile).
+    if (key == KEY_RSHIFT) return KEY_LSHIFT;
+    if (key == KEY_RCTRL) return KEY_LCTRL;
+    // Keys whose cap does not change with the layout keep their identity: they have no letter or digit label to look up.
+    if (key == KEY_MOUSE_L || key == KEY_MOUSE_R || key == KEY_SPACE || key == KEY_TAB || key == KEY_LSHIFT || key == KEY_LCTRL ||
+        key == KEY_UP || key == KEY_DOWN || key == KEY_LEFT || key == KEY_RIGHT) return key;
+    UINT label = MapVirtualKeyW((UINT)key_vk(key), MAPVK_VK_TO_CHAR);
+    if (label >= 'A' && label <= 'Z') return KEY_A + (int)(label - 'A');
+    if (label >= '0' && label <= '9') return KEY_0 + (int)(label - '0');
+    return KEY_NONE;
+}
+
+int ikb_intent_down(int key) { return ikb_down(key); }

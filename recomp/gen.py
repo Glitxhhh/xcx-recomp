@@ -22,6 +22,7 @@ time and resolves its jump tables (recomp/jumptables.py), so memory per worker d
 Chunks are sized from a per-instruction estimate of the C they produce, so their names and contents only depend on
 the input; a chunk whose text did not change is not rewritten and keeps its mtime.
 """
+import mod_menu
 import argparse
 import json
 import multiprocessing as mp
@@ -39,6 +40,7 @@ sys.path.insert(0, str(ROOT / 'tools'))
 sys.path.insert(0, str(ROOT / 'recomp'))
 
 import flags  # noqa: E402
+import appendage  # noqa: E402
 import jumptables  # noqa: E402
 import patches  # noqa: E402
 import regs  # noqa: E402
@@ -207,8 +209,10 @@ def partition(est, max_fns, max_bytes, big_fn):
 class Emitter:
     """C for the functions of one module. starts is the set of every function start of the module."""
 
-    def __init__(self, mod, starts, patched=None, reg_locals=regs.LOCALS, callee_saved=True, spins=None):
+    def __init__(self, mod, starts, patched=None, reg_locals=regs.LOCALS, callee_saved=True, spins=None, mod_menu_hook=False):
+        self.mod_menu_hook = mod_menu_hook and mod.name == "main"
         self.mod = mod
+        self.appendage = appendage.verified(mod)
         self.starts = starts
         self.patched = patched or {}   # {address: (set index, [replacement words])} (recomp/patches.py)
         self.spins = spins or {}       # {spin wait back-edge: its head} (recomp/patches.py `spin`)
@@ -330,6 +334,11 @@ class Emitter:
         local = not all_labels
         spill, reload, reload_call = (regs.SPILL, regs.RELOAD, regs.RELOAD_CALL) if local else ('', '', '')
         succ = self.flow(insns, entry, end, tables) if local else None
+        if self.mod_menu_hook and entry == mod_menu.ENTRY:
+            if not local or not entry <= mod_menu.HANDLED < end:
+                raise ValueError('Mod menu: selection function contract changed')
+            labels.add(mod_menu.HANDLED)
+            succ[(mod_menu.SITE - entry) // 4].append((mod_menu.HANDLED - entry) // 4)
         fp = self.flag_plan(insns, entry, end, tables, succ) if local else None
         if fp and fp.used:
             self.stats['local_flag_functions'] += 1
@@ -370,13 +379,21 @@ class Emitter:
         else:
             redispatch = f'{MUSTTAIL} rt_dispatch(c);'
             out = [f'void {fname(entry)}(Cpu *c) {{', f'    FN_ENTER({hx(entry)});']
+            if self.appendage and (hook := appendage.entry(mod, entry)):
+                out.append('    ' + hook)
             if fp.used:
                 out.append('    ' + fp.decl())
+
+        if self.mod_menu_hook and entry in mod_menu.LIFETIME:
+            out.append('    rt_mod_menu_invalidate();')
+        if self.mod_menu_hook and entry == mod_menu.LABEL_ENTRY:
+            out.append('    uint64_t menu_label = rt_mod_menu_label(c->x[0], c->x[1], c->x[2], c->x[3]);')
 
         def call(t, a):
             if t in starts:
                 refs.add(t)
-                return f'c->x[30] = {hx(a + 4)}; {spill}{fname(t)}(c);{reload_call}'
+                invoke = appendage.call(mod, a, t) if self.appendage else f'{fname(t)}(c);'
+                return f'c->x[30] = {hx(a + 4)}; {spill}{invoke}{reload_call}'
             self.stats['external_calls'] += 1
             return f'c->x[30] = {hx(a + 4)}; {spill}c->pc = {hx(t)}; rt_dispatch(c);{reload_call}'
 
@@ -412,7 +429,16 @@ class Emitter:
             a = entry + 4 * i
             if a in labels:
                 emit(None, f'L_{a:x}:;')
+            if self.mod_menu_hook and a == mod_menu.SITE:
+                # Read X19 through the register planner; the borrowed pointer never leaves this call.
+                emit(i, f'    if (rt_mod_menu_select(c->x[19])) goto L_{mod_menu.HANDLED:x};')
             k = ins.kind
+            if self.mod_menu_hook and a == mod_menu.BUILD_LABEL:
+                emit(i, "    c->x[3] = rt_mod_menu_message(c->x[0], c->x[1], c->x[23], c->x[21], c->x[3]);")
+            if self.mod_menu_hook and a == mod_menu.INSTALL:
+                emit(i, '    rt_mod_menu_install(c->x[19]);')
+            if self.mod_menu_hook and a == mod_menu.LABEL_TAIL:
+                emit(i, f'    if (menu_label) {{ c->x[1] = menu_label; {jump(mod_menu.RAW_SETTER,i)} }}')
             if a in self.patched:
                 emit(i, patch(i, ins, a))
             elif k == 'op':
@@ -482,7 +508,8 @@ def chunk_text(name, number, emitter, fns):
     protos = ''.join(f'void {fname(r)}(Cpu *c);\n' for r in sorted(refs))
     if emitter.uses_patches:
         protos += 'extern uint8_t rt_patch_on[];\n'
-    return (header(f'{name} chunk {number:04d}') + '#include "cpu.h"\n#include "simd.h"\n\n' + protos + '\n'
+    hook_header = '#include "appendage_glyph.h"\n' if any('appendage_glyph_' in s for s in body) else ''
+    return (header(f'{name} chunk {number:04d}') + '#include "cpu.h"\n#include "simd.h"\n' + hook_header + '\n' + protos + '\n'
             + '\n\n'.join(body) + '\n')
 
 
@@ -604,13 +631,23 @@ def main():
     ap.add_argument('--no-callee-saved-trust', action='store_true',
                     help='reload X19-X29 and SP after every call too, instead of trusting AAPCS64 (slower; for '
                          'telling a broken callee from a generator bug)')
+    ap.add_argument("--mod-menu-hook", action="store_true", help="validated XCX 2.0.0 registered Online-child insertion")
     args = ap.parse_args()
-    opts = {'reg_locals': args.reg_locals, 'callee_saved': not args.no_callee_saved_trust}
+    opts = {'reg_locals': args.reg_locals, 'callee_saved': not args.no_callee_saved_trust, 'mod_menu_hook': args.mod_menu_hook}
 
     t0 = time.perf_counter()
     mods = layout(args.exefs)
+    if args.mod_menu_hook:
+        if args.limit or 'main' not in args.modules.split(','):
+            raise SystemExit('Mod menu: main must be generated without --limit')
+        main = Module('main', args.exefs / 'main', next(b for n, b, _ in mods if n == 'main'), 'c')
+        mod_menu.validate(main, (args.exefs / 'main').read_bytes())
+        del main
     write_layout(mods, args.out)
+    write_if_changed(args.out / 'mod_menu_config.h', '// ' + GENERATED_MARKER + '\n#pragma once\n#define MOD_MENU_HOOKS ' + str(int(args.mod_menu_hook)) + '\n')
     table = patches.load(args.patches, mods) if args.patches else patches.Table()
+    if args.mod_menu_hook:
+        mod_menu.validate_patches(table)
     write_if_changed(args.out / 'patches.h', patches.header_text(table, GENERATED_MARKER))
     want = args.modules.split(',')
     unknown = set(want) - {n for n, _, _ in mods}

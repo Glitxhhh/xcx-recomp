@@ -20,12 +20,20 @@
 #include "imgui_internal.h"   // SetFocusID, NavCursorVisible
 #include "backends/imgui_impl_vulkan.h"
 #include "ui/binds_page.h"
+extern "C" {
+#include "input_glyphs.h"
+}
 #include "ui/option_rows.h"
+#include "ui/mods_page.h"
 
 extern "C" {
 #include "cfg.h"
+#include "mods.h"
+#include "mod_settings.h"
+#include "mod_menu.h"
 #include "input.h"
 #include "input_map.h"
+#include "input_wsys.h"
 #include "perfmon.h"
 #include "platform/platform.h"
 #include "swkbd.h"
@@ -65,6 +73,7 @@ static int change_open(int want) {
     int open = want < 0 ? !g_open.load() : want;
     if (g_open.load() != open) {
         g_open.store(open);
+        if(!open)mod_ui_interaction(0);
         g_reset.store(1);
         input_menu(open);
         rt_log("menu: %s", open ? "open" : "closed");
@@ -299,6 +308,8 @@ static int fonts_up(float scale) {
 }
 
 extern "C" void menu_vk_release(void) {
+    mod_menu_invalidate();
+    mod_ui_interaction(0);
     if (g_ctx_ok) vk_down();
 }
 
@@ -309,7 +320,7 @@ extern "C" void menu_vk_release(void) {
 // XCX_MENU_TEST_SET=<frame>:<key>=<value>[,<key>=<value>...][;<frame>:...]: cfg_set of each key (XCX_ prefix
 // optional) at that presented frame; changes live settings with no input, menu open or not. xcx.ini is written only by
 // the pseudo-key SAVE=1 (cfg_save, as a row change does; a failed write shows the menu's save note).
-enum { TAB_SCREEN, TAB_GAME, TAB_SOUND, TAB_CONTROLS, TAB_MENU, TAB_ADVANCED, TAB_COUNT };
+enum { TAB_SCREEN, TAB_GAME, TAB_SOUND, TAB_CONTROLS, TAB_MENU, TAB_ADVANCED, TAB_MODS, TAB_COUNT };
 enum { TEST_PAGE_FRAMES = 30, TEST_SETS = 16 };
 struct TestSet { uint64_t frame; char key[64], value[64]; };
 static struct {
@@ -582,20 +593,20 @@ static void tab_sound(float scale) {
     opt_end();
 }
 
-// "in use: Xbox" under the layout when it is Automatic and a gamepad is connected; NULL otherwise.
-static const char *pad_layout_note(void) {
-    int got = input_pad_layout();
-    if (got < 0 || strcmp(cfg_value("XCX_PAD_LAYOUT"), "auto")) return nullptr;
-    static char note[96];
-    snprintf(note, sizeof note, menu_text(UI_MENU_PAD_LAYOUT_IN_USE),
-             menu_text(got == PAD_LAYOUT_XBOX ? UI_MENU_PAD_LAYOUT_XBOX : UI_MENU_PAD_LAYOUT_NINTENDO));
-    return note;
-}
-
 static void tab_controls(float scale) {
     opt_begin("##controls", scale);
+    static const char *const glyph_values[] = {"auto","original","playstation","xbox","steam","keyboard"};
+    static const char *const glyph_names[] = {"Automatic","Nintendo Switch","PlayStation","Xbox","Steam Controller","Keyboard/Mouse"};
+    if (!glyph_build_supported()) opt_disable_next(UI_MENU_GLYPH_UNSUPPORTED);
+    opt_choice_list("XCX_GLYPH_STYLE", UI_MENU_GLYPH_STYLE, glyph_values, glyph_names, GLYPH_STYLE_COUNT,
+                    UI_MENU_GLYPH_STYLE_DESC);
+    static const char *const appearance_values[] = {"colored","standard"};
+    static const char *const appearance_names[] = {"Colored","Standard"};
+    if (!glyph_build_supported()) opt_disable_next(UI_MENU_GLYPH_UNSUPPORTED);
+    opt_choice_list("XCX_GLYPH_APPEARANCE", UI_MENU_GLYPH_APPEARANCE, appearance_values, appearance_names, 2,
+                    UI_MENU_GLYPH_APPEARANCE_DESC);
     static const UiTextId layout[] = {UI_MENU_PAD_LAYOUT_AUTO, UI_MENU_PAD_LAYOUT_NINTENDO, UI_MENU_PAD_LAYOUT_XBOX};
-    opt_choice("XCX_PAD_LAYOUT", UI_MENU_PAD_LAYOUT, layout, 3, UI_MENU_PAD_LAYOUT_DESC, pad_layout_note());
+    opt_choice("XCX_PAD_LAYOUT", UI_MENU_PAD_LAYOUT, layout, 3, UI_MENU_PAD_LAYOUT_DESC);
     opt_toggle("XCX_MOTION", UI_MENU_MOTION, UI_MENU_MOTION_DESC);
     opt_slider("XCX_RUMBLE_STRENGTH", UI_MENU_RUMBLE_STRENGTH, 0, 300, UI_MENU_RUMBLE_STRENGTH_DESC, 10, "%.0f %%");
     opt_slider("XCX_RUMBLE_CURVE", UI_MENU_RUMBLE_CURVE, 0.2f, 1.5f, UI_MENU_RUMBLE_CURVE_DESC, 0.05f, "%.2f");
@@ -771,27 +782,48 @@ static void tab_advanced(float scale) {
 }
 
 static const UiTextId kTabNames[TAB_COUNT] = {UI_MENU_TAB_SCREEN, UI_MENU_TAB_GAME, UI_MENU_TAB_SOUND,
-                                              UI_MENU_TAB_CONTROLS, UI_MENU_TAB_MENU, UI_MENU_TAB_ADVANCED};
+                                              UI_MENU_TAB_CONTROLS, UI_MENU_TAB_MENU, UI_MENU_TAB_ADVANCED, UI_MENU_TAB_MODS};
 static int g_tab;               // the tab shown
+static uint64_t g_registered_epoch;
+static char g_registered_owner[65];
 static int g_tab_request = -1;  // select this tab at the next layout; -1 none
 static int g_focus_page = -1;   // this tab's first row takes the cursor once it is shown; -1 none
 
-// ---- the text entry (swkbd_sdl.c): a field over the last game image while the game waits for the answer. A or Plus on
-// the gamepad and Enter confirm, B and Esc cancel; the gamepad's buttons count once seen released, so the press that
+// ---- the text entry (swkbd_sdl.c): a field and controller keyboard over the last game image. A activates a grid key;
+// Plus or the OK cell and Enter confirm, B or the Cancel cell and Esc cancel; the gamepad's buttons count once seen released, so the press that
 // opened the entry does not answer it. The fields below belong to the present path while g_text is set; text_lock
 // orders menu_text_poll's read of the answer after the frame that wrote it.
 static PlatMutex text_lock = PLAT_MUTEX_INIT;
 static char g_text_buf[(KB_LIMIT + 1) * 3], g_text_prompt[0x101 * 3];
 static int g_text_max, g_text_min, g_text_digits, g_text_focus, g_text_answer, g_text_frames;
 static uint32_t g_text_disabled;
+static int g_text_row, g_text_col, g_text_upper, g_text_shift, g_text_once, g_text_edit, g_text_select_initial;
+static int g_text_pad_ready, g_text_repeat_dir = -1;
+static uint64_t g_text_repeat_at;
+static const int text_columns[] = {11, 10, 10, 8, 1, 2};
+static const char *const text_letters[] = {"1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm"};
+enum { TEXT_CASE = -1, TEXT_BACKSPACE = -2, TEXT_OK = -3, TEXT_CANCEL = -4, TEXT_DELETE = -5, TEXT_LEFT = -6, TEXT_RIGHT = -7, TEXT_SHIFT = -8 };
+
+static void registered_route(bool &open,bool text){
+    if(g_registered_epoch){ModMenuEntry current;if(!open){g_registered_epoch=0;}else if(text||g_failed_flag()||mod_menu_epoch()!=g_registered_epoch||!mod_menu_snapshot(&current)||strcmp(current.owner,g_registered_owner)){set_open(0);open=false;g_registered_epoch=0;}}
+    ModMenuEntry requested;if(mod_menu_take(&requested)&&!open&&!text&&!g_failed_flag()){
+        mods_page_select(requested.owner,requested.page);g_tab_request=TAB_MODS;g_registered_epoch=requested.epoch;snprintf(g_registered_owner,sizeof g_registered_owner,"%s",requested.owner);set_open(1);open=true;
+    }
+
+}
 
 extern "C" void menu_text_begin(const char *prompt, const char *initial, int max_len, int min_len, uint32_t disabled,
                                 int digits_only) {
+    mod_ui_interaction(0);
     plat_mutex_lock(&text_lock);
     snprintf(g_text_prompt, sizeof g_text_prompt, "%s", prompt);
     snprintf(g_text_buf, sizeof g_text_buf, "%s", initial);
     g_text_max = max_len, g_text_min = min_len, g_text_disabled = disabled, g_text_digits = digits_only;
     g_text_focus = 1, g_text_answer = g_text_frames = 0;
+    g_text_row = 1, g_text_col = g_text_upper = g_text_shift = g_text_once = g_text_edit = 0;
+    g_text_pad_ready = 0;
+    g_text_select_initial = 1;
+    g_text_repeat_dir = -1;
     g_reset.store(1);
     g_text.store(1);
     plat_mutex_unlock(&text_lock);
@@ -827,9 +859,53 @@ static int text_units(const char *s, int max, int *cut) {
 }
 
 static int text_callback(ImGuiInputTextCallbackData *d) {
-    if (d->EventFlag == ImGuiInputTextFlags_CallbackCharFilter)   // the applet's disabled keys
+    if (d->EventFlag == ImGuiInputTextFlags_CallbackCharFilter)
         return d->EventChar > 0xffff || !swkbd_allowed((uint16_t)d->EventChar, g_text_disabled, g_text_digits);
-    int cut;   // CallbackEdit: the length the game allows
+    g_text_select_initial = 0;
+    if (int edit = g_text_edit) {
+        g_text_edit = 0;
+        bool movement = edit == TEXT_LEFT || edit == TEXT_RIGHT;
+        bool deletion = edit == TEXT_BACKSPACE || edit == TEXT_DELETE;
+        bool allowed = movement || deletion || swkbd_allowed((uint16_t)edit, g_text_disabled, g_text_digits);
+        if (allowed) {
+            int start = ImMin(d->SelectionStart, d->SelectionEnd);
+            int end = ImMax(d->SelectionStart, d->SelectionEnd);
+            if (movement) {
+                int pos = start != end ? (edit == TEXT_LEFT ? start : end) : d->CursorPos;
+                if (start == end && edit == TEXT_LEFT && pos) {
+                    --pos;
+                    while (pos && ((unsigned char)d->Buf[pos] & 0xc0) == 0x80) --pos;
+                } else if (start == end && edit == TEXT_RIGHT && pos < d->BufTextLen) {
+                    ++pos;
+                    while (pos < d->BufTextLen && ((unsigned char)d->Buf[pos] & 0xc0) == 0x80) ++pos;
+                }
+                d->CursorPos = d->SelectionStart = d->SelectionEnd = pos;
+            } else {
+                if (edit == TEXT_BACKSPACE && start == end) {
+                    end = d->CursorPos;
+                    start = end;
+                    if (start) {
+                        --start;
+                        while (start && ((unsigned char)d->Buf[start] & 0xc0) == 0x80) --start;
+                    }
+                }
+                if (edit == TEXT_DELETE && start == end) {
+                    start = end = d->CursorPos;
+                    if (end < d->BufTextLen) {
+                        ++end;
+                        while (end < d->BufTextLen && ((unsigned char)d->Buf[end] & 0xc0) == 0x80) ++end;
+                    }
+                }
+                if (end > start) d->DeleteChars(start, end - start);
+                if (!deletion) {
+                    char c = (char)edit;
+                    d->InsertChars(d->CursorPos, &c, &c + 1);
+                    g_text_once = 0;
+                }
+            }
+        }
+    }
+    int cut;
     if (g_text_max > 0) {
         text_units(d->Buf, g_text_max, &cut);
         if (cut >= 0) d->DeleteChars(cut, d->BufTextLen - cut);
@@ -837,16 +913,144 @@ static int text_callback(ImGuiInputTextCallbackData *d) {
     return 0;
 }
 
-// The gamepad's answer this frame: 1 A or Plus, -1 B, 0 none
+static float text_key_units(int row, int col) {
+    if (row == 0 && col == 10) return 2;
+    if (row == 2 && col == 0) return 1.5f;
+    if (row == 3 && col == 0) return 2;
+    if (row == 4) return 6;
+    if (row == 5) return 2;
+    return 1;
+}
+
+static const float text_indent[] = {0, 0.5f, 0, 0, 3, 8};
+static float text_key_center(int row, int col) {
+    float x = text_indent[row];
+    for (int i = 0; i < col; i++) x += text_key_units(row, i);
+    return x + text_key_units(row, col) * 0.5f;
+}
+
+static int text_key(int row, int col) {
+    if (row == 0 && col == 10) return TEXT_BACKSPACE;
+    if (row == 2 && col == 0) return TEXT_CASE;
+    if (row == 3 && col == 0) return TEXT_SHIFT;
+    if (row == 4) return ' ';
+    if (row == 5) return col == 0 ? TEXT_OK : TEXT_CANCEL;
+    int c = text_letters[row][col - (row == 2 || row == 3)];
+    return (g_text_upper != (g_text_shift || g_text_once)) && c >= 'a' && c <= 'z' ? c - 'a' + 'A' : c;
+}
+
+static int text_activate(int key) {
+    if (key == TEXT_OK) return 1;
+    if (key == TEXT_CANCEL) return -1;
+    if (key == TEXT_CASE) g_text_upper = !g_text_upper;
+    else if (key == TEXT_SHIFT) g_text_once = !g_text_once;
+    else g_text_edit = key;
+    g_text_focus = 2;   // return from a mouse-operated grid cell without selecting the whole name again
+    return 0;
+}
+
+// Grid navigation is separate from the field's cursor. Only directions repeat; an activation needs a new press.
 static int text_pad(int reset) {
     uint64_t b;
     int32_t lx, ly;
-    input_pad_read(&b, &lx, &ly);
+    int have = input_pad_read(&b, &lx, &ly);
+    if (reset || !have || !ikb_foreground()) {
+        g_text_pad_ready = g_text_shift = 0;
+        g_text_repeat_dir = stick_dir = -1;
+        pad_prev = b;
+        return 0;
+    }
+    int dir = stick_to_dpad(lx, ly);
+    if (dir >= 0) b |= 1ull << dir;
+    if (!g_text_pad_ready) {
+        pad_prev = b;
+        if (!b) g_text_pad_ready = 1;
+        return 0;
+    }
+    g_text_shift = !!(b & 1ull << B_ZR);
     uint64_t down = b & ~pad_prev;
     pad_prev = b;
-    if (reset) return 0;
-    if (down & (1ull << B_A | 1ull << B_PLUS)) return 1;
-    return down & 1ull << B_B ? -1 : 0;
+    if (down & 1ull << B_B) return -1;
+    if (down & 1ull << B_PLUS) return 1;
+    if (down & 1ull << B_X) return text_activate(TEXT_BACKSPACE);
+    if (down & 1ull << B_Y) return text_activate(TEXT_DELETE);
+    if (down & 1ull << B_ZL) return text_activate(TEXT_CASE);
+    if (down & 1ull << B_L) return text_activate(TEXT_LEFT);
+    if (down & 1ull << B_R) return text_activate(TEXT_RIGHT);
+    int held = b & 1ull << B_LEFT ? B_LEFT : b & 1ull << B_RIGHT ? B_RIGHT
+             : b & 1ull << B_UP ? B_UP : b & 1ull << B_DOWN ? B_DOWN : -1;
+    uint64_t now = plat_now_ns();
+    bool step = held >= 0 && (held != g_text_repeat_dir || now >= g_text_repeat_at);
+    if (step) {
+        g_text_repeat_at = now + (held != g_text_repeat_dir ? 350000000ull : 90000000ull);
+        if (held == B_LEFT) g_text_col = (g_text_col + text_columns[g_text_row] - 1) % text_columns[g_text_row];
+        if (held == B_RIGHT) g_text_col = (g_text_col + 1) % text_columns[g_text_row];
+        if (held == B_UP || held == B_DOWN) {
+            float x = text_key_center(g_text_row, g_text_col);
+            g_text_row = (g_text_row + (held == B_UP ? 5 : 1)) % 6;
+            g_text_col = 0;
+            for (int col = 1; col < text_columns[g_text_row]; col++)
+                if (fabsf(text_key_center(g_text_row, col) - x) < fabsf(text_key_center(g_text_row, g_text_col) - x))
+                    g_text_col = col;
+        }
+    }
+    g_text_repeat_dir = held;
+    return down & 1ull << B_A ? text_activate(text_key(g_text_row, g_text_col)) : 0;
+}
+
+static int text_grid(float scale, bool short_text) {
+    ImGui::Spacing();
+    float width = ImGui::GetContentRegionAvail().x;
+    const float gap = ImGui::GetStyle().ItemSpacing.x * 0.4f;
+    int answer = 0;
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(gap, gap));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2 * scale, 8 * scale));
+    for (int row = 0; row < 6; row++) {
+        float cell = (width - gap * 11) / 12;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + text_indent[row] * (cell + gap));
+        for (int col = 0; col < text_columns[row]; col++) {
+            if (col) ImGui::SameLine();
+            int key = text_key(row, col);
+            char letter[] = {(char)key, 0};
+            const char *label = key == TEXT_CASE ? "##caps"
+                              : key == TEXT_SHIFT ? "##shift"
+                              : key == ' ' ? ui_text(UI_SWKBD_SPACE)
+                              : key == TEXT_BACKSPACE ? ui_text(UI_SWKBD_BACKSPACE)
+                              : key == TEXT_OK ? ui_text(UI_SWKBD_OK)
+                              : key == TEXT_CANCEL ? ui_text(UI_SWKBD_CANCEL) : letter;
+            bool selected = row == g_text_row && col == g_text_col;
+            bool disabled = key == TEXT_OK ? short_text : key > 0 && !swkbd_allowed((uint16_t)key, g_text_disabled, g_text_digits);
+            float units = text_key_units(row, col);
+            float key_width = units * cell + (units - 1) * gap;
+            bool lit = key == TEXT_CASE ? g_text_upper : key == TEXT_SHIFT && (g_text_shift || g_text_once);
+            ImGui::PushID(row * 16 + col);
+            if (selected || lit) ImGui::PushStyleColor(ImGuiCol_Button, lit ? ImVec4(0.08f, 0.58f, 0.42f, 1) : ImVec4(0.08f, 0.48f, 0.59f, 1));
+            ImGui::BeginDisabled(disabled);
+            if (ImGui::ButtonEx(label, ImVec2(key_width, 46 * scale), ImGuiButtonFlags_NoNavFocus)) {
+                g_text_row = row; g_text_col = col;
+                answer = text_activate(key);
+            }
+            ImGui::EndDisabled();
+            if (key == TEXT_CASE || key == TEXT_SHIFT) {
+                ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
+                float x = (min.x + max.x) * 0.5f, y = (min.y + max.y) * 0.5f - 2 * scale;
+                float u = 9 * scale;
+                ImVec2 arrow[] = {{x, y-u}, {x+u, y}, {x+u*0.4f, y}, {x+u*0.4f, y+u*0.7f},
+                                  {x-u*0.4f, y+u*0.7f}, {x-u*0.4f, y}, {x-u, y}};
+                ImDrawList *draw = ImGui::GetWindowDrawList();
+                ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
+                draw->AddPolyline(arrow, IM_ARRAYSIZE(arrow), color, ImDrawFlags_Closed, 2 * scale);
+                if (key == TEXT_CASE) draw->AddLine(ImVec2(x-u*0.4f, y+u), ImVec2(x+u*0.4f, y+u), color, 2 * scale);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", ui_text(key == TEXT_CASE ? UI_SWKBD_SHIFT : UI_SWKBD_MOMENTARY_SHIFT));
+            }
+            if (selected) ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                IM_COL32(97, 222, 245, 255), ImGui::GetStyle().FrameRounding, 0, 2 * scale);
+            if (selected || lit) ImGui::PopStyleColor();
+            ImGui::PopID();
+        }
+    }
+    ImGui::PopStyleVar(2);
+    return answer;
 }
 
 // Test hook XCX_SWKBD_TEST=ok|cancel|type:<text>: OK or Cancel 30 frames into the entry; type: types <text> at frame
@@ -867,7 +1071,7 @@ static int text_test(ImGuiIO &io) {
 static int layout_text(uint32_t w, uint32_t h, float scale, int pad) {
     ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0, 0), ImVec2((float)w, (float)h), IM_COL32(0, 0, 0, 120));
     ImGui::SetNextWindowPos(ImVec2(w * 0.5f, h * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(fminf(w * 0.9f, 760 * scale), 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(fminf(w * 0.9f, 1040 * scale), 0), ImGuiCond_Always);
     ImGui::Begin("##text", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav);
     ImGui::TextColored(ImVec4(0.35f, 0.86f, 0.96f, 1), "%s", ui_text(UI_SWKBD_TITLE));
@@ -876,24 +1080,24 @@ static int layout_text(uint32_t w, uint32_t h, float scale, int pad) {
     int answer = ImGui::IsKeyPressed(ImGuiKey_Escape, false) ? -1 : pad;
     ImGui::SetNextItemWidth(-FLT_MIN);
     // the field keeps the keyboard: at the start, its text selected so typing replaces it, and after a click beside it
-    if (g_text_focus || (!ImGui::GetActiveID() && !ImGui::IsMouseDown(0))) ImGui::SetKeyboardFocusHere();
+    if (g_text_focus == 1) {
+        // The widget id is reused across requests; never apply the previous request's deactivated buffer.
+        GImGui->InputTextDeactivatedState.ID = 0;
+        if (ImGuiInputTextState *state = ImGui::GetInputTextState(ImGui::GetID("##text_field")))
+            state->ReloadUserBufAndSelectAll();
+    }
+    bool select_initial = g_text_select_initial != 0;
+    if (g_text_focus == 1 || (ImGui::GetActiveID() != ImGui::GetID("##text_field") &&
+                           (g_text_focus || (!ImGui::GetActiveID() && !ImGui::IsMouseDown(0)))))
+        ImGui::SetKeyboardFocusHere();
     g_text_focus = 0;
     if (ImGui::InputText("##text_field", g_text_buf, sizeof g_text_buf,
-                         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll |
-                             ImGuiInputTextFlags_CallbackCharFilter | ImGuiInputTextFlags_CallbackEdit,
+                         ImGuiInputTextFlags_EnterReturnsTrue | (select_initial ? ImGuiInputTextFlags_AutoSelectAll : 0) |
+                             ImGuiInputTextFlags_CallbackCharFilter | ImGuiInputTextFlags_CallbackEdit | ImGuiInputTextFlags_CallbackAlways,
                          text_callback) && !answer)
         answer = 1;
-    ImGui::TextDisabled("%s", ui_text(UI_SWKBD_PAD_HINT));
-    const ImGuiStyle &st = ImGui::GetStyle();
-    const char *ok = ui_text(UI_SWKBD_OK), *cancel = ui_text(UI_SWKBD_CANCEL);
-    float bw = fmaxf(ImGui::CalcTextSize(ok).x, ImGui::CalcTextSize(cancel).x) + st.FramePadding.x * 4;
-    ImGui::SetCursorPosX(ImGui::GetWindowWidth() - st.WindowPadding.x - bw * 2 - st.ItemSpacing.x);
-    int short_text = text_units(g_text_buf, 0, nullptr) < g_text_min;   // OK waits for the game's shortest length
-    ImGui::BeginDisabled(short_text);
-    if (ImGui::Button(ok, ImVec2(bw, 0))) answer = 1;
-    ImGui::EndDisabled();
-    ImGui::SameLine();
-    if (ImGui::Button(cancel, ImVec2(bw, 0))) answer = -1;
+    int short_text = text_units(g_text_buf, 0, nullptr) < g_text_min;
+    if (int a = text_grid(scale, short_text)) answer = a;
     ImGui::End();
     return answer == 1 && short_text ? 0 : answer;
 }
@@ -916,7 +1120,8 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
     ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x - ImGui::CalcTextSize(version).x);
     ImGui::TextDisabled("%s", version);
 
-    int step = g_modal || binds_modal()                                                                  ? 0
+    bool popup_was_open=ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId);
+    int step = g_modal || binds_modal() || popup_was_open                                                                  ? 0
              : ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false) || ImGui::IsKeyPressed(ImGuiKey_E, false) ? 1
              : ImGui::IsKeyPressed(ImGuiKey_GamepadL1, false) || ImGui::IsKeyPressed(ImGuiKey_Q, false) ? -1
                                                                                                          : 0;
@@ -931,7 +1136,8 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
             snprintf(label, sizeof label, "  %s  ###tab%d", menu_text(kTabNames[k]), k);   // the id stays per language
             if (!ImGui::BeginTabItem(label, nullptr, g_tab_request == k ? ImGuiTabItemFlags_SetSelected : 0)) continue;
             g_tab = k;
-            if (g_focus_page == k) {
+            bool focus_page = g_focus_page == k;
+            if (focus_page) {
                 opt_focus_first();
                 g_focus_page = -1;
             }
@@ -947,6 +1153,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
             case TAB_CONTROLS: tab_controls(scale); break;
             case TAB_MENU: tab_menu(scale); break;
             case TAB_ADVANCED: tab_advanced(scale); break;
+            case TAB_MODS: mods_page(scale,bottom,focus_page); break;
             }
             ImGui::EndTabItem();
         }
@@ -954,6 +1161,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
         ImGui::EndTabBar();
     }
 
+    if(g_tab!=TAB_MODS)mod_ui_interaction(0);
     // bottom row: the save status on the left, the two buttons on the right
     ImGui::Spacing();
     float y = ImGui::GetCursorPosY();
@@ -967,7 +1175,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
     if (ImGui::Button(cont, ImVec2(bw, 0))) set_open(0);
     ImGui::SameLine();
     if (ImGui::Button(quit, ImVec2(bw, 0))) gfx_window_request_close();
-    bool was_modal = g_modal || binds_modal();
+    bool was_modal = g_modal || binds_modal() || popup_was_open;
     if (g_tab != TAB_ADVANCED) g_modal = false;
     if (!was_modal && (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false)))
         set_open(0);
@@ -1228,6 +1436,9 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
     perf_tick(plat_now_ns(), t);
     bool open = g_open.load(std::memory_order_relaxed);
     bool text = g_text.load(std::memory_order_acquire);
+    registered_route(open,text);
+
+    if(!open || text || g_failed_flag())mod_ui_interaction(0);
     if (!open && !text) {
         if (g_save_pending) g_save_pending = opt_save_tick(1);   // closed: the last change goes to xcx.ini now
         if (g_test.at && !g_test.opened && frame >= g_test.at) {
@@ -1250,6 +1461,8 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
     if (!vk_up(t) || (g_font_scale != scale && !fonts_up(scale))) {
         rt_log("menu: Dear ImGui Vulkan back end set-up failed; the menu stays closed");
         g_failed.store(1);
+        mod_menu_support(-1);mod_menu_invalidate();
+        mod_ui_interaction(0);
         set_open(0);
         return 0;
     }
@@ -1264,6 +1477,7 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
     if (reset) {
         io.ClearInputKeys();
         io.ClearInputMouse();
+        if (text) ImGui::ClearActiveID();   // a new request must load its own initial text
         g_last_ns = 0;
         g_focus_page = g_tab_request >= 0 ? g_tab_request : g_tab;   // opening: the first row has the cursor
         if (GImGui->OpenPopupStack.Size) ImGui::ClosePopupToLevel(0, false);   // a confirmation left open on closing

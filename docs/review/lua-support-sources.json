@@ -1,0 +1,1348 @@
+{
+  "upstream": "7b2337a6854b3936dc4f567dbb46add8c1eb6559",
+  "keyboard_tip": "d3b69f851c6a10aaee56a6dc8d125f9dbe3f5b6e",
+  "accepted_primary_inventory_sha256": "834f8141e446e8e38251a7ce6d4058d6e78836b3c8595fe08715760827bb1f6d",
+  "accepted_keyboard_snapshot_sha256": "711e2b9e18b8f0fcfb3cc80056ba9e5a4864396c7e39205a27631cdd39799763",
+  "accepted_candidate_sha256": "c8a438c0522016a595ef2aa4a61bdb5aa535bbace5a2627d9dc364975c016254",
+  "prepared_relinked_candidate_sha256": "965f9044501f1ae3838933973c6344b51d13a226a387bc9b88bc7e61a5325c03",
+  "note": "Raw source hashes. Documentation exceptions are described in the reviewer guide. Matching source does not imply identical binaries. Keyboard source belongs to the prerequisite; its runner gains Mods tests later.",
+  "files": [
+    {
+      "file": "THIRD_PARTY_NOTICES.md",
+      "accepted_sha256": "8f34c947f387f8ca07a88b4614d8525265b93404964ff0bcefe9aa2d2f80adfe",
+      "prepared_sha256": "8f34c947f387f8ca07a88b4614d8525265b93404964ff0bcefe9aa2d2f80adfe"
+    },
+    {
+      "file": "deps/lua/LICENSE.txt",
+      "accepted_sha256": "a38e88aeffd124e9403aab4635ae3c0285d8d84147caef2df6fdce1b4c2bc971",
+      "prepared_sha256": "a38e88aeffd124e9403aab4635ae3c0285d8d84147caef2df6fdce1b4c2bc971"
+    },
+    {
+      "file": "deps/lua/README.md",
+      "accepted_sha256": "180dae825f60ba1b795656a5c7217d14f246ce13bd3ddac9c3b4dbdd11890e46",
+      "prepared_sha256": "6a4c49508d2ba729f462e12f344ffa0094e5f086800943790e3fb3e83f6b67f6"
+    },
+    {
+      "file": "deps/lua/patches/0b29f408433e92953cc72b1d3e06c7ac8139e439.patch",
+      "accepted_sha256": "0d196ef065208c578e1a26ce792b8e4399a507ff446e9128e285ea2b5e9c7993",
+      "prepared_sha256": "0d196ef065208c578e1a26ce792b8e4399a507ff446e9128e285ea2b5e9c7993"
+    },
+    {
+      "file": "deps/lua/patches/15b2a78106f85a3f8ef2efe5683148d9dad84b33.patch",
+      "accepted_sha256": "a7b45fb306544a48c1d968c6c7c6872f63862e1e1f0763281ab67c935e21da20",
+      "prepared_sha256": "a7b45fb306544a48c1d968c6c7c6872f63862e1e1f0763281ab67c935e21da20"
+    },
+    {
+      "file": "deps/lua/patches/b35736b9d71182bae67492af2a387b3f6e89fd05.patch",
+      "accepted_sha256": "45ffbc5cf56fe982bcf22b99bdc5914f2a987324d0b2864fe410a444eb0f09e3",
+      "prepared_sha256": "45ffbc5cf56fe982bcf22b99bdc5914f2a987324d0b2864fe410a444eb0f09e3"
+    },
+    {
+      "file": "deps/lua/patches/e8533201cd2448d668c9b64758fc44205544b27f.patch",
+      "accepted_sha256": "a535288b7a5037aaa5cedb8f75bd8fe2c1d56bb171e241de49b0a350e9ae9f69",
+      "prepared_sha256": "a535288b7a5037aaa5cedb8f75bd8fe2c1d56bb171e241de49b0a350e9ae9f69"
+    },
+    {
+      "file": "deps/lua/pins.json",
+      "accepted_sha256": "4e1fe2a971ffd2e7bfad70b2f5f412a084a3b3b7ef85d3ebcf2491b0058c4e34",
+      "prepared_sha256": "4e1fe2a971ffd2e7bfad70b2f5f412a084a3b3b7ef85d3ebcf2491b0058c4e34"
+    },
+    {
+      "file": "deps/lua/pristine/Makefile",
+      "accepted_sha256": "79417725c2088078582428bf2b96749b60710b76943e9382816c583d5cde6775",
+      "prepared_sha256": "79417725c2088078582428bf2b96749b60710b76943e9382816c583d5cde6775"
+    },
+    {
+      "file": "deps/lua/pristine/README",
+      "accepted_sha256": "7805901a81d7b26021652c3b81cb2793bcea88f940b13ea66f901fb8be544fba",
+      "prepared_sha256": "7805901a81d7b26021652c3b81cb2793bcea88f940b13ea66f901fb8be544fba"
+    },
+    {
+      "file": "deps/lua/pristine/doc/OSIApproved.png",
+      "accepted_sha256": "dedd5ae56398fb0829e768b944656cd3ce6d2f5d55e5a282eca7602b8d5488b6",
+      "prepared_sha256": "dedd5ae56398fb0829e768b944656cd3ce6d2f5d55e5a282eca7602b8d5488b6"
+    },
+    {
+      "file": "deps/lua/pristine/doc/contents.html",
+      "accepted_sha256": "9ccf55c9ce178e1f3fd1cab276b484aebd0c027d8ca7952624a704d12cd0e1d5",
+      "prepared_sha256": "9ccf55c9ce178e1f3fd1cab276b484aebd0c027d8ca7952624a704d12cd0e1d5"
+    },
+    {
+      "file": "deps/lua/pristine/doc/index.css",
+      "accepted_sha256": "b6ef324ca66e9ffdafa9e5b5a1478a548aa20f3a23f264eb1bed6d21c1c7d039",
+      "prepared_sha256": "b6ef324ca66e9ffdafa9e5b5a1478a548aa20f3a23f264eb1bed6d21c1c7d039"
+    },
+    {
+      "file": "deps/lua/pristine/doc/logo.png",
+      "accepted_sha256": "de4ca280a5561940ace4b1a72dc5bc1d96ac154e59c7ae32d98ddcde010baeaa",
+      "prepared_sha256": "de4ca280a5561940ace4b1a72dc5bc1d96ac154e59c7ae32d98ddcde010baeaa"
+    },
+    {
+      "file": "deps/lua/pristine/doc/lua.1",
+      "accepted_sha256": "070de30bbac451a0d93ba1d2754d4bc192268b643051fbf33b018d3dedcc58fd",
+      "prepared_sha256": "070de30bbac451a0d93ba1d2754d4bc192268b643051fbf33b018d3dedcc58fd"
+    },
+    {
+      "file": "deps/lua/pristine/doc/lua.css",
+      "accepted_sha256": "73e7e5fa61afec5f04f5e43ad5c8348620abc41b8e4671631300b5defe3f2826",
+      "prepared_sha256": "73e7e5fa61afec5f04f5e43ad5c8348620abc41b8e4671631300b5defe3f2826"
+    },
+    {
+      "file": "deps/lua/pristine/doc/luac.1",
+      "accepted_sha256": "ac60e6992db478539dff611beed7ad01f52622c897657a9152165470039b0494",
+      "prepared_sha256": "ac60e6992db478539dff611beed7ad01f52622c897657a9152165470039b0494"
+    },
+    {
+      "file": "deps/lua/pristine/doc/manual.css",
+      "accepted_sha256": "e31c59b690844c22af987625fd54c9c8f13d1ce9dc2f0f0250315d1df760369e",
+      "prepared_sha256": "e31c59b690844c22af987625fd54c9c8f13d1ce9dc2f0f0250315d1df760369e"
+    },
+    {
+      "file": "deps/lua/pristine/doc/manual.html",
+      "accepted_sha256": "90768c77d97223a7052c44f65fea3590d515e8a111753bd0a54fa96fd0e9245d",
+      "prepared_sha256": "90768c77d97223a7052c44f65fea3590d515e8a111753bd0a54fa96fd0e9245d"
+    },
+    {
+      "file": "deps/lua/pristine/doc/readme.html",
+      "accepted_sha256": "f6cb9082089df5bc843e7cf6cf55fac1a100b4d8a46c5272b6cac8f69856cdd6",
+      "prepared_sha256": "f6cb9082089df5bc843e7cf6cf55fac1a100b4d8a46c5272b6cac8f69856cdd6"
+    },
+    {
+      "file": "deps/lua/pristine/src/Makefile",
+      "accepted_sha256": "62b711161aad85046ee6e7d8860e0f38023f56c46a06cbc13871859ae7a25876",
+      "prepared_sha256": "62b711161aad85046ee6e7d8860e0f38023f56c46a06cbc13871859ae7a25876"
+    },
+    {
+      "file": "deps/lua/pristine/src/lapi.c",
+      "accepted_sha256": "d744084bfec5049f6eaa509f4f353886a8c4fa8c8ef875d9f5bd3783caa46e09",
+      "prepared_sha256": "d744084bfec5049f6eaa509f4f353886a8c4fa8c8ef875d9f5bd3783caa46e09"
+    },
+    {
+      "file": "deps/lua/pristine/src/lapi.h",
+      "accepted_sha256": "f3780df32449b84c4b8c4e2f8ac780d45b50c190b4965c329842d5f216ad4dcb",
+      "prepared_sha256": "f3780df32449b84c4b8c4e2f8ac780d45b50c190b4965c329842d5f216ad4dcb"
+    },
+    {
+      "file": "deps/lua/pristine/src/lauxlib.c",
+      "accepted_sha256": "12479bc0ada905452185278dc681d72eb865e1fc247a0143227c210bc3f9dd78",
+      "prepared_sha256": "12479bc0ada905452185278dc681d72eb865e1fc247a0143227c210bc3f9dd78"
+    },
+    {
+      "file": "deps/lua/pristine/src/lauxlib.h",
+      "accepted_sha256": "007608c5e2abd231a9f61dc6cf4080ff6d4b54c845aa87b08162b5c778960443",
+      "prepared_sha256": "007608c5e2abd231a9f61dc6cf4080ff6d4b54c845aa87b08162b5c778960443"
+    },
+    {
+      "file": "deps/lua/pristine/src/lbaselib.c",
+      "accepted_sha256": "c86efd0ab819c08a4d253d2071ba6ef58bd63d0d1a8b8b383c3bc6b661167028",
+      "prepared_sha256": "c86efd0ab819c08a4d253d2071ba6ef58bd63d0d1a8b8b383c3bc6b661167028"
+    },
+    {
+      "file": "deps/lua/pristine/src/lcode.c",
+      "accepted_sha256": "9ad73605143555e094f00bd87b0dadb3002c440e7ed743bdd09637e73466cbb6",
+      "prepared_sha256": "9ad73605143555e094f00bd87b0dadb3002c440e7ed743bdd09637e73466cbb6"
+    },
+    {
+      "file": "deps/lua/pristine/src/lcode.h",
+      "accepted_sha256": "c5804ed0ce52cd2034cda9fcca256cc56333ec9954023b233da5a0ea533ce2e6",
+      "prepared_sha256": "c5804ed0ce52cd2034cda9fcca256cc56333ec9954023b233da5a0ea533ce2e6"
+    },
+    {
+      "file": "deps/lua/pristine/src/lcorolib.c",
+      "accepted_sha256": "14ab32084fafe825b6dca8c2d69fbbfd68e6a5c442acf4b18cc78f9dc15a820a",
+      "prepared_sha256": "14ab32084fafe825b6dca8c2d69fbbfd68e6a5c442acf4b18cc78f9dc15a820a"
+    },
+    {
+      "file": "deps/lua/pristine/src/lctype.c",
+      "accepted_sha256": "2b8e4894b6cff2afc111c1c996de4b78b4db2cf0c83d485d396806baa9e5b28b",
+      "prepared_sha256": "2b8e4894b6cff2afc111c1c996de4b78b4db2cf0c83d485d396806baa9e5b28b"
+    },
+    {
+      "file": "deps/lua/pristine/src/lctype.h",
+      "accepted_sha256": "c800311872ecba642f6d013b290eda83ba6cd8df8061e25cdca1dd4adcbed8b5",
+      "prepared_sha256": "c800311872ecba642f6d013b290eda83ba6cd8df8061e25cdca1dd4adcbed8b5"
+    },
+    {
+      "file": "deps/lua/pristine/src/ldblib.c",
+      "accepted_sha256": "af19f54caa086a202d017a46233d7ee20c3709ae1a30548ac0ebcff5ef3023a9",
+      "prepared_sha256": "af19f54caa086a202d017a46233d7ee20c3709ae1a30548ac0ebcff5ef3023a9"
+    },
+    {
+      "file": "deps/lua/pristine/src/ldebug.c",
+      "accepted_sha256": "a15af90335bee18c4c4b04195bf20c7f2481b8b3af88f7ade4d92be3f3584b74",
+      "prepared_sha256": "a15af90335bee18c4c4b04195bf20c7f2481b8b3af88f7ade4d92be3f3584b74"
+    },
+    {
+      "file": "deps/lua/pristine/src/ldebug.h",
+      "accepted_sha256": "29e0a057ea98a7921d30d32b12ff82b4988848ee5a1163e8e3dd702583b5d2d2",
+      "prepared_sha256": "29e0a057ea98a7921d30d32b12ff82b4988848ee5a1163e8e3dd702583b5d2d2"
+    },
+    {
+      "file": "deps/lua/pristine/src/ldo.c",
+      "accepted_sha256": "6dd1265ccbc686073580a49de19e7fb5af80133d5decee104fc012dbfaaab3b8",
+      "prepared_sha256": "6dd1265ccbc686073580a49de19e7fb5af80133d5decee104fc012dbfaaab3b8"
+    },
+    {
+      "file": "deps/lua/pristine/src/ldo.h",
+      "accepted_sha256": "4bb9b8353327a71bae9c5c59f00eea17beb6e11b8325df75af23dda89ae26725",
+      "prepared_sha256": "4bb9b8353327a71bae9c5c59f00eea17beb6e11b8325df75af23dda89ae26725"
+    },
+    {
+      "file": "deps/lua/pristine/src/ldump.c",
+      "accepted_sha256": "8571aa21018d50033e32ad2ee28ecf28db303125d472a8fdf6bb9bc57335d978",
+      "prepared_sha256": "8571aa21018d50033e32ad2ee28ecf28db303125d472a8fdf6bb9bc57335d978"
+    },
+    {
+      "file": "deps/lua/pristine/src/lfunc.c",
+      "accepted_sha256": "033d3511a16e3c0947a69c12d47f54a7d48acf41060355e72779f6459c7f75f3",
+      "prepared_sha256": "033d3511a16e3c0947a69c12d47f54a7d48acf41060355e72779f6459c7f75f3"
+    },
+    {
+      "file": "deps/lua/pristine/src/lfunc.h",
+      "accepted_sha256": "cfa1e9c22b0bb68098fbee66ed266de25f62d033bba9668d4618b9ee667c673e",
+      "prepared_sha256": "cfa1e9c22b0bb68098fbee66ed266de25f62d033bba9668d4618b9ee667c673e"
+    },
+    {
+      "file": "deps/lua/pristine/src/lgc.c",
+      "accepted_sha256": "fdbeb7246deebb353fc0d462a9712a7e34983b37340be4877c621535e3b1baa3",
+      "prepared_sha256": "fdbeb7246deebb353fc0d462a9712a7e34983b37340be4877c621535e3b1baa3"
+    },
+    {
+      "file": "deps/lua/pristine/src/lgc.h",
+      "accepted_sha256": "cfc9ab1a6e1419793f1a2bcfc78b095781c024564dd6b6b5100a95015d507b7d",
+      "prepared_sha256": "cfc9ab1a6e1419793f1a2bcfc78b095781c024564dd6b6b5100a95015d507b7d"
+    },
+    {
+      "file": "deps/lua/pristine/src/linit.c",
+      "accepted_sha256": "76225baba77ef9abfc8e06919cb83e34b7c6f65292a200bffa95513782984696",
+      "prepared_sha256": "76225baba77ef9abfc8e06919cb83e34b7c6f65292a200bffa95513782984696"
+    },
+    {
+      "file": "deps/lua/pristine/src/liolib.c",
+      "accepted_sha256": "7e941581f34a8443e4ffbe690e9ee68332c7431a3a27e1d35b2312437459241c",
+      "prepared_sha256": "7e941581f34a8443e4ffbe690e9ee68332c7431a3a27e1d35b2312437459241c"
+    },
+    {
+      "file": "deps/lua/pristine/src/ljumptab.h",
+      "accepted_sha256": "8acb9bb44752da9bb9e9923fc890416574ac2763b6631baccbdc8b1817133413",
+      "prepared_sha256": "8acb9bb44752da9bb9e9923fc890416574ac2763b6631baccbdc8b1817133413"
+    },
+    {
+      "file": "deps/lua/pristine/src/llex.c",
+      "accepted_sha256": "f24fe0ca1cd3c1050c8b229c26a4d31b4abd21bf3b352234efb6b0d7059e1c56",
+      "prepared_sha256": "f24fe0ca1cd3c1050c8b229c26a4d31b4abd21bf3b352234efb6b0d7059e1c56"
+    },
+    {
+      "file": "deps/lua/pristine/src/llex.h",
+      "accepted_sha256": "b40436d5a40165a4f7a4bd7a89dbac542fd6213a3a0c094646f4184b41eed36c",
+      "prepared_sha256": "b40436d5a40165a4f7a4bd7a89dbac542fd6213a3a0c094646f4184b41eed36c"
+    },
+    {
+      "file": "deps/lua/pristine/src/llimits.h",
+      "accepted_sha256": "c01c714288789cccda925195260460e506bc81506bacfa3f30a3bf159fa48576",
+      "prepared_sha256": "c01c714288789cccda925195260460e506bc81506bacfa3f30a3bf159fa48576"
+    },
+    {
+      "file": "deps/lua/pristine/src/lmathlib.c",
+      "accepted_sha256": "27336bfd629d7472dc6e0807a805483e2c8e30828257465e4f466559de7f6e4b",
+      "prepared_sha256": "27336bfd629d7472dc6e0807a805483e2c8e30828257465e4f466559de7f6e4b"
+    },
+    {
+      "file": "deps/lua/pristine/src/lmem.c",
+      "accepted_sha256": "7a63908f22ac826f3eb6826bd106d4eed40a7df749da8a87c06713e980fad099",
+      "prepared_sha256": "7a63908f22ac826f3eb6826bd106d4eed40a7df749da8a87c06713e980fad099"
+    },
+    {
+      "file": "deps/lua/pristine/src/lmem.h",
+      "accepted_sha256": "02656822c7d11b096ebcf718e061a57b108f7bf80ec4eaa4094191d6e30809af",
+      "prepared_sha256": "02656822c7d11b096ebcf718e061a57b108f7bf80ec4eaa4094191d6e30809af"
+    },
+    {
+      "file": "deps/lua/pristine/src/loadlib.c",
+      "accepted_sha256": "234e1f3495fe86344ad9e3014b05f4f5a7b9e57370062c01c6b415add7efd9e9",
+      "prepared_sha256": "234e1f3495fe86344ad9e3014b05f4f5a7b9e57370062c01c6b415add7efd9e9"
+    },
+    {
+      "file": "deps/lua/pristine/src/lobject.c",
+      "accepted_sha256": "c5bb25d52e84294289b34ed20f1004fa6ed9bf9a5012ccb81c67eba43163a48b",
+      "prepared_sha256": "c5bb25d52e84294289b34ed20f1004fa6ed9bf9a5012ccb81c67eba43163a48b"
+    },
+    {
+      "file": "deps/lua/pristine/src/lobject.h",
+      "accepted_sha256": "c38f2c001065e03b238f1d8f814346bfa00a54183720604f1b2d42bce08b305f",
+      "prepared_sha256": "c38f2c001065e03b238f1d8f814346bfa00a54183720604f1b2d42bce08b305f"
+    },
+    {
+      "file": "deps/lua/pristine/src/lopcodes.c",
+      "accepted_sha256": "fc4036555d17e68bbf4d49de9e0762c0da42886ad7caed10cc9862ed7926ba18",
+      "prepared_sha256": "fc4036555d17e68bbf4d49de9e0762c0da42886ad7caed10cc9862ed7926ba18"
+    },
+    {
+      "file": "deps/lua/pristine/src/lopcodes.h",
+      "accepted_sha256": "46e41e9cadc08527139b3bda14f321d3e2c196eb6aedabfe4fdf21b2ee5f201d",
+      "prepared_sha256": "46e41e9cadc08527139b3bda14f321d3e2c196eb6aedabfe4fdf21b2ee5f201d"
+    },
+    {
+      "file": "deps/lua/pristine/src/lopnames.h",
+      "accepted_sha256": "1e6c0113507fbcae4255281cce5bf32b589be49fd90d4a3dd3c31d15bb68d0eb",
+      "prepared_sha256": "1e6c0113507fbcae4255281cce5bf32b589be49fd90d4a3dd3c31d15bb68d0eb"
+    },
+    {
+      "file": "deps/lua/pristine/src/loslib.c",
+      "accepted_sha256": "3ed70ea013b0c7a5a758db435f76fe5a99e87f07ea02ed19b2012fb728f8aa13",
+      "prepared_sha256": "3ed70ea013b0c7a5a758db435f76fe5a99e87f07ea02ed19b2012fb728f8aa13"
+    },
+    {
+      "file": "deps/lua/pristine/src/lparser.c",
+      "accepted_sha256": "918436a59eb67e22e08cc0aede69926a9af9ee106c97ce6bd9568b05c728a8c6",
+      "prepared_sha256": "918436a59eb67e22e08cc0aede69926a9af9ee106c97ce6bd9568b05c728a8c6"
+    },
+    {
+      "file": "deps/lua/pristine/src/lparser.h",
+      "accepted_sha256": "0e39ceb3cef13bc8d2d5843f9d0da59289261288dd459ed53ede8441b4ff080b",
+      "prepared_sha256": "0e39ceb3cef13bc8d2d5843f9d0da59289261288dd459ed53ede8441b4ff080b"
+    },
+    {
+      "file": "deps/lua/pristine/src/lprefix.h",
+      "accepted_sha256": "626785d4eda75e9435f0ac21a780ae3b11f8b27dc36934e637a5c2305f906531",
+      "prepared_sha256": "626785d4eda75e9435f0ac21a780ae3b11f8b27dc36934e637a5c2305f906531"
+    },
+    {
+      "file": "deps/lua/pristine/src/lstate.c",
+      "accepted_sha256": "19335bd0c9c3ea691cf0cbadcae4b40c08116aa8477bf661c7fa951e5874af1e",
+      "prepared_sha256": "19335bd0c9c3ea691cf0cbadcae4b40c08116aa8477bf661c7fa951e5874af1e"
+    },
+    {
+      "file": "deps/lua/pristine/src/lstate.h",
+      "accepted_sha256": "62ec82249a387c48dadccbdc39b28fd50b3e25462aaa2564c9eb32d1060ca8f0",
+      "prepared_sha256": "62ec82249a387c48dadccbdc39b28fd50b3e25462aaa2564c9eb32d1060ca8f0"
+    },
+    {
+      "file": "deps/lua/pristine/src/lstring.c",
+      "accepted_sha256": "440700ccb68929ae30339b0837c5e8063e53760a6ce65dca281d9d8e8ffde559",
+      "prepared_sha256": "440700ccb68929ae30339b0837c5e8063e53760a6ce65dca281d9d8e8ffde559"
+    },
+    {
+      "file": "deps/lua/pristine/src/lstring.h",
+      "accepted_sha256": "11174f9fb1a140afb2bad7b44471add3d143eb4fa6f249614fd5958211831f9b",
+      "prepared_sha256": "11174f9fb1a140afb2bad7b44471add3d143eb4fa6f249614fd5958211831f9b"
+    },
+    {
+      "file": "deps/lua/pristine/src/lstrlib.c",
+      "accepted_sha256": "a8de67c6e3dfb773fdc0a599f887f559864a7061c1e633ec48a4e093fbd5dd72",
+      "prepared_sha256": "a8de67c6e3dfb773fdc0a599f887f559864a7061c1e633ec48a4e093fbd5dd72"
+    },
+    {
+      "file": "deps/lua/pristine/src/ltable.c",
+      "accepted_sha256": "a271ba45de53d05c7b47cf8ad86628f2c35c85e920c9d29f6c7e133c5b7664f2",
+      "prepared_sha256": "a271ba45de53d05c7b47cf8ad86628f2c35c85e920c9d29f6c7e133c5b7664f2"
+    },
+    {
+      "file": "deps/lua/pristine/src/ltable.h",
+      "accepted_sha256": "d7d9b827572f379f13d928ec805b8f11b9a93762b8a258cf7aacb14f1e208f4b",
+      "prepared_sha256": "d7d9b827572f379f13d928ec805b8f11b9a93762b8a258cf7aacb14f1e208f4b"
+    },
+    {
+      "file": "deps/lua/pristine/src/ltablib.c",
+      "accepted_sha256": "4bde576ca5012b03161d4bf38b4d8fc2aab1bbed1993eb6e629620f1f5eb0f4c",
+      "prepared_sha256": "4bde576ca5012b03161d4bf38b4d8fc2aab1bbed1993eb6e629620f1f5eb0f4c"
+    },
+    {
+      "file": "deps/lua/pristine/src/ltm.c",
+      "accepted_sha256": "86e85bbb147f63fbbc67dc451f401fe4bb9b7ecc8c05e003f664dfe9717d860b",
+      "prepared_sha256": "86e85bbb147f63fbbc67dc451f401fe4bb9b7ecc8c05e003f664dfe9717d860b"
+    },
+    {
+      "file": "deps/lua/pristine/src/ltm.h",
+      "accepted_sha256": "f4d164a3b22632bbf2ef27e20f89d5a808ccafc9e69d861d81a65c159e5ce341",
+      "prepared_sha256": "f4d164a3b22632bbf2ef27e20f89d5a808ccafc9e69d861d81a65c159e5ce341"
+    },
+    {
+      "file": "deps/lua/pristine/src/lua.c",
+      "accepted_sha256": "17ce8e73dd3586b84076ceaad9d638887723a1c60945c6ee086d723a6e61453f",
+      "prepared_sha256": "17ce8e73dd3586b84076ceaad9d638887723a1c60945c6ee086d723a6e61453f"
+    },
+    {
+      "file": "deps/lua/pristine/src/lua.h",
+      "accepted_sha256": "5e00319e803893f4310b1206394c80b82f03f42609b40ceb306d92a6740d828e",
+      "prepared_sha256": "5e00319e803893f4310b1206394c80b82f03f42609b40ceb306d92a6740d828e"
+    },
+    {
+      "file": "deps/lua/pristine/src/lua.hpp",
+      "accepted_sha256": "6623b8596b2689d85734a233596c591b34e814fccd4776da0a20f5b8d3e23ee7",
+      "prepared_sha256": "6623b8596b2689d85734a233596c591b34e814fccd4776da0a20f5b8d3e23ee7"
+    },
+    {
+      "file": "deps/lua/pristine/src/luac.c",
+      "accepted_sha256": "53df5c02cfe8f6f347d02a355e3c3a5378998b1e2999fda40fcd0f80ea33dbd6",
+      "prepared_sha256": "53df5c02cfe8f6f347d02a355e3c3a5378998b1e2999fda40fcd0f80ea33dbd6"
+    },
+    {
+      "file": "deps/lua/pristine/src/luaconf.h",
+      "accepted_sha256": "1e617ae6f206d701018941b64ed61851da4ffc3573a0f96b73ebe64e340bfb5d",
+      "prepared_sha256": "1e617ae6f206d701018941b64ed61851da4ffc3573a0f96b73ebe64e340bfb5d"
+    },
+    {
+      "file": "deps/lua/pristine/src/lualib.h",
+      "accepted_sha256": "ca847f045256db26a03a654c60ca4db567fc63a54679bba4233114f0c3d532d1",
+      "prepared_sha256": "ca847f045256db26a03a654c60ca4db567fc63a54679bba4233114f0c3d532d1"
+    },
+    {
+      "file": "deps/lua/pristine/src/lundump.c",
+      "accepted_sha256": "4567fbd6689304ae675337805ddb5d13ecda6df0323655bf498978da1a93862c",
+      "prepared_sha256": "4567fbd6689304ae675337805ddb5d13ecda6df0323655bf498978da1a93862c"
+    },
+    {
+      "file": "deps/lua/pristine/src/lundump.h",
+      "accepted_sha256": "7b752cdfbb9d3f476209615b265bb58e51184e5577da7cc02caa449a441912d3",
+      "prepared_sha256": "7b752cdfbb9d3f476209615b265bb58e51184e5577da7cc02caa449a441912d3"
+    },
+    {
+      "file": "deps/lua/pristine/src/lutf8lib.c",
+      "accepted_sha256": "7c44f0b2a6ce5f54991baa1bcb643bf563e2dcd7a59be0cd0b0eefe0936ea04a",
+      "prepared_sha256": "7c44f0b2a6ce5f54991baa1bcb643bf563e2dcd7a59be0cd0b0eefe0936ea04a"
+    },
+    {
+      "file": "deps/lua/pristine/src/lvm.c",
+      "accepted_sha256": "632ca1fc6400301e3b11195d4830e948e6b4a50b6262187307eb8afe1f769c22",
+      "prepared_sha256": "632ca1fc6400301e3b11195d4830e948e6b4a50b6262187307eb8afe1f769c22"
+    },
+    {
+      "file": "deps/lua/pristine/src/lvm.h",
+      "accepted_sha256": "9a8f5f3189ee4835a0e12bca3023315fa373c161a77812ce92cdea90a92d4a17",
+      "prepared_sha256": "9a8f5f3189ee4835a0e12bca3023315fa373c161a77812ce92cdea90a92d4a17"
+    },
+    {
+      "file": "deps/lua/pristine/src/lzio.c",
+      "accepted_sha256": "9495c7396d04a857e4e6ae917a72ab6906855d30f7dc851527a87cc16d01fcc1",
+      "prepared_sha256": "9495c7396d04a857e4e6ae917a72ab6906855d30f7dc851527a87cc16d01fcc1"
+    },
+    {
+      "file": "deps/lua/pristine/src/lzio.h",
+      "accepted_sha256": "e9be4389ffa2936e462bc39e11de0341c5b14a99ee83f7f5e1683c52c9c2d675",
+      "prepared_sha256": "e9be4389ffa2936e462bc39e11de0341c5b14a99ee83f7f5e1683c52c9c2d675"
+    },
+    {
+      "file": "examples/mods/hello/main.lua",
+      "accepted_sha256": "f4b0586fe6751b6eae4b1cb09334b8e30df2a7532cbadcd6724dcaadaee2e8ef",
+      "prepared_sha256": "f4b0586fe6751b6eae4b1cb09334b8e30df2a7532cbadcd6724dcaadaee2e8ef"
+    },
+    {
+      "file": "examples/mods/hello/mod.ini",
+      "accepted_sha256": "14743fb83306f70aff5685aa681a371a1ea9a695782678cea3b8c3e4526f65bb",
+      "prepared_sha256": "14743fb83306f70aff5685aa681a371a1ea9a695782678cea3b8c3e4526f65bb"
+    },
+    {
+      "file": "recomp/gen.py",
+      "accepted_sha256": "7a29a6a0d9eceae954d50b708d5e69851ffaa03a8f36613543a780a749157d7b",
+      "prepared_sha256": "7a29a6a0d9eceae954d50b708d5e69851ffaa03a8f36613543a780a749157d7b"
+    },
+    {
+      "file": "recomp/mod_menu.py",
+      "accepted_sha256": "172de91978a356a8054c59c10dad29a2bfe4e1bf671744513fe8f8756f956db9",
+      "prepared_sha256": "172de91978a356a8054c59c10dad29a2bfe4e1bf671744513fe8f8756f956db9"
+    },
+    {
+      "file": "recomp/patches-upd.txt",
+      "accepted_sha256": "19f322dcdd26adee25bd8e0091a8456a9f861fe1b532e0fee1e33102d7d08191",
+      "prepared_sha256": "19f322dcdd26adee25bd8e0091a8456a9f861fe1b532e0fee1e33102d7d08191"
+    },
+    {
+      "file": "runtime/cpu.h",
+      "accepted_sha256": "02ba018906e035f49d386585eedc76656b0aadaaf142a84000f0f8ec94923888",
+      "prepared_sha256": "02ba018906e035f49d386585eedc76656b0aadaaf142a84000f0f8ec94923888"
+    },
+    {
+      "file": "runtime/main.c",
+      "accepted_sha256": "63f828ed555b31d51b68cbdd7a5db30e6482e4faab7828cf350dfb15de7b336c",
+      "prepared_sha256": "63f828ed555b31d51b68cbdd7a5db30e6482e4faab7828cf350dfb15de7b336c"
+    },
+    {
+      "file": "runtime/mod_internal.h",
+      "accepted_sha256": "0363a4f2db7b8cd052d75a1229cb7fa1c6fae486a5d7d43c1bb435cd53c1c152",
+      "prepared_sha256": "0363a4f2db7b8cd052d75a1229cb7fa1c6fae486a5d7d43c1bb435cd53c1c152"
+    },
+    {
+      "file": "runtime/mod_menu.c",
+      "accepted_sha256": "da22942753a1dea963fdafd40feaa5c863edee2ae02bc399535b6d4dc1b1d32e",
+      "prepared_sha256": "da22942753a1dea963fdafd40feaa5c863edee2ae02bc399535b6d4dc1b1d32e"
+    },
+    {
+      "file": "runtime/mod_menu.h",
+      "accepted_sha256": "f09fe505d74396c25fa27551bc8d80ed749343056b0eee8796ebbc666224a7a3",
+      "prepared_sha256": "f09fe505d74396c25fa27551bc8d80ed749343056b0eee8796ebbc666224a7a3"
+    },
+    {
+      "file": "runtime/mod_menu_adapter.c",
+      "accepted_sha256": "e1a0af400fa53aa5ababced4f269bab225cafbec99ccb2776d3eb960182722bb",
+      "prepared_sha256": "e1a0af400fa53aa5ababced4f269bab225cafbec99ccb2776d3eb960182722bb"
+    },
+    {
+      "file": "runtime/mod_package.c",
+      "accepted_sha256": "8a705fd9a1f70a840a4bb036948967748ab18c7c5e4db56e0826b3ebaeb4d11c",
+      "prepared_sha256": "8a705fd9a1f70a840a4bb036948967748ab18c7c5e4db56e0826b3ebaeb4d11c"
+    },
+    {
+      "file": "runtime/mod_provider.c",
+      "accepted_sha256": "bf511c1bf5274aa11878237c368e05b7253a712364735cb997c7782c815b3545",
+      "prepared_sha256": "ef8603a54a23d55995a75d22824c1e096ca257b944ba12ccaba6f166d18b7b3e"
+    },
+    {
+      "file": "runtime/mod_provider.h",
+      "accepted_sha256": "fe2228a08387df8560ebb7d18ed9907af76b2502c810263c398044928542ef0d",
+      "prepared_sha256": "fe2228a08387df8560ebb7d18ed9907af76b2502c810263c398044928542ef0d"
+    },
+    {
+      "file": "runtime/mod_provider_abi.h",
+      "accepted_sha256": "b578878b83ee69093864ced4e7e5865d33c585531d50fef42c4bb81c90726673",
+      "prepared_sha256": "b578878b83ee69093864ced4e7e5865d33c585531d50fef42c4bb81c90726673"
+    },
+    {
+      "file": "runtime/mod_provider_platform.c",
+      "accepted_sha256": "81b651bc5a96f277d57ae59387c57602a0425d80a25ebc6cecd3e9fadd949e5f",
+      "prepared_sha256": "81b651bc5a96f277d57ae59387c57602a0425d80a25ebc6cecd3e9fadd949e5f"
+    },
+    {
+      "file": "runtime/mod_provider_platform.h",
+      "accepted_sha256": "101e0d2a1fb1f07360b78dcf10d25ed6828e928b1be76d48cedd2806272c8bbe",
+      "prepared_sha256": "101e0d2a1fb1f07360b78dcf10d25ed6828e928b1be76d48cedd2806272c8bbe"
+    },
+    {
+      "file": "runtime/mod_provider_service_abi.h",
+      "accepted_sha256": "41d63dca06bd180eed3662079e0330a9aec6876a533f67ca7ef9fa9119306ab7",
+      "prepared_sha256": "41d63dca06bd180eed3662079e0330a9aec6876a533f67ca7ef9fa9119306ab7"
+    },
+    {
+      "file": "runtime/mod_runtime.c",
+      "accepted_sha256": "734065638671b7e165e7659e6b8ffb6a901eae3ee1aad4a4cba147debff06ec1",
+      "prepared_sha256": "734065638671b7e165e7659e6b8ffb6a901eae3ee1aad4a4cba147debff06ec1"
+    },
+    {
+      "file": "runtime/mod_settings.c",
+      "accepted_sha256": "8257fdf7e81150dace17bf2bd86042a5212ca99894ce5a5cd505af7ddc7eae3b",
+      "prepared_sha256": "8257fdf7e81150dace17bf2bd86042a5212ca99894ce5a5cd505af7ddc7eae3b"
+    },
+    {
+      "file": "runtime/mod_settings.h",
+      "accepted_sha256": "79802f0b7f70643463206a4e631307a8eb1ed67e69509bd10d97b230ea144068",
+      "prepared_sha256": "79802f0b7f70643463206a4e631307a8eb1ed67e69509bd10d97b230ea144068"
+    },
+    {
+      "file": "runtime/mod_text.h",
+      "accepted_sha256": "d3aacfa92382b2e2e07e8ea6b6158bf8470c761f997cee63b75a145a34635948",
+      "prepared_sha256": "d3aacfa92382b2e2e07e8ea6b6158bf8470c761f997cee63b75a145a34635948"
+    },
+    {
+      "file": "runtime/mods.c",
+      "accepted_sha256": "1abbfa6480e52929dcd47176745868d77b5ff5a04f6d016a7728fb31217336bf",
+      "prepared_sha256": "1abbfa6480e52929dcd47176745868d77b5ff5a04f6d016a7728fb31217336bf"
+    },
+    {
+      "file": "runtime/mods.h",
+      "accepted_sha256": "54cd0f184fa6e39eeb1da83a12b691021e283fe814748dd1dc99d0527b30f24e",
+      "prepared_sha256": "54cd0f184fa6e39eeb1da83a12b691021e283fe814748dd1dc99d0527b30f24e"
+    },
+    {
+      "file": "runtime/ov_probe.c",
+      "accepted_sha256": "a47b117c697b53935bf758d6cfebb30c5a227e92fc409b4f09831b59f2ce3266",
+      "prepared_sha256": "a47b117c697b53935bf758d6cfebb30c5a227e92fc409b4f09831b59f2ce3266"
+    },
+    {
+      "file": "runtime/platform/linux.c",
+      "accepted_sha256": "ec085a3d2d4b30258a365b802bfc6f419297cd212c8f0f79bc8a5b6d0485fb2b",
+      "prepared_sha256": "ec085a3d2d4b30258a365b802bfc6f419297cd212c8f0f79bc8a5b6d0485fb2b"
+    },
+    {
+      "file": "runtime/platform/win32.c",
+      "accepted_sha256": "b8a303824903a41d3c3f1de10b501e89be22608720702d70c39d7b3b906fd913",
+      "prepared_sha256": "b8a303824903a41d3c3f1de10b501e89be22608720702d70c39d7b3b906fd913"
+    },
+    {
+      "file": "runtime/swkbd.c",
+      "accepted_sha256": "8cd26c249a0c3cc66a66fd895e897c090266d0377dfc745b2781528af7f279c9",
+      "prepared_sha256": "8cd26c249a0c3cc66a66fd895e897c090266d0377dfc745b2781528af7f279c9"
+    },
+    {
+      "file": "runtime/swkbd_sdl.c",
+      "accepted_sha256": "ec3ef0ae7782dfd31c52c686b52d6f3b66fd50e16376d8b56ab01146085dc6d1",
+      "prepared_sha256": "ec3ef0ae7782dfd31c52c686b52d6f3b66fd50e16376d8b56ab01146085dc6d1"
+    },
+    {
+      "file": "runtime/ui/menu.cpp",
+      "accepted_sha256": "c1b1007a6acdfb4ec1d809694436f60008547d08af2f7f4abce1b1fc2964fa0f",
+      "prepared_sha256": "c1b1007a6acdfb4ec1d809694436f60008547d08af2f7f4abce1b1fc2964fa0f"
+    },
+    {
+      "file": "runtime/ui/mods_page.cpp",
+      "accepted_sha256": "ba1e87311b06232bf4be5877a19524c38f92b67bd2cab86add4a90d87856c8f9",
+      "prepared_sha256": "ba1e87311b06232bf4be5877a19524c38f92b67bd2cab86add4a90d87856c8f9"
+    },
+    {
+      "file": "runtime/ui/mods_page.h",
+      "accepted_sha256": "68ac0475cef7be98bfc48c485cc0e345075204c321f755f6a55c2f8d6fe16d15",
+      "prepared_sha256": "68ac0475cef7be98bfc48c485cc0e345075204c321f755f6a55c2f8d6fe16d15"
+    },
+    {
+      "file": "runtime/ui_text.c",
+      "accepted_sha256": "df448ffda020f3d79fb53fcade14d589fb19603c7e49f8c09fb1cc75ce890623",
+      "prepared_sha256": "df448ffda020f3d79fb53fcade14d589fb19603c7e49f8c09fb1cc75ce890623"
+    },
+    {
+      "file": "runtime/ui_text.h",
+      "accepted_sha256": "cb6f039d1cfa00f3aeb1e65b33d5aec3ead22f5056da948d5d2b26f1c036effd",
+      "prepared_sha256": "cb6f039d1cfa00f3aeb1e65b33d5aec3ead22f5056da948d5d2b26f1c036effd"
+    },
+    {
+      "file": "tests/actions/abi_probe.c",
+      "accepted_sha256": "c83c876314b94fff3808e0d59c9c9041aa1fe27de9d17232c218fa9f07299e27",
+      "prepared_sha256": "c83c876314b94fff3808e0d59c9c9041aa1fe27de9d17232c218fa9f07299e27"
+    },
+    {
+      "file": "tests/actions/check.py",
+      "accepted_sha256": "ef2bc7638fba36201bde6d9333d3ce6ad929ebe524b24a654cd5d231909a6005",
+      "prepared_sha256": "ecdb2d22ec3802f95d95a82393bd5b29766601c16dceab454ce9385b83e8517e"
+    },
+    {
+      "file": "tests/actions/layout.c",
+      "accepted_sha256": "96c2c55f17bd5db1532cd426043490847144422d9caddae29f140efaa023a9cd",
+      "prepared_sha256": "96c2c55f17bd5db1532cd426043490847144422d9caddae29f140efaa023a9cd"
+    },
+    {
+      "file": "tests/actions/lua_driver.c",
+      "accepted_sha256": "51671d47e3b6f7d8a4a56305cbef04b0c9bed112545bc0fa06c6f27ec7230bf4",
+      "prepared_sha256": "51671d47e3b6f7d8a4a56305cbef04b0c9bed112545bc0fa06c6f27ec7230bf4"
+    },
+    {
+      "file": "tests/actions/native_driver.c",
+      "accepted_sha256": "71d8e63c1614b715ce237bf483f1fba6996dacec9da1de88db44df24806dbbb8",
+      "prepared_sha256": "71d8e63c1614b715ce237bf483f1fba6996dacec9da1de88db44df24806dbbb8"
+    },
+    {
+      "file": "tests/actions/packages/alpha/main.lua",
+      "accepted_sha256": "e957374a734c35e021324e4754e090886be5d87c6a332a1df896f046cc2753bf",
+      "prepared_sha256": "e957374a734c35e021324e4754e090886be5d87c6a332a1df896f046cc2753bf"
+    },
+    {
+      "file": "tests/actions/packages/alpha/mod.ini",
+      "accepted_sha256": "35c09fc9553c0c30246e30c6d6d45dba1b4396ca3305521ef67f3cfddb4cd3d6",
+      "prepared_sha256": "35c09fc9553c0c30246e30c6d6d45dba1b4396ca3305521ef67f3cfddb4cd3d6"
+    },
+    {
+      "file": "tests/actions/packages/beta/main.lua",
+      "accepted_sha256": "b3f0d97922655718c14b8f7676a463dd189b057838ae65bc45c3427c754b05a1",
+      "prepared_sha256": "b3f0d97922655718c14b8f7676a463dd189b057838ae65bc45c3427c754b05a1"
+    },
+    {
+      "file": "tests/actions/packages/beta/mod.ini",
+      "accepted_sha256": "eb6ef47e68af711ab92d3e6b4c101ae5bb49eee581ca8bb602137604a70b75e4",
+      "prepared_sha256": "eb6ef47e68af711ab92d3e6b4c101ae5bb49eee581ca8bb602137604a70b75e4"
+    },
+    {
+      "file": "tests/actions/packages/catalog.txt",
+      "accepted_sha256": "f809d3b0e748b644e3d909d5bf3a763ceab46098ec884c1fa53c44253d69a4ab",
+      "prepared_sha256": "f809d3b0e748b644e3d909d5bf3a763ceab46098ec884c1fa53c44253d69a4ab"
+    },
+    {
+      "file": "tests/actions/packages/disabled/main.lua",
+      "accepted_sha256": "e8a89b58062c739f6d7c61e948d2498bbe589cd5354c4e0807f0926714f1d461",
+      "prepared_sha256": "e8a89b58062c739f6d7c61e948d2498bbe589cd5354c4e0807f0926714f1d461"
+    },
+    {
+      "file": "tests/actions/packages/disabled/mod.ini",
+      "accepted_sha256": "6bc117c48cedae7408ea003ecbddd90791da04c87f6665e914d68676ad4e5216",
+      "prepared_sha256": "6bc117c48cedae7408ea003ecbddd90791da04c87f6665e914d68676ad4e5216"
+    },
+    {
+      "file": "tests/actions/packages/enabled.txt",
+      "accepted_sha256": "c6f5bbf726a77fadc2b50d26950b02a6b2b32836064a0071a2bdc37d56cad7fe",
+      "prepared_sha256": "c6f5bbf726a77fadc2b50d26950b02a6b2b32836064a0071a2bdc37d56cad7fe"
+    },
+    {
+      "file": "tests/actions/packages/incompatible/main.lua",
+      "accepted_sha256": "e8a89b58062c739f6d7c61e948d2498bbe589cd5354c4e0807f0926714f1d461",
+      "prepared_sha256": "e8a89b58062c739f6d7c61e948d2498bbe589cd5354c4e0807f0926714f1d461"
+    },
+    {
+      "file": "tests/actions/packages/incompatible/mod.ini",
+      "accepted_sha256": "13f96e18772c6585498f314fff921bb7d7a15ba824c8bbb739ebd03b5bb27766",
+      "prepared_sha256": "13f96e18772c6585498f314fff921bb7d7a15ba824c8bbb739ebd03b5bb27766"
+    },
+    {
+      "file": "tests/actions/service_c.c",
+      "accepted_sha256": "74f69abd12d183d47c8e5cba1ecd88380334416bb7966587ce2885632315f7fb",
+      "prepared_sha256": "191eca3d46234710e947d69689d42cad824a67c4ece18b8f368beb8ae36be61f"
+    },
+    {
+      "file": "tests/actions/service_cpp.cpp",
+      "accepted_sha256": "605bccf19b057c5549cb49b07def3540adcf663bb082ba675fca363a73807c48",
+      "prepared_sha256": "605bccf19b057c5549cb49b07def3540adcf663bb082ba675fca363a73807c48"
+    },
+    {
+      "file": "tests/actions/support.h",
+      "accepted_sha256": "530c565526e247631625ab26e0627dd598c288f016e6ec47d06193fe2b153e37",
+      "prepared_sha256": "530c565526e247631625ab26e0627dd598c288f016e6ec47d06193fe2b153e37"
+    },
+    {
+      "file": "tests/actions/test_actions.py",
+      "accepted_sha256": "d760bb84554bff106b747498b656aa4bf01a559d7226b40b311637e64a19b746",
+      "prepared_sha256": "c9f799dc288363b7765a31024e325a834f81be94677dea70e2a15aa1273a254c"
+    },
+    {
+      "file": "tests/actions/windows-check.ps1",
+      "accepted_sha256": "11b71c4c1225beeb0f4b52ea138f93c8cacaa6cc5eaed47ac89450c1a48f705a",
+      "prepared_sha256": "11b71c4c1225beeb0f4b52ea138f93c8cacaa6cc5eaed47ac89450c1a48f705a"
+    },
+    {
+      "file": "tests/controller_keyboard_check.cpp",
+      "accepted_sha256": "2b6980edea6aef4589c9f1eae2e1aae3c6f0ef44fd7ac20645824b6067c4d2b1",
+      "prepared_sha256": "2b6980edea6aef4589c9f1eae2e1aae3c6f0ef44fd7ac20645824b6067c4d2b1"
+    },
+    {
+      "file": "tests/controller_keyboard_check.py",
+      "accepted_sha256": "7c1ef9c27b5b72d70ab5dc6341980eae512225637fc7da2edb821dd1901bde71",
+      "prepared_sha256": "7c1ef9c27b5b72d70ab5dc6341980eae512225637fc7da2edb821dd1901bde71"
+    },
+    {
+      "file": "tests/menu/adapter.c",
+      "accepted_sha256": "788d268721d466d4c685a8b8ac288445487997227fb9cdffd74bdcf982860809",
+      "prepared_sha256": "788d268721d466d4c685a8b8ac288445487997227fb9cdffd74bdcf982860809"
+    },
+    {
+      "file": "tests/menu/check.py",
+      "accepted_sha256": "42ea79fde4d2115843c9040d407070301cc6226a64cba8b5d7b49014dc198ac1",
+      "prepared_sha256": "42ea79fde4d2115843c9040d407070301cc6226a64cba8b5d7b49014dc198ac1"
+    },
+    {
+      "file": "tests/menu/check_docs.py",
+      "accepted_sha256": "b49ac713fba33ed103abb8560254793cac6c761006140e54202f73b86c46eb0e",
+      "prepared_sha256": "b49ac713fba33ed103abb8560254793cac6c761006140e54202f73b86c46eb0e"
+    },
+    {
+      "file": "tests/menu/contract.py",
+      "accepted_sha256": "6455277ac623d01484e2d2c5377731fc445c098c2c59ca6cddb357bd71665be1",
+      "prepared_sha256": "6455277ac623d01484e2d2c5377731fc445c098c2c59ca6cddb357bd71665be1"
+    },
+    {
+      "file": "tests/menu/test_lua.py",
+      "accepted_sha256": "7736cb29db5dc5673ecc095958e44403d3a05f59a46d2c1228bed4e61e319c49",
+      "prepared_sha256": "82f65b0ff56f2f45a285b6954e7d99fe2881f3f9a542a0386104d1693fcfa3bb"
+    },
+    {
+      "file": "tests/menu/test_validation.py",
+      "accepted_sha256": "5cb2f2fe1510675f3054b0a7bc407dadb912088fdda30b8b67c4fff1f3ff8bf6",
+      "prepared_sha256": "5cb2f2fe1510675f3054b0a7bc407dadb912088fdda30b8b67c4fff1f3ff8bf6"
+    },
+    {
+      "file": "tests/menu/windows-check.ps1",
+      "accepted_sha256": "6e31736f1da2ba36268406919261355a6ac10685e3c898058de50aab1c2cfcf3",
+      "prepared_sha256": "6e31736f1da2ba36268406919261355a6ac10685e3c898058de50aab1c2cfcf3"
+    },
+    {
+      "file": "tests/mods/baseline_fix_fixture.py",
+      "accepted_sha256": "0b6441870040a0b16919401574885ea74ec17f250026d49167d0ac2dc8f2b2c7",
+      "prepared_sha256": "0b6441870040a0b16919401574885ea74ec17f250026d49167d0ac2dc8f2b2c7"
+    },
+    {
+      "file": "tests/mods/check.py",
+      "accepted_sha256": "e741e7ce593e20207c665476c04a0e2279fd48b1c69018ef998ec0b97df1d629",
+      "prepared_sha256": "e741e7ce593e20207c665476c04a0e2279fd48b1c69018ef998ec0b97df1d629"
+    },
+    {
+      "file": "tests/mods/dependency-regressions.lua",
+      "accepted_sha256": "17ab5f05e1188ea75a3ca24322dbb1a1d3cd19217667132bd10e6b1257f8a2fe",
+      "prepared_sha256": "17ab5f05e1188ea75a3ca24322dbb1a1d3cd19217667132bd10e6b1257f8a2fe"
+    },
+    {
+      "file": "tests/mods/driver.c",
+      "accepted_sha256": "b491af5a1e699feb5471926ba4910887d52b2cb325a1cd6b3dd5a6ce82eebbd6",
+      "prepared_sha256": "b491af5a1e699feb5471926ba4910887d52b2cb325a1cd6b3dd5a6ce82eebbd6"
+    },
+    {
+      "file": "tests/mods/lifecycle_driver.c",
+      "accepted_sha256": "3383e0f6610002ae5e74f8a3aa8782cb08e97c4b8b8ee13ce928c5965aa37df8",
+      "prepared_sha256": "3383e0f6610002ae5e74f8a3aa8782cb08e97c4b8b8ee13ce928c5965aa37df8"
+    },
+    {
+      "file": "tests/mods/packages/alpha/main.lua",
+      "accepted_sha256": "24e83ec64a1b4207fe55b81f0a1844014331901835d6f792963c3411d67041a6",
+      "prepared_sha256": "24e83ec64a1b4207fe55b81f0a1844014331901835d6f792963c3411d67041a6"
+    },
+    {
+      "file": "tests/mods/packages/alpha/mod.ini",
+      "accepted_sha256": "85952e07021a2fcac07a93b47abbf538cc2e1fcc4f355b53ae543146f17fa885",
+      "prepared_sha256": "85952e07021a2fcac07a93b47abbf538cc2e1fcc4f355b53ae543146f17fa885"
+    },
+    {
+      "file": "tests/mods/packages/beta/main.lua",
+      "accepted_sha256": "8a6d22e657c4b3025e90265f95e3086e4ce562091774f0ad19ed9564827cb02b",
+      "prepared_sha256": "8a6d22e657c4b3025e90265f95e3086e4ce562091774f0ad19ed9564827cb02b"
+    },
+    {
+      "file": "tests/mods/packages/beta/mod.ini",
+      "accepted_sha256": "55d87948496725686824fc4db0de638b394e3558f13006bf18df3ef64bbf27f3",
+      "prepared_sha256": "55d87948496725686824fc4db0de638b394e3558f13006bf18df3ef64bbf27f3"
+    },
+    {
+      "file": "tests/mods/packages/enabled.txt",
+      "accepted_sha256": "e49c81e2d2f84e259d40e2fb8192f3bcd198b355184845d76d8f58807d0d78ee",
+      "prepared_sha256": "e49c81e2d2f84e259d40e2fb8192f3bcd198b355184845d76d8f58807d0d78ee"
+    },
+    {
+      "file": "tests/mods/platform_stub.c",
+      "accepted_sha256": "45457b352cab6c0433be431cf4e9441fab4743c314c0c0e62776018875ce6f9d",
+      "prepared_sha256": "45457b352cab6c0433be431cf4e9441fab4743c314c0c0e62776018875ce6f9d"
+    },
+    {
+      "file": "tests/mods/runtime_test.c",
+      "accepted_sha256": "1b0a220c1c6b785a2b3cf1eefe16eb0220a7375737818f8186031c8a5c1c171c",
+      "prepared_sha256": "1b0a220c1c6b785a2b3cf1eefe16eb0220a7375737818f8186031c8a5c1c171c"
+    },
+    {
+      "file": "tests/mods/settings_driver.c",
+      "accepted_sha256": "edc7311cfe39474639ebed8ee710dd158a63ff5cb599d62feffcacb824b7da08",
+      "prepared_sha256": "edc7311cfe39474639ebed8ee710dd158a63ff5cb599d62feffcacb824b7da08"
+    },
+    {
+      "file": "tests/mods/settings_io.c",
+      "accepted_sha256": "584407b1b1cf26d6f2bb97c6431f2889c9e75b2c5f1a50a8e01f13ea4b467127",
+      "prepared_sha256": "584407b1b1cf26d6f2bb97c6431f2889c9e75b2c5f1a50a8e01f13ea4b467127"
+    },
+    {
+      "file": "tests/mods/settings_test.c",
+      "accepted_sha256": "41621aa194ecdfd3ac086c5d8b36d886a29c49bc9398e67923ff0adba255819c",
+      "prepared_sha256": "41621aa194ecdfd3ac086c5d8b36d886a29c49bc9398e67923ff0adba255819c"
+    },
+    {
+      "file": "tests/mods/startup_driver.c",
+      "accepted_sha256": "916e28f2225bc091546c8115eb39f5dc4f6b8de06a4105a8e241392336b0c42d",
+      "prepared_sha256": "916e28f2225bc091546c8115eb39f5dc4f6b8de06a4105a8e241392336b0c42d"
+    },
+    {
+      "file": "tests/mods/test_runtime.py",
+      "accepted_sha256": "78008997bce55bac2e5a9893b478cd71b36edadf655d485c163f9ecd85d97134",
+      "prepared_sha256": "78008997bce55bac2e5a9893b478cd71b36edadf655d485c163f9ecd85d97134"
+    },
+    {
+      "file": "tests/mods/test_save_retry.py",
+      "accepted_sha256": "ad4c4a1ff4936e46cecdd9346a875ae1d60d1bbb006c9108bc7acea028530b5d",
+      "prepared_sha256": "ad4c4a1ff4936e46cecdd9346a875ae1d60d1bbb006c9108bc7acea028530b5d"
+    },
+    {
+      "file": "tests/mods/test_settings.py",
+      "accepted_sha256": "64d05f29bcb42a88c7c90251021963c9de33317efcaab8aa1f324b01deb74f6a",
+      "prepared_sha256": "64d05f29bcb42a88c7c90251021963c9de33317efcaab8aa1f324b01deb74f6a"
+    },
+    {
+      "file": "tests/mods/test_settings_files.py",
+      "accepted_sha256": "6c9c28523587924c2353103f3b6c226d4b4a67507d535e6b193242c088c35610",
+      "prepared_sha256": "6c9c28523587924c2353103f3b6c226d4b4a67507d535e6b193242c088c35610"
+    },
+    {
+      "file": "tests/mods/test_startup_failures.py",
+      "accepted_sha256": "c72e91dc27142b762e2cb622708b4a3872440fb4a7e330f28a6b919bc60f5432",
+      "prepared_sha256": "c72e91dc27142b762e2cb622708b4a3872440fb4a7e330f28a6b919bc60f5432"
+    },
+    {
+      "file": "tests/mods/ui-packages/alpha/main.lua",
+      "accepted_sha256": "e047dce09b18308a5b7f1d940b42e222a352cec0fc3d96e049c41fc1b41396b4",
+      "prepared_sha256": "e047dce09b18308a5b7f1d940b42e222a352cec0fc3d96e049c41fc1b41396b4"
+    },
+    {
+      "file": "tests/mods/ui-packages/alpha/mod.ini",
+      "accepted_sha256": "35c09fc9553c0c30246e30c6d6d45dba1b4396ca3305521ef67f3cfddb4cd3d6",
+      "prepared_sha256": "35c09fc9553c0c30246e30c6d6d45dba1b4396ca3305521ef67f3cfddb4cd3d6"
+    },
+    {
+      "file": "tests/mods/ui-packages/beta/main.lua",
+      "accepted_sha256": "125dc4c3cdfdabd398849250f1da1b1af16ca9033c063a3b4c6a85b3dbfc64e0",
+      "prepared_sha256": "125dc4c3cdfdabd398849250f1da1b1af16ca9033c063a3b4c6a85b3dbfc64e0"
+    },
+    {
+      "file": "tests/mods/ui-packages/beta/mod.ini",
+      "accepted_sha256": "eb6ef47e68af711ab92d3e6b4c101ae5bb49eee581ca8bb602137604a70b75e4",
+      "prepared_sha256": "eb6ef47e68af711ab92d3e6b4c101ae5bb49eee581ca8bb602137604a70b75e4"
+    },
+    {
+      "file": "tests/mods/ui-packages/catalog.txt",
+      "accepted_sha256": "f809d3b0e748b644e3d909d5bf3a763ceab46098ec884c1fa53c44253d69a4ab",
+      "prepared_sha256": "f809d3b0e748b644e3d909d5bf3a763ceab46098ec884c1fa53c44253d69a4ab"
+    },
+    {
+      "file": "tests/mods/ui-packages/disabled/main.lua",
+      "accepted_sha256": "e8a89b58062c739f6d7c61e948d2498bbe589cd5354c4e0807f0926714f1d461",
+      "prepared_sha256": "e8a89b58062c739f6d7c61e948d2498bbe589cd5354c4e0807f0926714f1d461"
+    },
+    {
+      "file": "tests/mods/ui-packages/disabled/mod.ini",
+      "accepted_sha256": "6bc117c48cedae7408ea003ecbddd90791da04c87f6665e914d68676ad4e5216",
+      "prepared_sha256": "6bc117c48cedae7408ea003ecbddd90791da04c87f6665e914d68676ad4e5216"
+    },
+    {
+      "file": "tests/mods/ui-packages/enabled.txt",
+      "accepted_sha256": "c6f5bbf726a77fadc2b50d26950b02a6b2b32836064a0071a2bdc37d56cad7fe",
+      "prepared_sha256": "c6f5bbf726a77fadc2b50d26950b02a6b2b32836064a0071a2bdc37d56cad7fe"
+    },
+    {
+      "file": "tests/mods/ui-packages/incompatible/main.lua",
+      "accepted_sha256": "e8a89b58062c739f6d7c61e948d2498bbe589cd5354c4e0807f0926714f1d461",
+      "prepared_sha256": "e8a89b58062c739f6d7c61e948d2498bbe589cd5354c4e0807f0926714f1d461"
+    },
+    {
+      "file": "tests/mods/ui-packages/incompatible/mod.ini",
+      "accepted_sha256": "13f96e18772c6585498f314fff921bb7d7a15ba824c8bbb739ebd03b5bb27766",
+      "prepared_sha256": "13f96e18772c6585498f314fff921bb7d7a15ba824c8bbb739ebd03b5bb27766"
+    },
+    {
+      "file": "tests/mods_ui_check.cpp",
+      "accepted_sha256": "3d9da7537831a6a484b278fec7a19ac2738404eb9e40372c187abf74539d0d43",
+      "prepared_sha256": "3d9da7537831a6a484b278fec7a19ac2738404eb9e40372c187abf74539d0d43"
+    },
+    {
+      "file": "tests/providers/abi_probe.c",
+      "accepted_sha256": "1fa7f1331e11a5e8c078a88a94ab34f8a63be8a94af814d9c4747bced7f307dc",
+      "prepared_sha256": "1fa7f1331e11a5e8c078a88a94ab34f8a63be8a94af814d9c4747bced7f307dc"
+    },
+    {
+      "file": "tests/providers/check.py",
+      "accepted_sha256": "ca4aaee955ac4253808fe82cfe5d31afb577da0f4491b76e914fe0f1ffee6d54",
+      "prepared_sha256": "ca4aaee955ac4253808fe82cfe5d31afb577da0f4491b76e914fe0f1ffee6d54"
+    },
+    {
+      "file": "tests/providers/driver.c",
+      "accepted_sha256": "406a2819fc7a49cd1a14a4bc6504bdc208f30208a63206324f883776b3b41acc",
+      "prepared_sha256": "406a2819fc7a49cd1a14a4bc6504bdc208f30208a63206324f883776b3b41acc"
+    },
+    {
+      "file": "tests/providers/fixture_c.c",
+      "accepted_sha256": "84573eef29ff669712157131214ffb2df7d9317e1da2cf7efb932f0a5ad7fa60",
+      "prepared_sha256": "84573eef29ff669712157131214ffb2df7d9317e1da2cf7efb932f0a5ad7fa60"
+    },
+    {
+      "file": "tests/providers/fixture_cpp.cpp",
+      "accepted_sha256": "df40b7c04a45102828e3289a52f7be8c532049d284922bcf654ace61645c19e4",
+      "prepared_sha256": "df40b7c04a45102828e3289a52f7be8c532049d284922bcf654ace61645c19e4"
+    },
+    {
+      "file": "tests/providers/fixture_support.h",
+      "accepted_sha256": "7448b47edbafc767c31d39d4bf2a92aab55ba13df81e0f1066ac9530f28f5082",
+      "prepared_sha256": "7448b47edbafc767c31d39d4bf2a92aab55ba13df81e0f1066ac9530f28f5082"
+    },
+    {
+      "file": "tests/providers/layout.c",
+      "accepted_sha256": "668e7964410003e6d807b7d0c6bca023c437d4c2119ac2cb2534a6cca01c25cd",
+      "prepared_sha256": "668e7964410003e6d807b7d0c6bca023c437d4c2119ac2cb2534a6cca01c25cd"
+    },
+    {
+      "file": "tests/providers/lua_driver.c",
+      "accepted_sha256": "d72342054efc1c907803dd15388e0ec5e75c08217b3dc99d9183746acb6655c6",
+      "prepared_sha256": "d72342054efc1c907803dd15388e0ec5e75c08217b3dc99d9183746acb6655c6"
+    },
+    {
+      "file": "tests/providers/test_loader.py",
+      "accepted_sha256": "5fc7eb4af3b9e0eda4d9574c97827b77b97e3412dfb647c72943d2fbc5890aa5",
+      "prepared_sha256": "5fc7eb4af3b9e0eda4d9574c97827b77b97e3412dfb647c72943d2fbc5890aa5"
+    },
+    {
+      "file": "tests/providers/windows-check.ps1",
+      "accepted_sha256": "72ee52d2530a13e7a9b7b091de4d89d3f1f3afe22c669361fefa61199fef6e82",
+      "prepared_sha256": "72ee52d2530a13e7a9b7b091de4d89d3f1f3afe22c669361fefa61199fef6e82"
+    },
+    {
+      "file": "tools/build_game.py",
+      "accepted_sha256": "c89e2f25e6781bd7d4500a024196fe756618510747700cec5867c55b4e3b7dfe",
+      "prepared_sha256": "c89e2f25e6781bd7d4500a024196fe756618510747700cec5867c55b4e3b7dfe"
+    },
+    {
+      "file": "tools/prepare_lua.py",
+      "accepted_sha256": "318ea7a5bd95872db939c3ebb5c26f3d07ada0c20eff3013b27ed722204f4afe",
+      "prepared_sha256": "318ea7a5bd95872db939c3ebb5c26f3d07ada0c20eff3013b27ed722204f4afe"
+    }
+  ],
+  "reconstruction_commits": [
+    {
+      "commit": "59f73d92faa89531babe308673e66a243d973de0",
+      "title": "Vendor pinned Lua sources and prepare explicit upstream fixes",
+      "paths": [
+        "THIRD_PARTY_NOTICES.md",
+        "deps/lua/LICENSE.txt",
+        "deps/lua/README.md",
+        "deps/lua/patches/0b29f408433e92953cc72b1d3e06c7ac8139e439.patch",
+        "deps/lua/patches/15b2a78106f85a3f8ef2efe5683148d9dad84b33.patch",
+        "deps/lua/patches/b35736b9d71182bae67492af2a387b3f6e89fd05.patch",
+        "deps/lua/patches/e8533201cd2448d668c9b64758fc44205544b27f.patch",
+        "deps/lua/pins.json",
+        "deps/lua/pristine/Makefile",
+        "deps/lua/pristine/README",
+        "deps/lua/pristine/doc/OSIApproved.png",
+        "deps/lua/pristine/doc/contents.html",
+        "deps/lua/pristine/doc/index.css",
+        "deps/lua/pristine/doc/logo.png",
+        "deps/lua/pristine/doc/lua.1",
+        "deps/lua/pristine/doc/lua.css",
+        "deps/lua/pristine/doc/luac.1",
+        "deps/lua/pristine/doc/manual.css",
+        "deps/lua/pristine/doc/manual.html",
+        "deps/lua/pristine/doc/readme.html",
+        "deps/lua/pristine/src/Makefile",
+        "deps/lua/pristine/src/lapi.c",
+        "deps/lua/pristine/src/lapi.h",
+        "deps/lua/pristine/src/lauxlib.c",
+        "deps/lua/pristine/src/lauxlib.h",
+        "deps/lua/pristine/src/lbaselib.c",
+        "deps/lua/pristine/src/lcode.c",
+        "deps/lua/pristine/src/lcode.h",
+        "deps/lua/pristine/src/lcorolib.c",
+        "deps/lua/pristine/src/lctype.c",
+        "deps/lua/pristine/src/lctype.h",
+        "deps/lua/pristine/src/ldblib.c",
+        "deps/lua/pristine/src/ldebug.c",
+        "deps/lua/pristine/src/ldebug.h",
+        "deps/lua/pristine/src/ldo.c",
+        "deps/lua/pristine/src/ldo.h",
+        "deps/lua/pristine/src/ldump.c",
+        "deps/lua/pristine/src/lfunc.c",
+        "deps/lua/pristine/src/lfunc.h",
+        "deps/lua/pristine/src/lgc.c",
+        "deps/lua/pristine/src/lgc.h",
+        "deps/lua/pristine/src/linit.c",
+        "deps/lua/pristine/src/liolib.c",
+        "deps/lua/pristine/src/ljumptab.h",
+        "deps/lua/pristine/src/llex.c",
+        "deps/lua/pristine/src/llex.h",
+        "deps/lua/pristine/src/llimits.h",
+        "deps/lua/pristine/src/lmathlib.c",
+        "deps/lua/pristine/src/lmem.c",
+        "deps/lua/pristine/src/lmem.h",
+        "deps/lua/pristine/src/loadlib.c",
+        "deps/lua/pristine/src/lobject.c",
+        "deps/lua/pristine/src/lobject.h",
+        "deps/lua/pristine/src/lopcodes.c",
+        "deps/lua/pristine/src/lopcodes.h",
+        "deps/lua/pristine/src/lopnames.h",
+        "deps/lua/pristine/src/loslib.c",
+        "deps/lua/pristine/src/lparser.c",
+        "deps/lua/pristine/src/lparser.h",
+        "deps/lua/pristine/src/lprefix.h",
+        "deps/lua/pristine/src/lstate.c",
+        "deps/lua/pristine/src/lstate.h",
+        "deps/lua/pristine/src/lstring.c",
+        "deps/lua/pristine/src/lstring.h",
+        "deps/lua/pristine/src/lstrlib.c",
+        "deps/lua/pristine/src/ltable.c",
+        "deps/lua/pristine/src/ltable.h",
+        "deps/lua/pristine/src/ltablib.c",
+        "deps/lua/pristine/src/ltm.c",
+        "deps/lua/pristine/src/ltm.h",
+        "deps/lua/pristine/src/lua.c",
+        "deps/lua/pristine/src/lua.h",
+        "deps/lua/pristine/src/lua.hpp",
+        "deps/lua/pristine/src/luac.c",
+        "deps/lua/pristine/src/luaconf.h",
+        "deps/lua/pristine/src/lualib.h",
+        "deps/lua/pristine/src/lundump.c",
+        "deps/lua/pristine/src/lundump.h",
+        "deps/lua/pristine/src/lutf8lib.c",
+        "deps/lua/pristine/src/lvm.c",
+        "deps/lua/pristine/src/lvm.h",
+        "deps/lua/pristine/src/lzio.c",
+        "deps/lua/pristine/src/lzio.h",
+        "tests/mods/dependency-regressions.lua",
+        "tools/prepare_lua.py"
+      ]
+    },
+    {
+      "commit": "fd53f060efeb3f5124757b8a3d4c263ad7888057",
+      "title": "Load explicitly enabled Lua packages with isolated lifecycle dispatch",
+      "paths": [
+        "docs/lua-mods.md",
+        "runtime/main.c",
+        "runtime/mod_internal.h",
+        "runtime/mod_package.c",
+        "runtime/mod_runtime.c",
+        "runtime/mods.c",
+        "runtime/mods.h",
+        "runtime/platform/linux.c",
+        "runtime/platform/win32.c",
+        "tests/mods/check.py",
+        "tests/mods/driver.c",
+        "tests/mods/lifecycle_driver.c",
+        "tests/mods/packages/alpha/main.lua",
+        "tests/mods/packages/alpha/mod.ini",
+        "tests/mods/packages/beta/main.lua",
+        "tests/mods/packages/beta/mod.ini",
+        "tests/mods/packages/enabled.txt",
+        "tests/mods/platform_stub.c",
+        "tests/mods/test_runtime.py",
+        "tools/build_game.py"
+      ]
+    },
+    {
+      "commit": "0f4bcc094cb0f8bfc359b6ce131b5aa24fdc743d",
+      "title": "Expose typed mod settings and persistence through the Mods page",
+      "paths": [
+        "docs/lua-mods.md",
+        "runtime/mod_internal.h",
+        "runtime/mod_package.c",
+        "runtime/mod_runtime.c",
+        "runtime/mod_settings.c",
+        "runtime/mod_settings.h",
+        "runtime/mods.c",
+        "runtime/mods.h",
+        "runtime/platform/linux.c",
+        "runtime/ui/menu.cpp",
+        "runtime/ui/mods_page.cpp",
+        "runtime/ui/mods_page.h",
+        "runtime/ui_text.c",
+        "runtime/ui_text.h",
+        "tests/controller_keyboard_check.py",
+        "tests/mods/check.py",
+        "tests/mods/platform_stub.c",
+        "tests/mods/settings_driver.c",
+        "tests/mods/settings_io.c",
+        "tests/mods/test_runtime.py",
+        "tests/mods/test_settings.py",
+        "tests/mods/ui-packages/alpha/main.lua",
+        "tests/mods/ui-packages/alpha/mod.ini",
+        "tests/mods/ui-packages/beta/main.lua",
+        "tests/mods/ui-packages/beta/mod.ini",
+        "tests/mods/ui-packages/catalog.txt",
+        "tests/mods/ui-packages/disabled/main.lua",
+        "tests/mods/ui-packages/disabled/mod.ini",
+        "tests/mods/ui-packages/enabled.txt",
+        "tests/mods/ui-packages/incompatible/main.lua",
+        "tests/mods/ui-packages/incompatible/mod.ini",
+        "tests/mods_ui_check.cpp"
+      ]
+    },
+    {
+      "commit": "af95c95240b7b66b98ac76c9aeef66edba50af24",
+      "title": "Bound settings reads and reject unsafe startup files",
+      "paths": [
+        "runtime/mod_settings.c",
+        "tests/mods/baseline_fix_fixture.py",
+        "tests/mods/check.py",
+        "tests/mods/settings_test.c",
+        "tests/mods/test_settings_files.py"
+      ]
+    },
+    {
+      "commit": "0510d35261188d88cdec7df6d874d45259a4837f",
+      "title": "Fault eligible packages when host startup fails",
+      "paths": [
+        "runtime/mod_runtime.c",
+        "runtime/mod_settings.c",
+        "runtime/mod_settings.h",
+        "runtime/mods.c",
+        "tests/mods/check.py",
+        "tests/mods/platform_stub.c",
+        "tests/mods/runtime_test.c",
+        "tests/mods/startup_driver.c",
+        "tests/mods/test_startup_failures.py"
+      ]
+    },
+    {
+      "commit": "4cbf7744f000b8165cb5314913452369a80cc5d1",
+      "title": "Retry failed settings persistence without repeating change callbacks",
+      "paths": [
+        "runtime/mod_runtime.c",
+        "runtime/mod_settings.c",
+        "runtime/mod_settings.h",
+        "runtime/ui/mods_page.cpp",
+        "tests/mods/settings_driver.c",
+        "tests/mods/test_save_retry.py",
+        "tests/mods_ui_check.cpp"
+      ]
+    },
+    {
+      "commit": "2a8f26679309eca77d6d0e0d8b4b6be56386b5d5",
+      "title": "Document failed-save recovery and preserve final fix regressions",
+      "paths": [
+        "docs/lua-mods.md"
+      ]
+    },
+    {
+      "commit": "1221be8103189a0723d4499e6a16d1ced49fc013",
+      "title": "Load explicitly associated native providers with bounded ownership",
+      "paths": [
+        "docs/native-providers.md",
+        "runtime/mod_internal.h",
+        "runtime/mod_package.c",
+        "runtime/mod_provider.c",
+        "runtime/mod_provider.h",
+        "runtime/mod_provider_abi.h",
+        "runtime/mod_provider_platform.c",
+        "runtime/mod_provider_platform.h",
+        "runtime/mod_runtime.c",
+        "tests/mods/check.py",
+        "tests/providers/abi_probe.c",
+        "tests/providers/check.py",
+        "tests/providers/driver.c",
+        "tests/providers/fixture_c.c",
+        "tests/providers/fixture_cpp.cpp",
+        "tests/providers/fixture_support.h",
+        "tests/providers/layout.c",
+        "tests/providers/lua_driver.c",
+        "tests/providers/test_loader.py",
+        "tests/providers/windows-check.ps1"
+      ]
+    },
+    {
+      "commit": "066c713e7561350ec71bb195d813b974da5d94ac",
+      "title": "Bridge asynchronous provider commands and copied action status",
+      "paths": [
+        "docs/native-providers.md",
+        "docs/provider-actions.md",
+        "runtime/mod_provider.c",
+        "runtime/mod_provider.h",
+        "runtime/mod_provider_service_abi.h",
+        "runtime/mod_runtime.c",
+        "runtime/mod_settings.c",
+        "runtime/mod_settings.h",
+        "runtime/mod_text.h",
+        "runtime/mods.c",
+        "runtime/mods.h",
+        "runtime/ui/mods_page.cpp",
+        "tests/actions/abi_probe.c",
+        "tests/actions/check.py",
+        "tests/actions/layout.c",
+        "tests/actions/lua_driver.c",
+        "tests/actions/native_driver.c",
+        "tests/actions/packages/alpha/main.lua",
+        "tests/actions/packages/alpha/mod.ini",
+        "tests/actions/packages/beta/main.lua",
+        "tests/actions/packages/beta/mod.ini",
+        "tests/actions/packages/catalog.txt",
+        "tests/actions/packages/disabled/main.lua",
+        "tests/actions/packages/disabled/mod.ini",
+        "tests/actions/packages/enabled.txt",
+        "tests/actions/packages/incompatible/main.lua",
+        "tests/actions/packages/incompatible/mod.ini",
+        "tests/actions/service_c.c",
+        "tests/actions/service_cpp.cpp",
+        "tests/actions/support.h",
+        "tests/actions/test_actions.py",
+        "tests/actions/windows-check.ps1",
+        "tests/mods_ui_check.cpp",
+        "tests/providers/test_loader.py"
+      ]
+    },
+    {
+      "commit": "e8e43d4a49525b6b15ca9201a237ef59ed6864f5",
+      "title": "Validate provider compatibility against linked host and game metadata",
+      "paths": [
+        "runtime/mod_internal.h",
+        "runtime/mod_provider.c",
+        "runtime/mod_provider_platform.c",
+        "runtime/mods.c",
+        "tests/mods/platform_stub.c",
+        "tests/providers/driver.c",
+        "tests/providers/test_loader.py"
+      ]
+    },
+    {
+      "commit": "0bdf54224d91e41acb169a9dbfa1b51fc4baa03f",
+      "title": "Register a checked native Online shortcut to existing Mods pages",
+      "paths": [
+        "recomp/gen.py",
+        "recomp/mod_menu.py",
+        "runtime/cpu.h",
+        "runtime/mod_menu.c",
+        "runtime/mod_menu.h",
+        "runtime/mod_menu_adapter.c",
+        "runtime/mod_runtime.c",
+        "runtime/mods.c",
+        "runtime/ui/menu.cpp",
+        "runtime/ui/mods_page.cpp",
+        "runtime/ui/mods_page.h",
+        "tests/actions/check.py",
+        "tests/menu/adapter.c",
+        "tests/menu/check.py",
+        "tests/menu/contract.py",
+        "tests/menu/test_lua.py",
+        "tests/menu/test_validation.py",
+        "tests/menu/windows-check.ps1",
+        "tests/mods/check.py",
+        "tests/mods/platform_stub.c",
+        "tests/mods_ui_check.cpp",
+        "tests/providers/check.py"
+      ]
+    },
+    {
+      "commit": "cfc8792832236c24e2b01e012e066b43b82878df",
+      "title": "Guide mod authors through packages settings actions and menu shortcuts",
+      "paths": [
+        "docs/mods/01-start-here.md",
+        "docs/mods/02-first-mod.md",
+        "docs/mods/03-menu-registration.md",
+        "docs/mods/04-compatibility.md",
+        "docs/mods/README.md",
+        "examples/mods/hello/main.lua",
+        "examples/mods/hello/mod.ini",
+        "tests/menu/check_docs.py"
+      ]
+    },
+    {
+      "commit": "74bdd9b9b5f786294b7b015b8c1e8ec90cd1bf29",
+      "title": "Quarantine providers that return live tokens after failed creation",
+      "paths": [
+        "runtime/mod_provider.c",
+        "tests/actions/check.py",
+        "tests/actions/service_c.c",
+        "tests/actions/test_actions.py"
+      ]
+    },
+    {
+      "commit": "ae8f01c46c7b0b481c932c9e88e4cb86114d8c97",
+      "title": "Complete author examples and explain logs updates and platform limits",
+      "paths": [
+        "README.md",
+        "deps/lua/README.md",
+        "docs/lua-mods.md",
+        "docs/mods/02-first-mod.md",
+        "docs/native-providers.md",
+        "docs/provider-actions.md",
+        "tests/menu/test_lua.py"
+      ]
+    }
+  ],
+  "documentation_differences": {
+    "README.md": {
+      "accepted_sha256": "826133f08674736f3f8f43b19a931321a5d4b8302a5381460fe026f8499476e0",
+      "prepared_sha256": "ccf3f235a0943da95544b3915b71210b6ee8b2a6a57503244040f6ee0b6fa1db"
+    },
+    "deps/lua/README.md": {
+      "accepted_sha256": "180dae825f60ba1b795656a5c7217d14f246ce13bd3ddac9c3b4dbdd11890e46",
+      "prepared_sha256": "6a4c49508d2ba729f462e12f344ffa0094e5f086800943790e3fb3e83f6b67f6"
+    },
+    "docs/lua-mods.md": {
+      "accepted_sha256": "74c7e369bff8185127ed1d50647111a83d242e103220808607174792a007d2bd",
+      "prepared_sha256": "16866aa4c3073629e9df634e12ec424df7ded5e7133d594812783bd7b5ac57e2"
+    },
+    "docs/mods/02-first-mod.md": {
+      "accepted_sha256": "f2aa009a3a4efc167b537d08409ec6b32a92df65a29ce678e69fad63b6febc04",
+      "prepared_sha256": "23134d8a5f19287452b43cce8b487298700591f75aa7f2b314c7187bd6d86f8b"
+    },
+    "docs/native-providers.md": {
+      "accepted_sha256": "09bf18cd70d2f7182fc2a846a1135783d027997b52719d68c984bfe5e702005c",
+      "prepared_sha256": "7f64314c35cdfbe0ed9f5ab350b8635c31ccb5083877423dd08b8f553c3f3936"
+    },
+    "docs/provider-actions.md": {
+      "accepted_sha256": "195f66de58d2d4c02b995970e7888389138005c3a044248a29a98ac4bbc5b2f5",
+      "prepared_sha256": "529b037749169b38b3b76797a10f6740e853b75abc1e63ba2bae79de8c9744e9"
+    }
+  },
+  "git_normalization": {
+    "tests/actions/windows-check.ps1": {
+      "git_blob_sha256": "885797ea321070a646e8b24775bb665248c7e1afb601b061a57ab2a82b2aad21",
+      "checkout": "CRLF per existing .gitattributes; Git blob stores LF"
+    },
+    "tests/menu/windows-check.ps1": {
+      "git_blob_sha256": "1288eb9f86e238007dad976c7e87b2022a0f80856e6a1354f6c34f3bd5170316",
+      "checkout": "CRLF per existing .gitattributes; Git blob stores LF"
+    },
+    "tests/providers/windows-check.ps1": {
+      "git_blob_sha256": "e459b3469ed1819b80940493c5fec26633b9d4eb9b3ca45caca39311cf0ec89d",
+      "checkout": "CRLF per existing .gitattributes; Git blob stores LF"
+    }
+  }
+}

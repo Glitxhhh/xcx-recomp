@@ -1,8 +1,8 @@
 // The software keyboard's front end for SDL windows (swkbd.h): a text field on the menu overlay (ui/menu.h,
 // menu_text_begin) over the game's last frame. The game waits for the answer and presents nothing meanwhile, so this
 // thread presents that frame again about 60 times a second (vk_present_repeat) until the field answers. SDL text input is
-// on while it is up, which shows the host's screen keyboard where there is one (Steam's on the Steam Deck). A or Plus on
-// the gamepad and Enter confirm, B and Esc cancel. XCX asks for one name, the player character's after the avatar is
+// on while it is up, allowing physical text input and a system keyboard where supported. The controller grid works
+// without a system keyboard: A selects a key, Plus or OK confirms, and B or Cancel cancels. Enter / Esc also work. XCX asks for one name, the player character's after the avatar is
 // made. Before the game has presented anything (the --probe-services cases) there is no frame to draw over: the
 // starting text is taken at once, and XCX_SWKBD_TEST=cancel stands for Cancel pressed.
 #include <string.h>

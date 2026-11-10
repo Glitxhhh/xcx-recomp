@@ -177,10 +177,15 @@
 # rumble_strength = 130
 # rumble_curve = 0.6
 # rumble_triggers = 0
-# Which gamepad button is Switch A: nintendo (by position: east A, south B, west Y, north X), xbox (south A, east B,
+# Controls tab, Confirmation/Cancel (Default is nintendo, Flipped is xbox). Which gamepad button is Switch A: nintendo (by position: east A, south B, west Y, north X), xbox (south A, east B,
 # west X, north Y, as an Xbox pad labels them; cross A on a PlayStation pad) or auto (nintendo for a pad with Nintendo
 # labels, xbox for the others). The bind_ lines below apply on top. Changes while the game runs take effect at once.
 # pad_layout = auto
+# Button icons shown on the game's prompts (Controls tab, Button Icon Type): auto follows the device you used last, original is
+# the Nintendo Switch artwork, then playstation, xbox, steam or keyboard. Changes while the game runs take effect at once.
+# glyph_style = auto
+# Controls tab, Button Appearance: colored uses colored or solid icons where they exist, standard uses colorless ones.
+# glyph_appearance = colored
 # Mouse camera sensitivity (0 to 10; 0 = no mouse camera and no cursor capture).
 # mouse_sens = 1
 # Write the input of this run to a file that replays as a script (docs/controls.md, "Scripted input"). Default: off.

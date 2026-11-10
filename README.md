@@ -23,6 +23,10 @@ Report problems as issues, following [CONTRIBUTING.md](CONTRIBUTING.md).
 - HDR10 output with peak, game and HUD brightness settings
 - Keyboard, mouse and gamepad
 
+## Experimental source mods
+
+This feature branch supports explicitly enabled Lua source packages, settings/actions in F1/Esc → Mods, optional trusted native providers and one checked Online-menu shortcut to the existing Mods page. Start with the [mod-author guide](docs/mods/README.md). Linux candidate tests are recorded in the [reviewer guide](docs/review/lua-mod-support.md); native Windows acceptance for these additions is pending. This is separate from emulator asset mods and does not expose gameplay APIs or game-native content windows.
+
 ## Planned
 
 - Linux and the Steam Deck
@@ -54,6 +58,8 @@ XCX Recomp builds on the projects below. What was taken from each, with its lice
 - [deko3d](https://github.com/devkitPro/deko3d)
 - [hactool](https://github.com/SciresM/hactool)
 - [SDL 3](https://libsdl.org), [Dear ImGui](https://github.com/ocornut/imgui), [AMD FSR 1](https://github.com/GPUOpen-Effects/FidelityFX-FSR), [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator), [libopus](https://opus-codec.org), [libvpx](https://chromium.googlesource.com/webm/libvpx), [Zstandard](https://github.com/facebook/zstd)
+- [Audune Prompts](https://audune.itch.io/audune-prompts) by Audune, the Xbox and PlayStation button artwork of the button icon styles. It's licensed CC BY-SA 4.0, so those images keep that license and aren't covered by this project's MIT license: [assets/appendage-glyph/audune/NOTICE.txt](assets/appendage-glyph/audune/NOTICE.txt) has the credit line and what we changed
+- [Kenney Input Prompts](https://kenney.nl/assets/input-prompts) by Kenney, the keyboard, mouse and Steam Controller button artwork of the button icon styles (CC0)
 - The [60FPS mod for XCX DE 1.0.1](https://github.com/Fl4sh9174/Switch-Emulator-Ultrawide-FPS-Mods) by Fl4sh_ and StevensND
 - [Switchbrew](https://switchbrew.org) and the Switch homebrew community
 

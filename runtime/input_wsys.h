@@ -9,8 +9,13 @@ int ikb_down(int key);                        // key id (input_map.h KEY_*) held
 int ikb_escape(void);                         // Esc held (no key id: it belongs to the menu)
 int ikb_captured(void);                       // the cursor is captured for the mouse camera
 void ikb_mouse_take(int32_t *dx, int32_t *dy);   // raw mouse motion since the last call, in counts
+void ikb_intent_mouse_take(int32_t *dx, int32_t *dy); // separate genuine relative-motion observation; never consumes gameplay motion
 void ikb_cursor_update(void);                 // what input_cursor_allowed says may have changed
 void ikb_menu_closed(void);                   // the menu closed: a capture that Esc gave up comes back
 
 // ---- what input.c provides the back end
 int input_cursor_allowed(void);               // no text entry or menu open, the mouse camera on, input not disabled
+
+int ikb_glyph_key(int key); // Current unshifted keyboard label, as a supported letter/digit key; mouse buttons, Space, Tab, Shift, Ctrl and the arrow keys as themselves; 0 unsupported.
+
+int ikb_intent_down(int key); // Display observation excludes explicitly identified generated mouse events.

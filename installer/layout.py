@@ -7,7 +7,7 @@ Release (docs/installer.md "Release layout"), root = the unpacked folder:
     recomp/, tools/         the lifter and the scripts; tools/data/expected-xcx-<version>.json for the base game and
                             each supported update (SUPPORTED)
     llvm/                   llvm-mingw (bin/clang.exe)
-    runtime/                libxcxrt.a (libxcxrt-v2.a for CPUs without AVX2), the headers, install-side sources (romfs.c, patches.c, ov_zstd.c) and the icon; runtime/deps/ holds
+    runtime/                libxcxrt.a (libxcxrt-v2.a for CPUs without AVX2), the headers, install-side sources (romfs.c, patches.c, ov_zstd.c, mod_menu_adapter.c) and the icon; runtime/deps/ holds
                             include/ + lib/ of Vulkan, SDL3, Opus, libvpx and VMA (build_game.py --deps)
     bin/                    xcx_xlate.exe (+ xcx_xlate.id), hactool.exe, ninja.exe, SDL3.dll, libopus-0.dll
     xcx.ini.example

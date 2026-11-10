@@ -1,6 +1,7 @@
 # Adapted from LAS Recomp tools/nso.py @ da35b83 (MIT, Copyright (c) 2026 Peiikai).
 """NSO loader: decompress segments, build the memory image, parse MOD0/dynamic info."""
 import struct
+import hashlib
 import sys
 from collections import Counter
 
@@ -15,6 +16,7 @@ R_AARCH64_ABS64, R_AARCH64_GLOB_DAT, R_AARCH64_JUMP_SLOT, R_AARCH64_RELATIVE = 2
 class Nso:
     def __init__(self, path):
         raw = open(path, 'rb').read()
+        self.source_sha256 = hashlib.sha256(raw).hexdigest()
         assert raw[:4] == b'NSO0', path
         flags = struct.unpack_from('<I', raw, 0xC)[0]
         self.build_id = raw[0x40:0x60].rstrip(b'\0').hex()

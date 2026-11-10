@@ -1,3 +1,4 @@
+#include "../mods.h"
 // Windows implementation of platform.h: CreateThread, QueryPerformanceCounter, high-resolution waitable timers,
 // SRW locks and condition variables.
 #include <io.h>
@@ -616,6 +617,7 @@ void plat_aligned_free(void *p) { _aligned_free(p); }
 // ---- process
 
 void plat_exit(int code) {
+    if (!code) rt_mods_shutdown();
     fflush(stdout);
     fflush(stderr);
     ExitProcess((UINT)code);

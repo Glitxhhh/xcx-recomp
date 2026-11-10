@@ -1,3 +1,4 @@
+#include "mods.h"
 // xcx.exe entry: reserves the guest address space, parses the command line and runs one mode.
 //
 //   xcx.exe [--exefs DIR] [--romfs DIR] [--profile DIR] <mode>
@@ -626,7 +627,9 @@ int main(int argc, char **argv) {
     if (!mode) {
         profile_fallback(&cfg);
         cfg.boot = cfg.seconds > 0;   // --seconds starts the game like --boot, with its checkpoints
+        if (!cfg.shot && !cfg.seconds) rt_mods_start();
         rt_boot();
+        rt_mods_shutdown();
         return 0;
     }
     if (!strcmp(mode, "--selftest")) return selftest();

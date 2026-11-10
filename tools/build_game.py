@@ -144,8 +144,8 @@ LLVM_LINK_LIBS = ['-lpsapi', '-lbcrypt', '-luser32', '-lgdi32', '-ldwmapi', '-lw
 DEFAULT_DEPS = ROOT / 'toolchain' / 'deps-mingw'
 # Runtime sources compiled per install, not in the library: romfs.c includes romfs_config.h, patches.c and ov_zstd.c
 # the patches.h of the player's game version (its patch page is the page after that version's main; ov_zstd.c's host
-# functions sit on it).
-INSTALL_SIDE = {'romfs.c', 'patches.c', 'ov_zstd.c'}
+# functions sit on it). The menu adapter reads the generated per-install capability header.
+INSTALL_SIDE = {'romfs.c', 'patches.c', 'ov_zstd.c', 'mod_menu_adapter.c'}
 LIB_NAME = 'libxcxrt.a'
 AR = UCRT / 'llvm-ar.exe' if WIN else on_path('llvm-ar')
 WINDRES = UCRT / 'windres.exe'   # runtime/xcx.rc: the manifest of xcx.exe
@@ -317,10 +317,16 @@ def ninja_file(gen, out, mods, pool_depth, skip=(), prebuilt=False, runtime_lib=
     """build.ninja text, and the object lists per module. With prebuilt the generated objects already exist in
     out/obj and are link inputs without a compile edge. runtime_lib: a prebuilt library replaces the runtime objects
     except INSTALL_SIDE. make_lib: build only that library, from the runtime objects except INSTALL_SIDE."""
+    lua = None
+    if not runtime_lib:
+        from prepare_lua import prepare
+        lua = prepare(out / 'lua')
     inc = f'-I {cmd_path(RUNTIME)} -I {cmd_path(gen)}'
     vma = f'{cmd_path(DEPS / "include")} -I {cmd_path(DEPS / "include" / "vma")}' if DEPS else cmd_path(vma_include())
     imgui = cmd_path(RUNTIME / 'third_party' / 'imgui')
     rt_inc = f'{inc} -I {cmd_path(out)} -I {vma} -I {imgui}'   # romfs_config.h, vk_mem_alloc.h (+ deps headers), imgui.h
+    if lua:
+        rt_inc += f' -I {cmd_path(lua)}'
     libs = [f'-L {cmd_path(DEPS / "lib")}'] + (LLVM_LINK_LIBS if WIN else LINK_LIBS) if DEPS else LINK_LIBS
     lines = [
         '# Written by tools/build_game.py; do not edit.',
@@ -369,6 +375,10 @@ def ninja_file(gen, out, mods, pool_depth, skip=(), prebuilt=False, runtime_lib=
             objs[mod].append(o)
     rt = []
     sources = runtime_sources(skip)
+    lua_libs = {'lauxlib.c', 'lbaselib.c', 'lstrlib.c', 'ltablib.c', 'lmathlib.c'}
+    if lua:
+        sources += sorted(p for p in lua.glob('*.c') if p.name not in {'lua.c', 'luac.c', 'linit.c'}
+                          and (not p.name.endswith('lib.c') or p.name in lua_libs))
     if make_lib:
         sources = [p for p in sources if p.name not in INSTALL_SIDE]
     elif runtime_lib:

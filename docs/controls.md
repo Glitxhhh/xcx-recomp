@@ -2,13 +2,13 @@
 
 Input comes from the first SDL3 gamepad, the keyboard and the mouse, merged into one Switch controller (`runtime/input_win.c`). Buttons are ORed; each stick takes the source with the larger deflection. Keys and mouse buttons count only while the game window is in the foreground. `XCX_INPUT=none` disables both (automated runs). `XCX_*` settings can also be set in `xcx.ini` next to `xcx.exe` (`input = none`, `motion = 0`, `rumble = 0`); the environment overrides the file. `XCX_RUMBLE_STRENGTH` is the rumble strength in percent (0 to 300, default 130; 0 is the same as `rumble = 0`). `XCX_RUMBLE_CURVE` is the exponent applied to the amplitude before the strength (0.2 to 1.5, default 0.6; lower makes weak pulses stronger, 1 is linear). `XCX_RUMBLE_TRIGGERS=1` also drives the impulse triggers of an Xbox pad.
 
-`XCX_PAD_LAYOUT` (`pad_layout`, the *Button layout* row on the Controls tab, live) picks which face button is Switch A:
+`XCX_PAD_LAYOUT` (`pad_layout`, the *Confirmation/Cancel* row on the Controls tab, live; options Automatic, Default and Flipped) picks which face button is Switch A:
 
-- `nintendo`: by position, as on a Switch (the table below).
-- `xbox`: south A, east B, west X, north Y, as an Xbox pad labels them; on a PlayStation pad cross is A, circle B, square X, triangle Y.
+- `nintendo` (shown as *Default*): by position, as on a Switch, the original layout (the table below).
+- `xbox` (shown as *Flipped*, which swaps the confirmation and cancel buttons): south A, east B, west X, north Y, as an Xbox pad labels them; on a PlayStation pad cross is A, circle B, square X, triangle Y.
 - `auto` (default): `nintendo` for a pad whose east button SDL reports labelled A (Switch Pro Controller, Nintendo-layout pads), `xbox` for the others.
 
-The log names the layout in effect (`input: gamepad layout ...`); the menu shows it under *Automatic*. The game's button prompts stay Switch letters either way.
+The log names the layout in effect (`input: gamepad layout ...`); the menu shows it under *Automatic*. The game's button prompts stay Switch letters by default. The experimental HUD style preference below is separate from this input layout.
 
 | Switch | Gamepad (by position, Nintendo layout) | Keyboard and mouse | Action in the world |
 |---|---|---|---|
@@ -88,3 +88,25 @@ The stick direction bits (`StickLLeft` to `StickRDown`) are derived from the sti
 ## RenderDoc capture (blocked)
 
 `XCX_RDOC=<frame>[,...]` (`runtime/rdoc_win.c`; `XCX_RDOC_DIR`, `XCX_RDOC_DLL`) loads RenderDoc before `vkCreateInstance`. RenderDoc hides `VK_EXT_external_memory_host`, which the back end requires for guest pool imports (`runtime/vk_memory.c`), so device creation fails under it. A capture needs a copy-based pool fallback first.
+
+## Experimental Appendage glyphs
+
+In F1/Esc → Controls, **Button Icon Type** (Automatic, Nintendo Switch, PlayStation, Xbox, Steam Controller, Keyboard/Mouse; Automatic is the default and stores `auto`, Nintendo Switch stores `original`) changes selected button guides in verified XCX 2.0.0. Appendage, weapon-change X and NPC interaction prompts have passed Linux owner acceptance. Other shared field A-button captions, Target R and Board ZL are also adapted, but their visible acceptance remains pending. It offers Original (unchanged), Automatic, PlayStation, Xbox, Steam Controller and Keyboard / Mouse. Other HUD, menu and tutorial prompts remain unchanged; see the [coverage inventory](prompt-coverage.md). The guide still appears briefly on targeting/retargeting and hides normally.
+
+Automatic follows fresh intentional keyboard/mouse or controller activity even with a controller connected. Held input and small stick drift do not take the display back. Mouse clicks count; sustained captured camera motion can count, while incidental movement, capture/focus motion and single spikes are filtered. These filters do not change gameplay dead zones or emitted inputs. Manual selection fixes artwork without changing bindings or the separate Button layout preference.
+
+The guide represents virtual R held with Y or A for previous/next appendage. With the default Xbox input layout on a PlayStation pad, it shows R1 with Triangle / Cross; keyboard/mouse defaults show R with left mouse / E. It uses the current bindings, not fixed artwork-to-physical-button assumptions. Keyboard letter/digit glyphs follow the current unshifted keyboard labels.
+
+Coverage is deliberately bounded: standard face/shoulder/trigger buttons for the named controller families; letters, digits, Space and left/right mouse for keyboard/mouse. Multiple, shared, unbound or unsupported bindings use the original virtual Switch labels for the whole chord, with a reason under the preference. Unknown controller families also use original labels. Steam Input virtual devices are identified only by the controller interface exposed to SDL; an exposed Xbox controller is treated as Xbox. Manual Steam Controller styling supports its exposed standard controls, not arbitrary paddles, touchpad regions or hidden physical hardware.
+
+Original leaves game artwork unchanged. Automatic also keeps native virtual labels for intentional input from an exposed Nintendo controller. There is no separate Nintendo Switch style option. Native labels do not change to describe custom bindings. No Nintendo artwork is downloaded or installed.
+
+**Button Appearance: Colored (default) / Standard** is separate from style and bindings. Colored face buttons uses licensed PlayStation, Xbox and Steam face-button variants. Other buttons, keyboard/mouse and native Nintendo retain Standard. Automatic honors the applicable appearance choice.
+
+The existing **Confirmation/Cancel** option changes physical mappings: which physical button emits A/B/X/Y. Glyph style and appearance only change displayed artwork. They do not replace that option or alter your rebinding settings.
+
+The weapon guide uses the current X binding (Space on the default keyboard map); field A, Target and Board guides use A, R and ZL respectively. The default keyboard ZL has multiple bindings, so Board retains native virtual artwork. Unsupported bindings keep the original virtual label for that guide.
+
+The experimental renderer keeps a process-wide history of 192 successful button-node attachments shared between the Appendage and all registered shared-widget instances. Reusing a live shared guide, including a retained A/R/ZL selector change, does not consume it; reconstruction does, even while Original is selected. Once the budget is full, rebuilt guides keep original labels, and Controls explains that restarting the game restores styles. Changing styles does not reset the budget.
+
+The preference persists as `glyph_style = auto|original|playstation|xbox|steam|keyboard` in `xcx.ini` (default `auto`), alongside the separate `glyph_appearance = colored|standard` (default `colored`), independently of `pad_layout` and `bind_*`. Original is the default. It is unavailable for unverified game builds. This is experimental coverage, not universal prompt replacement or a claim of Windows/other-controller runtime acceptance.

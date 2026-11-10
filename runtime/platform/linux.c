@@ -1,6 +1,7 @@
 // Linux implementation of platform.h: pthreads, CLOCK_MONOTONIC, futex locks and condition variables, POSIX files,
 // /proc and sysfs for the load counters, posix_spawn for child processes.
 #define _GNU_SOURCE
+#include "../mods.h"
 #include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
@@ -1262,6 +1263,7 @@ int plat_stderr_path(char *out, size_t cap) {
 // ---- process
 
 void plat_exit(int code) {
+    if (!code) rt_mods_shutdown();
     fflush(stdout);
     fflush(stderr);
     _exit(code);

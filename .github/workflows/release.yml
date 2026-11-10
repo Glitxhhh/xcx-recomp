@@ -60,6 +60,7 @@ jobs:
           path: build/release/${{ env.PACKAGE }}
           if-no-files-found: error
           compression-level: 0
+          retention-days: 7
 
   linux:
     needs: version
@@ -92,6 +93,7 @@ jobs:
           path: build/release/${{ env.PACKAGE }}
           if-no-files-found: error
           compression-level: 0
+          retention-days: 7
 
   # A fresh runner with none of the build's toolchain: each package unpacks and passes the check-only installer pass.
   verify:
