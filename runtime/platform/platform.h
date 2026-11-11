@@ -32,6 +32,15 @@ void plat_thread_detach(PlatThread *t);   // frees t; the thread runs on
 // Returns the previous mask, 0 on failure.
 uint64_t plat_thread_affinity(PlatThread *t, uint64_t mask);
 uint32_t plat_cpu_count(void);            // logical processors
+// On a CPU with cores of more than one kind (Intel P- and E-cores), asks the OS to run the calling thread on the fastest
+// kind: a preference the scheduler may break when those cores are busy, not a pin. Returns how many logical processors
+// the thread now prefers, 0 when the CPU has one kind of core or the OS has no such preference (Linux: its scheduler
+// already places busy threads on the fast cores of a hybrid CPU).
+uint32_t plat_thread_prefer_fast_cores(void);
+// The process asks to run at full speed: Windows' power throttling (EcoQoS, which slows a process whose window is
+// hidden or in the background, and ignores its 1 ms timer request while the window is hidden) is turned off for it.
+// Nothing on Linux.
+void plat_power_full_speed(void);
 uint64_t plat_thread_cpu_ns(uint32_t tid);  // CPU time of the thread with id tid (plat_thread_id) so far; 0 unknown
 // The logical processors the process may use (bit n = processor n, the first 64), into *all, and the lowest of each
 // physical core among them into *first; returns the number of physical cores, 0 when unknown.

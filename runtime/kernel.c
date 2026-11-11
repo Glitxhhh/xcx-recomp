@@ -1534,6 +1534,7 @@ static PlatIntr *ap_open_self(void) {
 static void thread_main(void *p) {
     RtThread *t = p;
     tcur = t;
+    rt_fast_cores();
     t->tid = plat_thread_id();
     PlatIntr *self = ap_open_self();
     lock();
@@ -1602,6 +1603,7 @@ void kern_main_stack(uint64_t *base, uint64_t *size) {
 static void guest_main(void *p) {
     void (*fn)(Cpu *) = (void (*)(Cpu *))p;
     Cpu *c;
+    rt_fast_cores();
     kern_main_thread(&c);
     if (!setjmp(tcur->exit_jmp)) fn(c);
     thread_finish(tcur);

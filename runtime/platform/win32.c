@@ -209,6 +209,73 @@ uint64_t plat_thread_affinity(PlatThread *t, uint64_t mask) {
     return (uint64_t)SetThreadAffinityMask(t ? t->h : GetCurrentThread(), (DWORD_PTR)mask);
 }
 
+// The CPU sets of the highest efficiency class (the P-cores of a hybrid CPU), found once. Windows numbers the classes
+// from 0 (the most efficient, slowest cores) up; a CPU with one kind of core reports class 0 for all of them.
+static ULONG fast_sets[256];
+static ULONG fast_n = ~0u;
+// Windows 10 functions, looked up at run time: the headers declare them only for a newer _WIN32_WINNT than ours.
+typedef BOOL(WINAPI *CpuSetInfoFn)(SYSTEM_CPU_SET_INFORMATION *, ULONG, ULONG *, HANDLE, ULONG);
+typedef BOOL(WINAPI *ThreadCpuSetsFn)(HANDLE, const ULONG *, ULONG);
+typedef BOOL(WINAPI *ProcessInfoFn)(HANDLE, PROCESS_INFORMATION_CLASS, void *, DWORD);
+static ThreadCpuSetsFn set_thread_cpu_sets;
+
+static FARPROC kernel32_fn(const char *name) { return GetProcAddress(GetModuleHandleW(L"kernel32.dll"), name); }
+
+static void fast_sets_find(void) {
+    ULONG len = 0;
+    fast_n = 0;
+    CpuSetInfoFn info = (CpuSetInfoFn)(void *)kernel32_fn("GetSystemCpuSetInformation");
+    set_thread_cpu_sets = (ThreadCpuSetsFn)(void *)kernel32_fn("SetThreadSelectedCpuSets");
+    if (!info || !set_thread_cpu_sets) return;
+    info(NULL, 0, &len, GetCurrentProcess(), 0);
+    char *buf = len ? malloc(len) : NULL;
+    if (!buf || !info((SYSTEM_CPU_SET_INFORMATION *)buf, len, &len, GetCurrentProcess(), 0)) {
+        free(buf);
+        return;
+    }
+    int lo = 255, hi = -1;
+    for (ULONG at = 0; at < len; at += ((SYSTEM_CPU_SET_INFORMATION *)(buf + at))->Size) {
+        const SYSTEM_CPU_SET_INFORMATION *s = (const void *)(buf + at);
+        if (s->Type != CpuSetInformation) continue;
+        if (s->CpuSet.EfficiencyClass < lo) lo = s->CpuSet.EfficiencyClass;
+        if (s->CpuSet.EfficiencyClass > hi) hi = s->CpuSet.EfficiencyClass;
+    }
+    if (hi > lo)
+        for (ULONG at = 0; at < len && fast_n < sizeof fast_sets / sizeof *fast_sets;
+             at += ((SYSTEM_CPU_SET_INFORMATION *)(buf + at))->Size) {
+            const SYSTEM_CPU_SET_INFORMATION *s = (const void *)(buf + at);
+            if (s->Type == CpuSetInformation && s->CpuSet.EfficiencyClass == hi && !s->CpuSet.Parked)
+                fast_sets[fast_n++] = s->CpuSet.Id;
+        }
+    free(buf);
+}
+
+uint32_t plat_thread_prefer_fast_cores(void) {
+    static INIT_ONCE once = INIT_ONCE_STATIC_INIT;
+    BOOL pending;
+    if (InitOnceBeginInitialize(&once, 0, &pending, NULL) && pending) {
+        fast_sets_find();
+        InitOnceComplete(&once, 0, NULL);
+    }
+    if (!fast_n || !set_thread_cpu_sets(GetCurrentThread(), fast_sets, fast_n)) return 0;
+    return fast_n;
+}
+
+void plat_power_full_speed(void) {
+    // ControlMask names the policies the process sets itself; a zero StateMask turns each of them off.
+    PROCESS_POWER_THROTTLING_STATE p = {PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+                                        PROCESS_POWER_THROTTLING_EXECUTION_SPEED |
+                                            PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION,
+                                        0};
+    ProcessInfoFn set = (ProcessInfoFn)(void *)kernel32_fn("SetProcessInformation");
+    if (set) set(GetCurrentProcess(), ProcessPowerThrottling, &p, sizeof p);
+}
+
+// Laptops with two GPUs: the NVIDIA (Optimus) and AMD (PowerXpress) drivers read these exports of the exe and start it
+// on the dedicated GPU, which then also lists first for Vulkan (vk_device.c picks a discrete GPU when it sees one).
+__declspec(dllexport) DWORD NvOptimusEnablement = 1;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+
 uint32_t plat_cpu_count(void) {
     DWORD n = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
     return n ? (uint32_t)n : 1;
