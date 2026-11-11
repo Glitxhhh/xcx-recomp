@@ -1,5 +1,7 @@
 # XCX Recomp
 
+<a href="https://recomplauncher.com/game/xcx-recomp"><picture><source media="(prefers-color-scheme: dark)" srcset="https://recomplauncher.com/assets/press/launcher/badge-light.svg"><img alt="Get it on RecompLauncher" src="https://recomplauncher.com/assets/press/launcher/badge-dark.svg" height="48"></picture></a>
+
 **XCX Recomp** is a static recompilation of *Xenoblade Chronicles X: Definitive Edition* (Nintendo Switch, 2025) into a native Windows x86-64 application ([docs/architecture.md](docs/architecture.md)). It is a fork of [TotK Recomp](https://github.com/valentderah/totk-pc-recomp) by Valiantsin Dzerakh.
 
 > [!IMPORTANT]
