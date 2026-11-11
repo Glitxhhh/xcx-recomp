@@ -75,6 +75,7 @@
  "warn.npdm_differs": "main.npdm differs from the reference {version} dump; only the code modules are used.",
  "warn.kernel_old": "Linux {version} lacks the write tracking the game relies on (6.7 or later); the game may run very slowly. Updating the system fixes this.",
  "warn.cpu_no_avx2": "This processor lacks AVX2, so the game is built for older processors (x86-64-v2) and runs slower than on a processor with AVX2.",
+ "warn.cheats_skipped": "The cheats of the mods folder could not be built in; the game is built without its code cheats. Details: {log}",
  "ui.title": "XCX Setup",
  "ui.version": "version {version}",
  "ui.intro": "Builds a playable Xenoblade Chronicles X: Definitive Edition folder from your own game files. This takes a while and runs once.",

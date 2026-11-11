@@ -45,8 +45,22 @@ A write to memory that can't be written is skipped and the game keeps running; t
 
 ### Cheats that change code
 
-They don't work, and the tab shows them greyed out. An emulator runs the game's ARM code, so changing those bytes
-changes what runs. Here the code was compiled to x86-64 during setup and the ARM bytes never run.
+Most cheats for this game change its code (opcode `04000000` into `main`). On an emulator that works because it runs
+the game's ARM code. Here that code was compiled to x86-64 during setup, so the setup builds such cheats into the game
+instead: `tools/cheats.py` turns each one into a patch set that the Cheats tab switches on and off while the game runs.
+
+- Put the cheat file in `mods/<name>/cheats/`, then run the setup again (Install or Update). It rebuilds the game with
+  the cheats in; that takes a few minutes. A cheat added or edited later shows "needs the setup again" until then.
+- Cheats that branch into a code cave (a "MUST BE ON" section that writes code past `main`) are supported: the cave's
+  code is built in at the cheat's site.
+- Button cheats (`8` opcode around the code writes) act only while their buttons are held.
+- Some cheats can't be built in yet, and the tab greys them out with the reason: caves with their own branches
+  (if/else or loops inside), and cheats that mix code changes with data written by the interpreter.
+- Two cheats that change the same instruction (such as hp inf and tp inf) can't both act: the first one in the file
+  wins.
+- The setup lists what it built in `build-cache/cheats.status` next to `xcx.exe`.
+
+The 1.0.2 cheats work on 2.0.0: their addresses are the same. Rename the file to `EC4ED46BBC4A9EBB.txt`.
 
 ## Checks
 

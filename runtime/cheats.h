@@ -1,6 +1,7 @@
-// Cheats in the Atmosphere format (docs/modding.md, "Cheats"): the port's built-in ones and each mod folder's
-// cheats/<build id>.txt, run 12 times a second on a thread of their own (runtime/cheats.c). The format and the
-// interpreter are cheat_vm.c.
+// Cheats in the Atmosphere format (docs/cheats.md): the port's built-in ones and each mod folder's
+// cheats/<build id>.txt. Cheats that change data run 12 times a second on a thread of their own, in the interpreter
+// of cheat_vm.c; cheats that change code were built into the game by the setup (tools/cheats.py) as patch sets, which
+// switching them on or off flips (runtime/cheats.c).
 #pragma once
 #include <stdint.h>
 #include "cheat_vm.h"
@@ -11,6 +12,8 @@ typedef struct {
     int enabled, master;
     CheatState state;
     uint64_t refused;     // writes the cheat aimed at memory that cannot be written
+    uint32_t buttons;     // a patched cheat that acts only while these buttons are held (nn::hid bits), else 0
+    const char *note;     // CHEAT_UNSUPPORTED: why, from the setup ("" none)
 } CheatRow;
 
 #define CHEATS_BUILTIN "Built-in"

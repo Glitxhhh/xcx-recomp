@@ -623,12 +623,37 @@ EMITTED = re.compile(r'^emitted (\d+)/(\d+) chunks')
 DISCOVERED = re.compile(r'^(\w+): \d+ functions \(.*discovery')
 
 
+CHEAT_PLACES = ('cheats', 'atmosphere/contents/0100453019AA8000/cheats', 'contents/0100453019AA8000/cheats',
+                '0100453019AA8000/cheats')
+
+
+def cheat_files(ctx):
+    """The Atmosphere cheat files of the mods folder (<dest>/mods/<mod>/cheats/*.txt and the Atmosphere places, as
+    tools/cheats.py finds them), for the lift key. All of them: the build reads the ones named after the installed
+    main's build id, and the keys are computed before Extract runs, when a fresh install has no main yet."""
+    mods = ctx.dest / 'mods'
+    if not mods.is_dir():
+        return []
+    return sorted(f for mod in mods.iterdir() if mod.is_dir() for where in CHEAT_PLACES
+                  for f in ((mod / where).glob('*.txt') if (mod / where).is_dir() else ()))
+
+
+def cheats_status(ctx):
+    """The build's cheat status file (tools/cheats.py --status), which runtime/cheats.c reads: which cheats became
+    patch sets, which the cheat interpreter runs and which cannot work."""
+    return ctx.dest / 'build-cache' / 'cheats.status'
+
+
 class Lift(Step):
     id = 'lift'
     transient = True
 
     def key(self, ctx):
-        return fingerprint('lift-3', ctx.keys['extract'], ctx.layout.recomp)
+        # fingerprint takes a file's name and content only; the paths under mods/ go in too, because tools/cheats.py
+        # names each patch set after its mod folder, so a renamed folder needs a lift
+        files = cheat_files(ctx)
+        return fingerprint('lift-4', ctx.keys['extract'], ctx.layout.recomp, ctx.layout.tools / 'cheats.py', *files,
+                           *(f.relative_to(ctx.dest / 'mods').as_posix() for f in files))
 
     def current(self, ctx, record):
         gen = ctx.temp / 'gen'
@@ -648,12 +673,33 @@ class Lift(Step):
         args = ['--exefs', ctx.dest / 'exefs', '--out', gen]
         if game_version(ctx) == '2.0.0':
             args += ['--mod-menu-hook']
-        table = layout.recomp / PATCHES
-        if table.is_file():   # the 60 fps sites (XCX_FPS60 switches them at run time)
-            args += ['--patches', table]
-        code, log = run_tool(ctx, 'lift', layout.recomp / 'gen.py', args, parse)
+        plain = layout.recomp / PATCHES   # the 60 fps sites and the other sets of 2.0.0
+        # The code cheats of the mods' cheat files become patch sets (tools/cheats.py); its status file tells the
+        # runtime what the build has. Cheat files are the player's downloads, so a failure costs the cheats, not the
+        # install: the game is built without them and the setup warns.
+        status = cheats_status(ctx)
+        status.unlink(missing_ok=True)   # no status: runtime/cheats.c treats every code cheat as not built
+        patches, skipped = plain, None
+        if plain.is_file() and cheat_files(ctx):
+            code, log = run_tool(ctx, 'lift', layout.tools / 'cheats.py',
+                                 ['--exefs', ctx.dest / 'exefs', '--mods', ctx.dest / 'mods', '--patches', plain,
+                                  '--out', ctx.temp / 'patches-cheats.txt', '--status', status])
+            if code:
+                status.unlink(missing_ok=True)
+                skipped = log
+            else:
+                patches = ctx.temp / 'patches-cheats.txt'
+        tables = ['--patches', patches] if patches.is_file() else []
+        code, log = run_tool(ctx, 'lift', layout.recomp / 'gen.py', args + tables, parse)
+        if code and patches != plain:
+            status.unlink(missing_ok=True)
+            skipped = log
+            code, log = run_tool(ctx, 'lift', layout.recomp / 'gen.py',
+                                 args + (['--patches', plain] if plain.is_file() else []), parse)
         if code:
             raise InstallError('lift.failed', code=code, log=str(log))
+        if skipped:
+            rep.warning('warn.cheats_skipped', log=str(skipped))
         (gen / STAMP).write_text(ctx.keys['lift'] + '\n')
         return {}
 

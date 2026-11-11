@@ -20,6 +20,11 @@ typedef enum {
     CHEAT_OK,
     CHEAT_MALFORMED,    // a word is not an opcode this format has, or the code ends inside one
     CHEAT_WRITES_CODE,  // writes to main's code or read-only data, which the lifted C does not read back
+    // Set by cheats.c from the setup's build (tools/cheats.py); the interpreter runs none of these.
+    CHEAT_PATCHED,      // built into the game as a patch set, which cheats.c switches
+    CHEAT_NOT_BUILT,    // changes code, but the game was built without it (added or edited after the last setup)
+    CHEAT_UNSUPPORTED,  // changes code in a way the setup could not build in
+    CHEAT_HIDDEN,       // nothing to switch: a code cave other cheats take their code from, or a restore of the original
 } CheatState;
 
 typedef struct {

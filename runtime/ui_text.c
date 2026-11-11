@@ -68,6 +68,13 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_CHEATS_RELOAD_DESC] = "Reads the cheat files again, for adding or editing one while the game runs.",
     [UI_CHEATS_OTHER_BUILDS] = "%d mods have cheats only for other versions of the game, so they do not load.",
     [UI_CHEATS_WHERE] = "Cheat files", [UI_CHEATS_BUILD] = "Game build for cheat files: %s",
+    [UI_CHEATS_PATCHED] = "Changes the game's code. The setup built it into the game, so it switches at once and stays on "
+                          "after a restart.",
+    [UI_CHEATS_NOT_BUILT] = "Changes the game's code, which has to be built into the game: run the setup again (Install "
+                            "or Update) to add this cheat, then restart.",
+    [UI_CHEATS_UNSUPPORTED] = "Changes the game's code in a way the setup cannot build into the recompiled game yet.",
+    [UI_CHEATS_NOTE_SETUP] = "needs the setup again",
+    [UI_CHEATS_BUTTONS] = "\n\nActs only while its buttons are held (button mask %X).",
     [UI_SWKBD_GRID_HINT] = "Controller: %s selects a key, %s confirms, %s cancels. D-pad or left stick moves. %s: Backspace. %s: Delete. Hold %s: Shift. %s: Caps Lock. %s / %s: text cursor.",
     [UI_SWKBD_SHIFT] = "Caps Lock", [UI_SWKBD_MOMENTARY_SHIFT] = "Shift",
     [UI_SWKBD_PALETTE] = "Controller keyboard: Latin letters, digits and space. You can also type with your keyboard.",
@@ -373,6 +380,13 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_CHEATS_RELOAD_DESC] = "Заново читает файлы читов, чтобы добавлять или править их во время игры.",
     [UI_CHEATS_OTHER_BUILDS] = "Модов с читами только для других версий игры: %d. Они не загружаются.",
     [UI_CHEATS_WHERE] = "Файлы читов", [UI_CHEATS_BUILD] = "Сборка игры для файлов читов: %s",
+    [UI_CHEATS_PATCHED] = "Меняет код игры. Установщик встроил его в игру, поэтому он включается сразу и остаётся "
+                          "включённым после перезапуска.",
+    [UI_CHEATS_NOT_BUILT] = "Меняет код игры, поэтому его нужно встроить в игру: запустите установщик ещё раз (Install "
+                            "или Update), затем перезапустите игру.",
+    [UI_CHEATS_UNSUPPORTED] = "Меняет код игры так, что установщик пока не может встроить это в рекомпилированную игру.",
+    [UI_CHEATS_NOTE_SETUP] = "нужен повторный запуск установщика",
+    [UI_CHEATS_BUTTONS] = "\n\nДействует, только пока зажаты его кнопки (маска кнопок %X).",
     [UI_SWKBD_GRID_HINT] = "Контроллер: %s — выбрать клавишу, %s — подтвердить, %s — отменить. Крестовина или левый стик — перемещение. %s — назад удалить. %s — удалить вперёд. Удерживать %s — Shift. %s — Caps Lock. %s / %s — курсор.",
     [UI_SWKBD_SHIFT] = "Caps Lock", [UI_SWKBD_MOMENTARY_SHIFT] = "Shift",
     [UI_SWKBD_PALETTE] = "Клавиатура контроллера: латинские буквы, цифры и пробел. Можно вводить текст и с обычной клавиатуры.",

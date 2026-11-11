@@ -637,6 +637,7 @@ static void tab_cheats(float scale) {
     const char *group = NULL;
     for (int i = 0; i < n; i++) {
         CheatRow c = cheats_row(i);
+        if (c.state == CHEAT_HIDDEN) continue;   // a code cave or a restore: nothing of its own to switch
         if (!group || strcmp(group, c.source)) {   // a heading per source, as the rows come in source order
             group = c.source;
             ImGui::Dummy(ImVec2(0, 6 * scale));
@@ -645,18 +646,26 @@ static void tab_cheats(float scale) {
         char id[32], desc[1024];
         snprintf(id, sizeof id, "##cheat%d", i);
         int builtin = !strcmp(c.source, CHEATS_BUILTIN);
-        snprintf(desc, sizeof desc, "%s",
-                 menu_text(c.state == CHEAT_WRITES_CODE ? UI_CHEATS_CODE
-                           : c.state == CHEAT_MALFORMED ? UI_CHEATS_BAD
-                           : c.master                   ? UI_CHEATS_MASTER
-                           : c.refused                  ? UI_CHEATS_REFUSED
-                           : builtin                    ? UI_CHEATS_BUILTIN
-                                                        : UI_CHEATS_DESC));
-        if (c.state == CHEAT_WRITES_CODE) opt_disable_next(UI_CHEATS_NOTE_CODE);
+        bool runs = c.state == CHEAT_OK || c.state == CHEAT_PATCHED;
+        int len = snprintf(desc, sizeof desc, "%s",
+                           menu_text(c.state == CHEAT_WRITES_CODE ? UI_CHEATS_CODE
+                                     : c.state == CHEAT_NOT_BUILT ? UI_CHEATS_NOT_BUILT
+                                     : c.state == CHEAT_UNSUPPORTED ? UI_CHEATS_UNSUPPORTED
+                                     : c.state == CHEAT_MALFORMED ? UI_CHEATS_BAD
+                                     : c.master                   ? UI_CHEATS_MASTER
+                                     : c.refused                  ? UI_CHEATS_REFUSED
+                                     : c.state == CHEAT_PATCHED   ? UI_CHEATS_PATCHED
+                                     : builtin                    ? UI_CHEATS_BUILTIN
+                                                                  : UI_CHEATS_DESC));
+        if (len > 0 && len < (int)sizeof desc && c.state == CHEAT_UNSUPPORTED && *c.note)
+            len += snprintf(desc + len, sizeof desc - len, "\n\n%s", c.note);
+        if (len > 0 && len < (int)sizeof desc && c.buttons)
+            snprintf(desc + len, sizeof desc - len, menu_text(UI_CHEATS_BUTTONS), (unsigned)c.buttons);
+        if (c.state == CHEAT_WRITES_CODE || c.state == CHEAT_UNSUPPORTED) opt_disable_next(UI_CHEATS_NOTE_CODE);
+        else if (c.state == CHEAT_NOT_BUILT) opt_disable_next(UI_CHEATS_NOTE_SETUP);
         else if (c.state == CHEAT_MALFORMED) opt_disable_next(UI_CHEATS_NOTE_BAD);
         else if (c.master) opt_disable_next(UI_CHEATS_NOTE_MASTER);
-        if (opt_row_text(id, c.name, desc, (c.enabled || c.master) && c.state == CHEAT_OK) && c.state == CHEAT_OK &&
-            !c.master)
+        if (opt_row_text(id, c.name, desc, (c.enabled || c.master) && runs) && runs && !c.master)
             cheats_set(i, !c.enabled);
     }
     opt_group(UI_CHEATS_WHERE);
