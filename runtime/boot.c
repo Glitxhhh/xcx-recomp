@@ -326,12 +326,37 @@ static void hang_note_present(void) {
     if (s > 0) plat_thread_detach(plat_thread_new(state_watch, (void *)(uintptr_t)s, "state_watch"));
 }
 
+// XCX_CRASH_TEST=<frame>[:<kind>]: a debugging hook that crashes on purpose at that present, on the guest thread that
+// presents, to check the crash report (main.c crash_handler, rt_crash_fatal) and crash.txt. Kinds: write (default; a
+// write to address 0x10 in this executable), null (a call through a null pointer, rip 0), foreign (strlen in the C
+// runtime library reads address 8: a fault in another module, as in a driver), abort, fatal (rt_fatal).
+static size_t (*volatile crash_test_strlen)(const char *) = strlen;
+static void (*volatile crash_test_null)(void);
+
+static void crash_test(uint64_t n) {
+    static uint64_t at = UINT64_MAX;
+    static const char *kind;
+    if (at == UINT64_MAX) {
+        const char *e = cfg_get("XCX_CRASH_TEST");
+        at = e ? strtoull(e, NULL, 10) : 0;
+        kind = e && strchr(e, ':') ? strchr(e, ':') + 1 : "write";
+        if (at) rt_log("crash test: a %s crash at present %llu", kind, (unsigned long long)at);
+    }
+    if (!at || n != at) return;
+    if (!strcmp(kind, "null")) crash_test_null();
+    else if (!strcmp(kind, "foreign")) rt_log("crash test: %zu", crash_test_strlen((const char *)(uintptr_t)8));
+    else if (!strcmp(kind, "abort")) abort();
+    else if (!strcmp(kind, "fatal")) rt_fatal("crash test: rt_fatal at present %llu", (unsigned long long)n);
+    else *(volatile int *)(uintptr_t)0x10 = 1;
+}
+
 // A --seconds run ends at the first present after the world clock (game time since the save's first frame,
 // frame_step_world_us) passed S seconds, so a run covers the same game time at any frame rate; any other frame is
 // counted by the back end only.
 void rt_frame_presented(const tex_t *t, uint64_t n) {
     const RtConfig *cfg = rt_config();
     hang_note_present();
+    crash_test(n);
     series_shot(t, n);
     int64_t w = cfg->seconds ? frame_step_world_us() : -1;
     if (w < 0 || (double)w < cfg->seconds * 1e6) return;

@@ -14,4 +14,7 @@ const char *mod_zip_unpack_romfs(const uint8_t *zip, size_t size, const char *fo
 
 // Raw deflate (RFC 1951) of src into dst, which holds exactly the expected size; 1 when the stream filled dst exactly.
 int mod_inflate(const uint8_t *src, size_t n, uint8_t *dst, size_t want);
+// Raw deflate of src into dst, which holds cap bytes: one block with the fixed Huffman codes. The compressed size, or
+// 0 when it would not fit in cap (the caller stores the data instead). For the bug report (runtime/bug_report.c).
+size_t mod_deflate(const uint8_t *src, size_t n, uint8_t *dst, size_t cap);
 uint32_t mod_crc32(const uint8_t *p, size_t n);

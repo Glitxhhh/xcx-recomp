@@ -41,15 +41,13 @@ static struct { uint64_t addr; GuestFn fn; } g_host[HOST_CAP];
 static uint64_t g_nhost;
 
 void rt_fatal(const char *fmt, ...) {
+    char msg[2048];
     va_list ap;
     va_start(ap, fmt);
-    rt_log_raw("FATAL: ", 7);
-    rt_vlogf(fmt, ap);
-    rt_log_raw("\n", 1);
+    vsnprintf(msg, sizeof msg, fmt, ap);
     va_end(ap);
     fflush(stdout);
-    fflush(stderr);
-    _Exit(70);
+    rt_crash_fatal(msg);   // main.c: the FATAL line, the guest state and the crash report; exit code 70
 }
 
 static const RtModule *module_at(uint64_t pc) {

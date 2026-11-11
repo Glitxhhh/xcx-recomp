@@ -200,17 +200,34 @@ void plat_mem_fault_hook(int (*fn)(uint64_t addr));
 // replaces this process with it (Linux). Environment changes made before the call are passed on.
 _Noreturn void plat_reexec(void);
 
-// A crash in this executable's own code (an access violation, an illegal instruction, a division by zero, a stack
-// overflow) goes to fn, which reports it and must end the process. Faults in other modules (drivers) are left to the
-// OS. The write-fault hook above runs first.
+// A crash goes to fn, which reports it and must end the process. The write-fault hook above runs first.
+// - A fault in this executable's own code (an access violation, an illegal instruction, a division by zero, a stack
+//   overflow) is reported as it happens, with the return addresses on the faulting thread's stack (but for a stack
+//   overflow, which leaves no room to walk it).
+// - A fault in another module (a GPU driver, a system library) is reported only when nothing handles it: on Windows
+//   from the unhandled-exception filter, so drivers that raise and catch their own exceptions never reach fn. For a
+//   C++ exception thrown by MSVC-built code (a driver) the report names its type and, for a std::exception, what().
+// - abort() (a failed assert, std::terminate) and, on Windows, an invalid parameter to a C runtime function go there
+//   too, with the frames of the caller: the C runtime would end the process for both with no exception.
 typedef struct {
     const char *what;          // "access violation", "illegal instruction", ...
     uint32_t code;             // the Windows exception code or the signal number
-    uintptr_t rip, offset;     // the faulting instruction, and its offset in the executable
+    uintptr_t rip, offset;     // the faulting instruction, and its offset in its module
     int access;                // the data access that faulted: 0 read, 1 write, 8 execute; -1 when not an access
     uint64_t addr;             // its address when access >= 0
+    int nframes;               // return addresses, innermost first (for abort, rip is frames[0])
+    uintptr_t frames[32];
+    const char *frame_module[32];   // the module of each frame: NULL for this executable, "" for none
+    uintptr_t frame_offset[32];     // each frame's offset in its module
+    int frames_left_out;       // frames in other modules past the limit the walk keeps, so this executable's still fit
+    const char *module;        // the module holding rip: NULL for this executable, "" for none (a jump to address 0)
+    const char *cxx_type;      // a C++ exception from MSVC-built code: the thrown type's decorated name (.?AV...@@)
+    const char *cxx_what;      // and what() when the type derives from std::exception; NULL when unknown
 } PlatCrash;
 void plat_crash_hook(void (*fn)(const PlatCrash *c));
+// The return addresses of the calling thread, innermost first, past its skip innermost frames (this function's own
+// frame is never counted); their count. For rt_fatal's report.
+int plat_backtrace(uintptr_t *frames, int max, int skip);
 int plat_mem_read(uint64_t addr, void *out, size_t n);    // copies n bytes, 0 instead of faulting on unmapped memory
 int plat_mem_readable(uint64_t addr, uint64_t n);         // every page of [addr, addr + n) can be read; no fault
 void *plat_aligned_alloc(size_t size, size_t align);      // free with plat_aligned_free; NULL on failure
@@ -340,6 +357,16 @@ const char *plat_ui_language(void);
 // The user's regional format (locale) as a BCP-47 tag; "" when the system gives none. Valid for the process.
 const char *plat_user_locale(void);
 uint32_t plat_thread_id(void);                            // id of the calling thread, for unique file names
+// Who and where the player is, for the bug report's masking (pii_mask.c): UTF-8, "" when unknown. user: the login
+// name; full_name: the account's display name; computer and host: the NetBIOS and DNS names of the machine; home: the
+// home folder; home_short: its 8.3 form (Windows; "" when it has none or it equals home).
+typedef struct {
+    char user[256], full_name[256], computer[256], host[256], home[PLAT_PATH_MAX], home_short[PLAT_PATH_MAX];
+} PlatIdentity;
+void plat_identity(PlatIdentity *out);
+// The lowercase of a Unicode code point by the OS's invariant rules (not the C locale's ASCII-only tolower); cp itself
+// when it has none.
+uint32_t plat_char_lower(uint32_t cp);
 // A system font file with the glyphs of a catalog language ("ja", "ko", "zh-Hans", "zh-Hant"): the menu shows each
 // language's name in its own script. Copies the UTF-8 path into out; 0 when the system has none.
 int plat_font_path(const char *lang, char *out, size_t cap);
