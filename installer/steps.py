@@ -791,6 +791,9 @@ class Dlss(Step):
     id = 'dlss'
 
     def key(self, ctx):
+        given = getattr(ctx.options, 'dlss_file', None)
+        if given:
+            return fingerprint('dlss-1', 'file', file_sha256(given))
         if not getattr(ctx.options, 'dlss', False):
             return fingerprint('dlss-1', 'off')
         return fingerprint('dlss-1', DLSS_VERSION, DLSS_SHA256)
@@ -801,6 +804,11 @@ class Dlss(Step):
         return not record.get('installed') or (ctx.dest / DLSS_DLL).is_file()
 
     def run(self, ctx):
+        given = getattr(ctx.options, 'dlss_file', None)
+        if given:
+            # A launcher fetched and checked the file (--dlss-file): copy it over any library an older run left
+            replace_file(given, ctx.dest / DLSS_DLL)
+            return {'installed': 'file'}
         if not getattr(ctx.options, 'dlss', False):
             return {}
         if os.name != 'nt':
