@@ -296,6 +296,7 @@ void rt_boot(void);                                        // boot.c
 // Modes of xcx.exe. main.c has run mem_init and parsed the paths; each mode calls ldr_load itself if it needs the
 // modules, registers its host functions, then seals (hostfn_seal, or implicitly at the first rt_call). Return the
 // process exit code.
+int probe_cheats(void);                                    // cheat_probe.c
 int probe_cfg(void);                                       // cfg_probe.c
 int probe_loader(void), probe_kernel(void), probe_ipc(void), probe_services(void), probe_fs(void);
 int probe_gfx_abi(void);                                   // gfx_abi_probe.c

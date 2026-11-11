@@ -115,7 +115,7 @@ RUNTIME_SUFFIXES = {'.h', '.inc', '.ico'}   # .ico: the installer window icon
 
 VERSION_TAG = 'upd'   # installer/layout.py version_tag: the generated/ and build/extracted/ name of 2.0.0
 EXPECTED = 'expected-xcx-2.0.0.json'
-PROBES = ['--probe-kernel', '--probe-vkexec', '--probe-nvn-tex', '--probe-shader']
+PROBES = ['--probe-kernel', '--probe-vkexec', '--probe-nvn-tex', '--probe-shader', '--probe-cheats']
 
 
 def sha256_file(path):

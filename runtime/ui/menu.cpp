@@ -28,6 +28,7 @@ extern "C" {
 
 extern "C" {
 #include "cfg.h"
+#include "cheats.h"
 #include "mods.h"
 #include "mod_settings.h"
 #include "mod_menu.h"
@@ -36,6 +37,7 @@ extern "C" {
 #include "input_wsys.h"
 #include "perfmon.h"
 #include "platform/platform.h"
+#include "romfs_mods.h"
 #include "swkbd.h"
 #include "sysinfo.h"
 #include "ui/menu.h"
@@ -320,7 +322,7 @@ extern "C" void menu_vk_release(void) {
 // XCX_MENU_TEST_SET=<frame>:<key>=<value>[,<key>=<value>...][;<frame>:...]: cfg_set of each key (XCX_ prefix
 // optional) at that presented frame; changes live settings with no input, menu open or not. xcx.ini is written only by
 // the pseudo-key SAVE=1 (cfg_save, as a row change does; a failed write shows the menu's save note).
-enum { TAB_SCREEN, TAB_GAME, TAB_SOUND, TAB_CONTROLS, TAB_MENU, TAB_ADVANCED, TAB_MODS, TAB_COUNT };
+enum { TAB_SCREEN, TAB_GAME, TAB_SOUND, TAB_CONTROLS, TAB_MENU, TAB_ADVANCED, TAB_MODS, TAB_CHEATS, TAB_COUNT };
 enum { TEST_PAGE_FRAMES = 30, TEST_SETS = 16 };
 struct TestSet { uint64_t frame; char key[64], value[64]; };
 static struct {
@@ -624,6 +626,55 @@ static void tab_menu(float scale) {
     opt_end();
 }
 
+// ---- Cheats: the built-in cheats, then each mod folder's (cheats.c). Nothing here is a setting: the rows are built from
+// the cheat files and cheats-enabled.txt keeps them.
+static void tab_cheats(float scale) {
+    opt_begin("##cheats", scale);
+    char line[4400];
+    int n = cheats_count();
+    if (n) opt_text(UI_CHEATS_WARN, true);
+    else opt_text(UI_CHEATS_NONE);
+    const char *group = NULL;
+    for (int i = 0; i < n; i++) {
+        CheatRow c = cheats_row(i);
+        if (!group || strcmp(group, c.source)) {   // a heading per source, as the rows come in source order
+            group = c.source;
+            ImGui::Dummy(ImVec2(0, 6 * scale));
+            opt_text_raw(c.source);
+        }
+        char id[32], desc[1024];
+        snprintf(id, sizeof id, "##cheat%d", i);
+        int builtin = !strcmp(c.source, CHEATS_BUILTIN);
+        snprintf(desc, sizeof desc, "%s",
+                 menu_text(c.state == CHEAT_WRITES_CODE ? UI_CHEATS_CODE
+                           : c.state == CHEAT_MALFORMED ? UI_CHEATS_BAD
+                           : c.master                   ? UI_CHEATS_MASTER
+                           : c.refused                  ? UI_CHEATS_REFUSED
+                           : builtin                    ? UI_CHEATS_BUILTIN
+                                                        : UI_CHEATS_DESC));
+        if (c.state == CHEAT_WRITES_CODE) opt_disable_next(UI_CHEATS_NOTE_CODE);
+        else if (c.state == CHEAT_MALFORMED) opt_disable_next(UI_CHEATS_NOTE_BAD);
+        else if (c.master) opt_disable_next(UI_CHEATS_NOTE_MASTER);
+        if (opt_row_text(id, c.name, desc, (c.enabled || c.master) && c.state == CHEAT_OK) && c.state == CHEAT_OK &&
+            !c.master)
+            cheats_set(i, !c.enabled);
+    }
+    opt_group(UI_CHEATS_WHERE);
+    if (opt_button("##cheats_reload", UI_CHEATS_RELOAD, UI_CHEATS_RELOAD_DESC)) cheats_reload();
+    if (cheats_other_builds()) {
+        snprintf(line, sizeof line, menu_text(UI_CHEATS_OTHER_BUILDS), cheats_other_builds());
+        opt_text_raw(line);
+    }
+    snprintf(line, sizeof line, menu_text(UI_CHEATS_BUILD), *cheats_build_id() ? cheats_build_id() : "?");
+    opt_text_raw(line);
+    const char *dir = romfs_mods_dir();
+    if (dir) {
+        snprintf(line, sizeof line, "%s", dir);
+        opt_text_raw(line);
+    }
+    opt_end();
+}
+
 // ---- Advanced: the testing and troubleshooting keys, the bug report helpers and the reset of every setting
 static bool g_modal;   // the reset confirmation is open: B and Esc close it, not the menu; L / R stay on the page
 
@@ -782,7 +833,8 @@ static void tab_advanced(float scale) {
 }
 
 static const UiTextId kTabNames[TAB_COUNT] = {UI_MENU_TAB_SCREEN, UI_MENU_TAB_GAME, UI_MENU_TAB_SOUND,
-                                              UI_MENU_TAB_CONTROLS, UI_MENU_TAB_MENU, UI_MENU_TAB_ADVANCED, UI_MENU_TAB_MODS};
+                                              UI_MENU_TAB_CONTROLS, UI_MENU_TAB_MENU, UI_MENU_TAB_ADVANCED, UI_MENU_TAB_MODS,
+                                              UI_MENU_TAB_CHEATS};
 static int g_tab;               // the tab shown
 static uint64_t g_registered_epoch;
 static char g_registered_owner[65];
@@ -1154,6 +1206,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
             case TAB_MENU: tab_menu(scale); break;
             case TAB_ADVANCED: tab_advanced(scale); break;
             case TAB_MODS: mods_page(scale,bottom,focus_page); break;
+            case TAB_CHEATS: tab_cheats(scale); break;
             }
             ImGui::EndTabItem();
         }

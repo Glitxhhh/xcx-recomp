@@ -40,8 +40,10 @@ struct Desc { char text[512]; };
 static Desc g_hover, g_focus, g_first, g_shown;
 
 // disabled: the note of a row opt_disable_next greyed out, else NULL.
+static const char *g_own_label, *g_own_desc;   // opt_row_text: this row's own text in place of its UiTextIds
+
 static void desc_set(Desc &d, UiTextId desc, const char *key, const CfgMeta *m, const char *disabled) {
-    int n = snprintf(d.text, sizeof d.text, "%s", menu_text(desc));
+    int n = snprintf(d.text, sizeof d.text, "%s", g_own_desc ? g_own_desc : menu_text(desc));
     if (n < 0 || n >= (int)sizeof d.text) return;
     if (disabled)
         snprintf(d.text + n, sizeof d.text - n, "\n\n%s", disabled);
@@ -187,7 +189,8 @@ static int row(const char *key, UiTextId label, UiTextId desc, const RowView &v)
     }
     // the label and its note, clipped before the value
     ImVec4 clip(p.x, p.y, value_left - fs * 0.6f, p.y + h);
-    dl->AddText(font, fs, ImVec2(p.x + pad, ty), off ? kGrey : IM_COL32(230, 242, 250, 255), menu_text(label), NULL, 0,
+    dl->AddText(font, fs, ImVec2(p.x + pad, ty), off ? kGrey : IM_COL32(230, 242, 250, 255),
+                g_own_label ? g_own_label : menu_text(label), NULL, 0,
                 &clip);
     const char *note = disabled        ? disabled
                      : off             ? menu_text(UI_MENU_SET_BY_ENV)
@@ -234,6 +237,22 @@ bool opt_toggle(const char *key, UiTextId label, UiTextId desc, bool inverted) {
     if (!row(key, label, desc, v)) return false;   // any step flips it
     apply(key, set ? "0" : "1");
     return true;
+}
+
+bool opt_row_text(const char *id, const char *label, const char *desc, bool on) {
+    g_own_label = label;
+    g_own_desc = desc;
+    RowView v = {menu_text(on ? UI_MENU_ON : UI_MENU_OFF), false, false, NULL};
+    int step = row(id, UI_MENU_ON, UI_MENU_ON, v);
+    g_own_label = g_own_desc = NULL;
+    return step != 0;   // any step flips it
+}
+
+void opt_text_raw(const char *text) {
+    ImGui::PushTextWrapPos(0);
+    ImGui::TextDisabled("%s", text);
+    ImGui::PopTextWrapPos();
+    ImGui::Spacing();
 }
 
 bool opt_button(const char *id, UiTextId label, UiTextId desc, const char *value) {

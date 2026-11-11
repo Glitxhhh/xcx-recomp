@@ -49,6 +49,25 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MODS_EMPTY] = "No mods yet. When the library has been read, its mods are listed here to install.",
     [UI_MODS_LUA] = "Lua mod settings",
     [UI_MODS_NO_LUA] = "No Lua mods running. Lua mods turned on in the library start with the next start of the game.",
+    [UI_MENU_TAB_CHEATS] = "Cheats",
+    [UI_CHEATS_WARN] = "Cheats change the running game and the save it writes. Back up your saves first.",
+    [UI_CHEATS_NONE] = "No cheats for this version of the game. A mod's cheats go in mods/<mod>/cheats/, in a file "
+                       "named after the build below.",
+    [UI_CHEATS_DESC] = "Applies at once, 12 times a second, and stays on after a restart.",
+    [UI_CHEATS_BUILTIN] = "Comes with the recomp. Applies once a save is loaded, 12 times a second, and stays on after "
+                          "a restart.",
+    [UI_CHEATS_MASTER] = "A master code: it always runs, because other cheats of the file may depend on it.",
+    [UI_CHEATS_REFUSED] = "Some of its writes went to memory that cannot be written. It was probably made for another "
+                          "version of the game.",
+    [UI_CHEATS_CODE] = "This cheat changes the game's code. The game here is compiled ahead of time, so it cannot be "
+                       "changed that way while running.",
+    [UI_CHEATS_BAD] = "This cheat is not valid: a line of it is not code the format knows.",
+    [UI_CHEATS_NOTE_CODE] = "changes code, cannot run", [UI_CHEATS_NOTE_BAD] = "not valid",
+    [UI_CHEATS_NOTE_MASTER] = "always on",
+    [UI_CHEATS_RELOAD] = "Reload cheats",
+    [UI_CHEATS_RELOAD_DESC] = "Reads the cheat files again, for adding or editing one while the game runs.",
+    [UI_CHEATS_OTHER_BUILDS] = "%d mods have cheats only for other versions of the game, so they do not load.",
+    [UI_CHEATS_WHERE] = "Cheat files", [UI_CHEATS_BUILD] = "Game build for cheat files: %s",
     [UI_SWKBD_GRID_HINT] = "Controller: %s selects a key, %s confirms, %s cancels. D-pad or left stick moves. %s: Backspace. %s: Delete. Hold %s: Shift. %s: Caps Lock. %s / %s: text cursor.",
     [UI_SWKBD_SHIFT] = "Caps Lock", [UI_SWKBD_MOMENTARY_SHIFT] = "Shift",
     [UI_SWKBD_PALETTE] = "Controller keyboard: Latin letters, digits and space. You can also type with your keyboard.",
@@ -335,6 +354,25 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MODS_EMPTY] = "Модов пока нет. Когда библиотека будет прочитана, её моды появятся здесь.",
     [UI_MODS_LUA] = "Настройки Lua-модов",
     [UI_MODS_NO_LUA] = "Lua-моды не запущены. Lua-моды, включённые в библиотеке, запустятся при следующем запуске игры.",
+    [UI_MENU_TAB_CHEATS] = "Читы",
+    [UI_CHEATS_WARN] = "Читы меняют запущенную игру и её сохранения. Сначала сделайте копию сохранений.",
+    [UI_CHEATS_NONE] = "Для этой версии игры читов нет. Читы мода лежат в mods/<мод>/cheats/, в файле, названном по "
+                       "сборке ниже.",
+    [UI_CHEATS_DESC] = "Применяется сразу, 12 раз в секунду, и остаётся включённым после перезапуска.",
+    [UI_CHEATS_BUILTIN] = "Входит в рекомпиляцию. Работает после загрузки сохранения, 12 раз в секунду, и остаётся "
+                          "включённым после перезапуска.",
+    [UI_CHEATS_MASTER] = "Мастер-код: работает всегда, от него могут зависеть другие читы файла.",
+    [UI_CHEATS_REFUSED] = "Часть записей попала в память, недоступную для записи. Вероятно, чит сделан для другой "
+                          "версии игры.",
+    [UI_CHEATS_CODE] = "Этот чит меняет код игры. Игра скомпилирована заранее, поэтому так изменить её во время работы "
+                       "нельзя.",
+    [UI_CHEATS_BAD] = "Чит недействителен: в нём есть строка, которой нет в формате.",
+    [UI_CHEATS_NOTE_CODE] = "меняет код, не запустится", [UI_CHEATS_NOTE_BAD] = "недействителен",
+    [UI_CHEATS_NOTE_MASTER] = "всегда включён",
+    [UI_CHEATS_RELOAD] = "Перечитать читы",
+    [UI_CHEATS_RELOAD_DESC] = "Заново читает файлы читов, чтобы добавлять или править их во время игры.",
+    [UI_CHEATS_OTHER_BUILDS] = "Модов с читами только для других версий игры: %d. Они не загружаются.",
+    [UI_CHEATS_WHERE] = "Файлы читов", [UI_CHEATS_BUILD] = "Сборка игры для файлов читов: %s",
     [UI_SWKBD_GRID_HINT] = "Контроллер: %s — выбрать клавишу, %s — подтвердить, %s — отменить. Крестовина или левый стик — перемещение. %s — назад удалить. %s — удалить вперёд. Удерживать %s — Shift. %s — Caps Lock. %s / %s — курсор.",
     [UI_SWKBD_SHIFT] = "Caps Lock", [UI_SWKBD_MOMENTARY_SHIFT] = "Shift",
     [UI_SWKBD_PALETTE] = "Клавиатура контроллера: латинские буквы, цифры и пробел. Можно вводить текст и с обычной клавиатуры.",

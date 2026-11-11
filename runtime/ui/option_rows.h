@@ -45,6 +45,12 @@ bool opt_choice_list(const char *key, UiTextId label, const char *const *values,
 // A row that runs an action: true on A or a click. id: unique on the page and not a setting ("##copy_info"); value:
 // shown on the right ("" none).
 bool opt_button(const char *id, UiTextId label, UiTextId desc, const char *value = "");
+// An on / off row over a list the caller builds, not a setting (a cheat, a mod). id: unique on the page, not a setting;
+// label and desc are shown as they are. Returns true when the player flipped it; the caller keeps the state.
+// opt_disable_next greys it out as any row.
+bool opt_row_text(const char *id, const char *label, const char *desc, bool on);
+// A wrapped line of text that is not from the catalog (a path).
+void opt_text_raw(const char *text);
 // lo..hi in steps of step (left and right held for a second go ten times as fast); fmt formats the value ("%.0f %%").
 bool opt_slider(const char *key, UiTextId label, float lo, float hi, UiTextId desc, float step = 1,
                 const char *fmt = "%g");
