@@ -50,6 +50,11 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MODS_LUA] = "Lua mod settings",
     [UI_MODS_NO_LUA] = "No Lua mods running. Lua mods turned on in the library start with the next start of the game.",
     [UI_MENU_TAB_CHEATS] = "Cheats",
+    [UI_MENU_CHEATS] = "Cheats",
+    [UI_MENU_CHEATS_DESC] = "Shows the Cheats tab, where cheats are switched on one by one. Off keeps every cheat off; "
+                            "the ones chosen are kept for the next time.",
+    [UI_CHEATS_CREDITS] = "Cheat codes by pspmaster, TomSwitch, ranma99vn, Nic87, zzpong and WiduraGoez, collected by "
+                          "Muezaa. Thank you!",
     [UI_CHEATS_WARN] = "Cheats change the running game and the save it writes. Back up your saves first.",
     [UI_CHEATS_NONE] = "No cheats for this version of the game. A mod's cheats go in mods/<mod>/cheats/, in a file "
                        "named after the build below.",
@@ -362,6 +367,11 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MODS_LUA] = "Настройки Lua-модов",
     [UI_MODS_NO_LUA] = "Lua-моды не запущены. Lua-моды, включённые в библиотеке, запустятся при следующем запуске игры.",
     [UI_MENU_TAB_CHEATS] = "Читы",
+    [UI_MENU_CHEATS] = "Читы",
+    [UI_MENU_CHEATS_DESC] = "Показывает вкладку «Читы», где читы включаются по одному. Выключено: все читы выключены, "
+                            "выбранные сохраняются до следующего раза.",
+    [UI_CHEATS_CREDITS] = "Коды читов: pspmaster, TomSwitch, ranma99vn, Nic87, zzpong и WiduraGoez, собрал Muezaa. "
+                          "Спасибо!",
     [UI_CHEATS_WARN] = "Читы меняют запущенную игру и её сохранения. Сначала сделайте копию сохранений.",
     [UI_CHEATS_NONE] = "Для этой версии игры читов нет. Читы мода лежат в mods/<мод>/cheats/, в файле, названном по "
                        "сборке ниже.",

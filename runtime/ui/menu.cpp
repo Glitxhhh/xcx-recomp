@@ -586,6 +586,7 @@ static void tab_game(float scale) {
     row_game_lang();
     static const UiTextId mode[] = {UI_MENU_MODE_DOCKED, UI_MENU_MODE_HANDHELD};
     opt_choice("XCX_OPERATION_MODE", UI_MENU_OPERATION_MODE, mode, 2, UI_MENU_OPERATION_MODE_DESC);
+    opt_toggle("XCX_CHEATS", UI_MENU_CHEATS, UI_MENU_CHEATS_DESC);
     opt_end();
 }
 
@@ -637,12 +638,19 @@ static void tab_cheats(float scale) {
     const char *group = NULL;
     for (int i = 0; i < n; i++) {
         CheatRow c = cheats_row(i);
-        if (c.state == CHEAT_HIDDEN) continue;   // a code cave or a restore: nothing of its own to switch
         if (!group || strcmp(group, c.source)) {   // a heading per source, as the rows come in source order
             group = c.source;
             ImGui::Dummy(ImVec2(0, 6 * scale));
             opt_text_raw(c.source);
+            if (!strcmp(c.source, CHEATS_BUILTIN)) opt_text(UI_CHEATS_CREDITS);
         }
+        size_t len_name = strlen(c.name);   // "--- Combat ---": a group label of the cheat list
+        if (len_name > 8 && !strncmp(c.name, "--- ", 4) && !strcmp(c.name + len_name - 4, " ---")) {
+            snprintf(line, sizeof line, "%.*s", (int)(len_name - 8), c.name + 4);
+            opt_group_raw(line);
+            continue;
+        }
+        if (c.state == CHEAT_HIDDEN) continue;   // a code cave, a restore or a note: nothing of its own to switch
         char id[32], desc[1024];
         snprintf(id, sizeof id, "##cheat%d", i);
         int builtin = !strcmp(c.source, CHEATS_BUILTIN);
@@ -1186,13 +1194,15 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
              : ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false) || ImGui::IsKeyPressed(ImGuiKey_E, false) ? 1
              : ImGui::IsKeyPressed(ImGuiKey_GamepadL1, false) || ImGui::IsKeyPressed(ImGuiKey_Q, false) ? -1
                                                                                                          : 0;
-    if (step) g_tab_request = (g_tab + step + TAB_COUNT) % TAB_COUNT;
+    int tabs = cfg_bool("XCX_CHEATS") ? TAB_COUNT : TAB_CHEATS;   // the Cheats tab is last and shows while cheats are on
+    if (g_tab >= tabs) g_tab_request = TAB_GAME;   // cheats turned off on their own tab: back to the switch
+    if (step) g_tab_request = (g_tab + step + tabs) % tabs;
     if (g_tab_request >= 0) g_focus_page = g_tab_request;   // the new page's first row takes the cursor
 
     const ImGuiStyle &st = ImGui::GetStyle();
     float bottom = ImGui::GetFrameHeight() + st.ItemSpacing.y * 2;
     if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_NoTabListScrollingButtons)) {
-        for (int k = 0; k < TAB_COUNT; k++) {
+        for (int k = 0; k < tabs; k++) {
             char label[128];
             snprintf(label, sizeof label, "  %s  ###tab%d", menu_text(kTabNames[k]), k);   // the id stays per language
             if (!ImGui::BeginTabItem(label, nullptr, g_tab_request == k ? ImGuiTabItemFlags_SetSelected : 0)) continue;

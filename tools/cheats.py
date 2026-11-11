@@ -7,9 +7,11 @@ into `site` lines (recomp/patches.py) when the game is lifted; the runtime (runt
 from the in-game menu. A cheat that only writes data (heap, main's data, pointer chains, button conditions) needs no
 patch: runtime/cheats.c runs it in its cheat VM.
 
-  python tools/cheats.py --exefs <dir> --mods <mods folder> --patches <patch file> --out <patch file> --status <file>
+  python tools/cheats.py --exefs <dir> --mods <mods folder> [--builtin <folder>] --patches <patch file>
+                         --out <patch file> --status <file>
 
-The cheat files are <mod>/cheats/<build id>.txt in each folder of --mods (or the Atmosphere places of that folder,
+--builtin is the folder of the port's own cheat lists (tools/data/cheats, which runtime/cheats.c embeds): its
+<build id>.txt goes first, as the mod "Built-in" (CHEATS_BUILTIN in runtime/cheats.h). The cheat files are <mod>/cheats/<build id>.txt in each folder of --mods (or the Atmosphere places of that folder,
 as runtime/cheats.c finds them; the name's case does not matter), the build id the first 8 bytes of main's. Every mod's
 file is built, switched on or off: the runtime decides which run. --out gets the --patches file followed by one set
 per convertible cheat (`cheat_<hash>`, switch XCX_CHEAT_<HASH>, default off) and its sites. --status gets one line
@@ -45,6 +47,7 @@ from lifter import Lifter  # noqa: E402
 from nso import Nso  # noqa: E402
 
 CAVE_SPACE = 0x1000000   # how far past main's image a cave write may go
+BUILTIN = 'Built-in'   # runtime/cheats.h CHEATS_BUILTIN: the name the built-in cheats' hashes take
 BASE = 0x7000000000   # main's base in the layout (recomp/layout.py); only pc-relative decoding sees it
 NOP = 0xD503201F
 RET = 0xD65F03C0
@@ -430,6 +433,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--exefs', type=Path, required=True)
     ap.add_argument('--mods', type=Path, required=True, help='the mods folder next to xcx.exe')
+    ap.add_argument('--builtin', type=Path, help='the folder of the built-in cheat lists (tools/data/cheats)')
     ap.add_argument('--patches', type=Path, required=True, help='the game version\'s patch file')
     ap.add_argument('--out', type=Path, required=True, help='the patch file with the cheats added')
     ap.add_argument('--status', type=Path, required=True)
@@ -437,7 +441,9 @@ def main():
     sys.stdout.reconfigure(errors='replace')   # cheat names in a console without their characters
     m = Main(args.exefs / 'main')
     text = args.patches.read_text()
-    files = cheat_files(args.mods, build_id(args.exefs / 'main'))
+    bid = build_id(args.exefs / 'main')
+    own = args.builtin / f'{bid}.txt' if args.builtin else None
+    files = ([(BUILTIN, own)] if own and own.is_file() else []) + cheat_files(args.mods, bid)
     cheats = [c for mod, f in files for c in parse(f.read_text(encoding='utf-8-sig', errors='replace'), mod)]
     shared = cave_words(m, cheats)
     sets, sites, status = [], [], []

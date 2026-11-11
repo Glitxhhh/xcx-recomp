@@ -260,9 +260,11 @@ bool opt_button(const char *id, UiTextId label, UiTextId desc, const char *value
     return row(id, label, desc, v) == 2;   // A or a click; left and right do nothing
 }
 
-void opt_group(UiTextId title) {
+void opt_group(UiTextId title) { opt_group_raw(menu_text(title)); }
+
+void opt_group_raw(const char *title) {
     ImGui::Dummy(ImVec2(0, 6 * g_scale));
-    ImGui::TextColored(ImVec4(0.35f, 0.86f, 0.96f, 1), "%s", menu_text(title));
+    ImGui::TextColored(ImVec4(0.35f, 0.86f, 0.96f, 1), "%s", title);
 }
 
 void opt_text(UiTextId text, bool warn) {

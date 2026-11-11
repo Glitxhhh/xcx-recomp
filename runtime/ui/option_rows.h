@@ -28,6 +28,7 @@ void opt_disable_next(UiTextId note);
 
 // Page text that is not a row: a group heading in the accent colour, a wrapped paragraph (warn: the warning colour).
 void opt_group(UiTextId title);
+void opt_group_raw(const char *title);   // a group heading not from ui_text (a cheat list's)
 void opt_text(UiTextId text, bool warn = false);
 
 // The return value of every row: true when it changed the setting this frame.

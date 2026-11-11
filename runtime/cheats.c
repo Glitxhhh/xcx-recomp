@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cfg.h"
 #include "host.h"
 #include "romfs_mods.h"
 #include "platform/platform.h"
@@ -28,18 +29,18 @@
 #define STATE_FILE "cheats-enabled.txt"
 #define PATH_CAP 4200
 
-// The port's own cheats, for the 2.0.0 update (build BUILTIN_BUILD). The game data object's pointer is at main +
-// 0x1DC1408; it is null until a save is loaded, which the 1 opcode tests first. In that object Funds are a u32 at
-// +0x1B5CC, which the game caps at 99,999,999; the value set here shows in the game's own menu. Tickets (+0x1B5D4) have
-// no cheat: their cap is not known, and a save was seen holding 15,000, above the 9,999 it was thought to be.
+// The port's own cheats, for the 2.0.0 update (build BUILTIN_BUILD): tools/data/cheats/<build>.txt, the community
+// cheat list (its first lines credit the authors) with plain names, embedded here. The setup builds its code cheats in
+// from the same file (tools/cheats.py --builtin), so the two agree on every name and hash. Its Max Funds is the port's
+// own: the game data object's pointer is at main + 0x1DC1408, null until a save is loaded, which the 1 opcode tests
+// first; in that object Funds are a u32 at +0x1B5CC, which the game caps at 99,999,999.
 #define BUILTIN_BUILD "EC4ED46BBC4A9EBB"
-static const char builtin_text[] =
-    "[Max Funds]\n"
-    "18060000 01DC1408 00000000 00000000\n"   // if the game data pointer is not null
-    "58000000 01DC1408\n"                     // r0 = the pointer
-    "78000000 0001B5CC\n"                     // r0 += Funds
-    "64000000 00000000 05F5E0FF\n"            // u32 [r0] = 99,999,999
-    "20000000\n";
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wc23-extensions"   // the runtime builds as C17; clang has #embed in every mode
+static const char builtin_text[] = {
+#embed "../tools/data/cheats/EC4ED46BBC4A9EBB.txt"
+};
+#pragma clang diagnostic pop
 
 typedef struct {
     int set;            // the patch set of a CHEAT_PATCHED cheat, else -1
@@ -63,6 +64,7 @@ static char **state;   // the lines of cheats-enabled.txt
 static int nstate;
 static uint64_t code_end;   // main's code and read-only data end here
 static _Atomic uint64_t keys;
+static _Atomic int allowed;   // XCX_CHEATS: off, no cheat runs and every patch set is off
 static StatusLine *status;  // build-cache/cheats.status
 static int nstatus;
 
@@ -305,7 +307,7 @@ static void apply_sets(Source *s) {
         Cheat *c = &s->cheats.cheats[k];
         const CodeCheat *cc = &s->code[k];
         if (c->state != CHEAT_PATCHED || c->master) continue;
-        rt_patch_switch(cc->set, c->enabled && (!cc->buttons || (held & cc->buttons) == cc->buttons));
+        rt_patch_switch(cc->set, allowed && c->enabled && (!cc->buttons || (held & cc->buttons) == cc->buttons));
     }
 }
 
@@ -328,7 +330,7 @@ static void add_source(const char *name, const char *text, size_t n) {
     apply_sets(s);
     for (int k = 0; k < s->cheats.count; k++) {
         const Cheat *c = &s->cheats.cheats[k];
-        if (c->state == CHEAT_PATCHED && (c->enabled || c->master))
+        if (c->state == CHEAT_PATCHED && ((allowed && c->enabled) || c->master))
             rt_log("cheats: %s: %s on (patch set %d%s)", s->name, c->name, s->code[k].set,
                    s->code[k].buttons ? ", while its buttons are held" : "");
     }
@@ -387,7 +389,7 @@ static void load_all(void) {
     nstate = 0;
     state_read();
     status_read();
-    if (!strcmp(build_id, BUILTIN_BUILD)) add_source(CHEATS_BUILTIN, builtin_text, sizeof builtin_text - 1);
+    if (!strcmp(build_id, BUILTIN_BUILD)) add_source(CHEATS_BUILTIN, builtin_text, sizeof builtin_text);
     const char *dir = romfs_mods_dir();
     if (!dir || !plat_dir_exists(dir)) return;
     Names names = list_sorted(dir);
@@ -435,8 +437,14 @@ static void cheat_thread(void *arg) {
     for (;;) {
         plat_sleep_ms(PERIOD_MS);
         env.keys = keys;
+        int on = cfg_bool("XCX_CHEATS");   // a live setting: the F1 menu's Game tab
         plat_mutex_lock(&lock);
-        for (int i = 0; i < nsources; i++) {
+        if (on != allowed) {
+            allowed = on;
+            for (int i = 0; i < nsources; i++) apply_sets(&sources[i]);
+            rt_log("cheats: %s", on ? "on" : "off");
+        }
+        for (int i = 0; i < nsources && on; i++) {
             env.ctx = &sources[i];
             cheat_run(&sources[i].cheats, &env);
             for (int k = 0; k < sources[i].cheats.count; k++) {
@@ -455,6 +463,7 @@ void cheats_start(void) {
     started = 1;
     read_build_id();
     code_end = ldr_module(0)->data_off;   // .text and .rodata: the lifted C holds the code, and rodata is sealed
+    allowed = cfg_bool("XCX_CHEATS");
     plat_mutex_lock(&lock);
     load_all();
     plat_mutex_unlock(&lock);

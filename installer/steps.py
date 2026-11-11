@@ -638,6 +638,12 @@ def cheat_files(ctx):
                   for f in ((mod / where).glob('*.txt') if (mod / where).is_dir() else ()))
 
 
+def builtin_cheats(ctx):
+    """The port's own cheat lists (tools/data/cheats, one per build of main), which every install builds in."""
+    folder = ctx.layout.tools / 'data' / 'cheats'
+    return sorted(folder.glob('*.txt')) if folder.is_dir() else []
+
+
 def cheats_status(ctx):
     """The build's cheat status file (tools/cheats.py --status), which runtime/cheats.c reads: which cheats became
     patch sets, which the cheat interpreter runs and which cannot work."""
@@ -652,8 +658,8 @@ class Lift(Step):
         # fingerprint takes a file's name and content only; the paths under mods/ go in too, because tools/cheats.py
         # names each patch set after its mod folder, so a renamed folder needs a lift
         files = cheat_files(ctx)
-        return fingerprint('lift-4', ctx.keys['extract'], ctx.layout.recomp, ctx.layout.tools / 'cheats.py', *files,
-                           *(f.relative_to(ctx.dest / 'mods').as_posix() for f in files))
+        return fingerprint('lift-5', ctx.keys['extract'], ctx.layout.recomp, ctx.layout.tools / 'cheats.py', *files,
+                           *builtin_cheats(ctx), *(f.relative_to(ctx.dest / 'mods').as_posix() for f in files))
 
     def current(self, ctx, record):
         gen = ctx.temp / 'gen'
@@ -674,15 +680,16 @@ class Lift(Step):
         if game_version(ctx) == '2.0.0':
             args += ['--mod-menu-hook']
         plain = layout.recomp / PATCHES   # the 60 fps sites and the other sets of 2.0.0
-        # The code cheats of the mods' cheat files become patch sets (tools/cheats.py); its status file tells the
-        # runtime what the build has. Cheat files are the player's downloads, so a failure costs the cheats, not the
-        # install: the game is built without them and the setup warns.
+        # The code cheats of the built-in cheat list and of the mods' cheat files become patch sets, off until switched
+        # on in the Cheats tab (tools/cheats.py); its status file tells the runtime what the build has. A failure costs
+        # the cheats, not the install: the game is built without them and the setup warns.
         status = cheats_status(ctx)
         status.unlink(missing_ok=True)   # no status: runtime/cheats.c treats every code cheat as not built
         patches, skipped = plain, None
-        if plain.is_file() and cheat_files(ctx):
+        if plain.is_file() and (builtin_cheats(ctx) or cheat_files(ctx)):
             code, log = run_tool(ctx, 'lift', layout.tools / 'cheats.py',
-                                 ['--exefs', ctx.dest / 'exefs', '--mods', ctx.dest / 'mods', '--patches', plain,
+                                 ['--exefs', ctx.dest / 'exefs', '--mods', ctx.dest / 'mods',
+                                  '--builtin', layout.tools / 'data' / 'cheats', '--patches', plain,
                                   '--out', ctx.temp / 'patches-cheats.txt', '--status', status])
             if code:
                 status.unlink(missing_ok=True)

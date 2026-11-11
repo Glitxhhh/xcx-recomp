@@ -1,19 +1,22 @@
 # Cheats
 
-The **Cheats** tab of the in-game menu (F1) lists the recomp's built-in cheats and the cheats of every mod folder.
-A cheat switched on applies at once and stays on after a restart.
+Turn on **Cheats** in the Game tab of the in-game menu (F1) and a **Cheats** tab appears. It lists the recomp's
+built-in cheats, grouped as Adventure, Combat, Items, Item Drops, Weapon Type and Weather, then the cheats of every mod
+folder. A cheat switched on applies at once and stays on after a restart. Turning **Cheats** off stops every cheat and
+hides the tab; the ones chosen come back when it is turned on again (`cheats` in `xcx.ini`).
 
 Cheats change the running game, and the game saves what it finds in memory. Back up your saves first.
 
 ## Built-in cheats
 
-For the 2.0.0 update (build `EC4ED46BBC4A9EBB`):
+For the 2.0.0 update (build `EC4ED46BBC4A9EBB`) the recomp carries the community cheat list for 1.0.2, whose
+addresses 2.0.0 keeps: codes by pspmaster, TomSwitch, ranma99vn, Nic87, zzpong and WiduraGoez, collected by Muezaa.
+The names were cleaned up for the menu; the codes are unchanged, except Max Funds, which is the recomp's own: it sets
+Funds to 99,999,999, the game's cap, once a save is loaded. The list is `tools/data/cheats/EC4ED46BBC4A9EBB.txt`.
+The runtime embeds it and every install builds its code cheats into the game, so they need no files and no extra
+setup run. Values a cheat set stay where they are when it is switched off.
 
-| Cheat | What it does |
-|---|---|
-| Max Funds | Sets Funds to 99,999,999, the game's cap. |
-
-It acts only once a save is loaded. Switch it off and the value stays where it was.
+A few of them cannot be built in yet and show as unavailable, with the reason: see "Code cheats" below.
 
 ## Cheat files
 
