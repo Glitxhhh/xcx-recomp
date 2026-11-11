@@ -114,7 +114,7 @@ static const CfgMeta metas[] = {
     {"MOTION", "1", "0|1", LIVE}, {"RUMBLE_STRENGTH", "130", "0..300", LIVE}, {"RUMBLE_CURVE", "0.6", "0.2..1.5", LIVE},
     {"RUMBLE_TRIGGERS", "0", "0|1", LIVE}, {"PAD_LAYOUT", "auto", "auto|nintendo|xbox", LIVE},
     {"GLYPH_APPEARANCE", "colored", "standard|colored", LIVE},
-    {"GLYPH_STYLE", "original", "original|auto|playstation|xbox|steam|keyboard", LIVE},
+    {"GLYPH_STYLE", "auto", "original|auto|playstation|xbox|steam|keyboard", LIVE},
     {"MOUSE_SENS", "1", "0..10", LIVE},
     {"MENU_LANG", "", "en|ru", LIVE},
     // Advanced: scheduling

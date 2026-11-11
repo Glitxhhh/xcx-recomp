@@ -28,6 +28,8 @@ typedef struct {
 void glyph_intent_sample(GlyphIntent *state, const GlyphIntentSample *sample);
 int glyph_style_parse(const char *value);
 const char *glyph_style_name(int style);
+int glyph_style_setting(void);        // XCX_GLYPH_STYLE parsed, cached until the settings change
+int glyph_appearance_setting(void);   // XCX_GLYPH_APPEARANCE parsed, the same way
 typedef struct { int style, art[3]; const char *reason; } GlyphDecision;
 GlyphDecision glyph_decide(int preference, int source, int family, int layout, const InputMap *map);
 // Atomically copies the intent, exposed controller family, layout and current bindings under input.c's lock.
