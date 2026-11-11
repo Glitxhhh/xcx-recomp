@@ -1,5 +1,5 @@
 // Mod zips: the central directory (PKWARE APPNOTE 4.3.12 and 4.3.7), stored and deflated entries, CRC-32 checks, and
-// an inflater written from RFC 1951. Zip64 archives are refused; a mod that large is not something to fetch in game.
+// an inflater written from RFC 1951; a small deflater (fixed codes) for the bug report's zip. Zip64 archives are refused; a mod that large is not something to fetch in game.
 #include "mod_zip.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -173,6 +173,103 @@ static int dynamic_block(Inflate *s) {
     if (!lengths[256]) return 0;   // a block needs its end code
     if (!build(&lit, lengths, (int)hlit) || !build(&dist, lengths + hlit, (int)hdist)) return 0;
     return codes(s, &lit, &dist);
+}
+
+// ---- deflate: greedy LZ77 over a 32 KiB window with hash chains, one block with the fixed Huffman codes (RFC 1951
+// 3.2.6). Logs, the bulk of a bug report, shrink to about a fifth; no dynamic codes, as speed matters more here.
+
+typedef struct { uint8_t *dst; size_t cap, at; uint64_t bits; int nbits; int full; } Deflate;
+
+static void put_bits(Deflate *d, uint32_t v, int k) {
+    d->bits |= (uint64_t)v << d->nbits;
+    d->nbits += k;
+    while (d->nbits >= 8) {
+        if (d->at >= d->cap) { d->full = 1; d->nbits = 0; return; }
+        d->dst[d->at++] = (uint8_t)d->bits;
+        d->bits >>= 8;
+        d->nbits -= 8;
+    }
+}
+
+// A Huffman code goes out most significant bit first, so reversed into the bit buffer.
+static void put_code(Deflate *d, uint32_t code, int len) {
+    uint32_t r = 0;
+    for (int i = 0; i < len; i++) r |= ((code >> i) & 1) << (len - 1 - i);
+    put_bits(d, r, len);
+}
+
+static void put_lit(Deflate *d, unsigned v) {
+    if (v < 144) put_code(d, 0x30 + v, 8);
+    else if (v < 256) put_code(d, 0x190 + v - 144, 9);
+    else if (v < 280) put_code(d, v - 256, 7);
+    else put_code(d, 0xc0 + v - 280, 8);
+}
+
+static const uint16_t len_base[29] = {3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83,
+                                      99, 115, 131, 163, 195, 227, 258};
+static const uint8_t len_extra[29] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
+static const uint16_t dist_base[30] = {1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769,
+                                       1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577};
+static const uint8_t dist_extra[30] = {0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11,
+                                       12, 12, 13, 13};
+
+static void put_match(Deflate *d, unsigned len, unsigned dist) {
+    int l = 28;
+    while (len_base[l] > len) l--;
+    put_lit(d, 257 + (unsigned)l);
+    if (len_extra[l]) put_bits(d, len - len_base[l], len_extra[l]);
+    int k = 29;
+    while (dist_base[k] > dist) k--;
+    put_code(d, (uint32_t)k, 5);
+    if (dist_extra[k]) put_bits(d, dist - dist_base[k], dist_extra[k]);
+}
+
+size_t mod_deflate(const uint8_t *src, size_t n, uint8_t *dst, size_t cap) {
+    enum { WIN = 32768, HASH = 1 << 15, CHAIN = 24, MAX_LEN = 258 };
+    int32_t *head = malloc(HASH * sizeof *head), *prev = malloc(WIN * sizeof *prev);
+    if (!head || !prev) { free(head); free(prev); return 0; }
+    for (int i = 0; i < HASH; i++) head[i] = -1;
+    Deflate d = {dst, cap, 0, 0, 0, 0};
+    put_bits(&d, 1, 1);   // BFINAL
+    put_bits(&d, 1, 2);   // BTYPE 01: fixed codes
+    size_t i = 0;
+    while (i < n && !d.full) {
+        unsigned best = 0, best_dist = 0;
+        if (i + 3 <= n) {
+            uint32_t h = ((uint32_t)src[i] << 16 | (uint32_t)src[i + 1] << 8 | src[i + 2]) * 2654435761u >> 17;
+            size_t max = n - i < MAX_LEN ? n - i : MAX_LEN;
+            int32_t cand = head[h];
+            for (int c = 0; c < CHAIN && cand >= 0 && i - (size_t)cand <= WIN - 1; c++) {
+                const uint8_t *a = src + cand, *b = src + i;
+                if (a[best] == b[best]) {
+                    unsigned k = 0;
+                    while (k < max && a[k] == b[k]) k++;
+                    if (k > best) { best = k; best_dist = (unsigned)(i - (size_t)cand); if (k == max) break; }
+                }
+                int32_t next = prev[cand & (WIN - 1)];
+                if (next >= cand) break;
+                cand = next;
+            }
+            prev[i & (WIN - 1)] = head[h];
+            head[h] = (int32_t)i;
+        }
+        if (best >= 3) {
+            put_match(&d, best, best_dist);
+            for (size_t e = i + best, j = i + 1; j < e && j + 3 <= n; j++) {   // the match's other positions
+                uint32_t h = ((uint32_t)src[j] << 16 | (uint32_t)src[j + 1] << 8 | src[j + 2]) * 2654435761u >> 17;
+                prev[j & (WIN - 1)] = head[h];
+                head[h] = (int32_t)j;
+            }
+            i += best;
+        } else {
+            put_lit(&d, src[i++]);
+        }
+    }
+    put_lit(&d, 256);
+    if (d.nbits) put_bits(&d, 0, 8 - d.nbits);
+    free(head);
+    free(prev);
+    return d.full ? 0 : d.at;
 }
 
 int mod_inflate(const uint8_t *src, size_t n, uint8_t *dst, size_t want) {

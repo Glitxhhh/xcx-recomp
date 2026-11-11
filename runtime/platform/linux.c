@@ -5,6 +5,7 @@
 #include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <execinfo.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <linux/fs.h>
@@ -913,10 +914,44 @@ uint64_t plat_mem_written(uint64_t addr, uint64_t n, uint64_t *pages, uint64_t m
 }
 
 // One handler for the synchronous faults. A SIGSEGV whose page-fault error code has the write bit set goes to the
-// write-fault hook first (memory.c thaws a frozen region); a fault in this executable's code then goes to the crash
-// hook (main.c); anything else gets the default action. Runs on the thread's signal stack.
+// write-fault hook first (memory.c thaws a frozen region); any other fault then goes to the crash hook (main.c), which
+// ends the process; without a hook it gets the default action. Runs on the thread's signal stack.
 static int (*fault_hook)(uint64_t addr);
 static void (*crash_fn)(const PlatCrash *c);
+
+// The report is static, not on the signal stack; a second thread that crashes meanwhile waits for the first to end
+// the process.
+static PlatCrash crash_report;
+static volatile int32_t crash_claimed;
+
+static PlatCrash *crash_claim(void) {
+    if (__atomic_exchange_n(&crash_claimed, 1, __ATOMIC_ACQ_REL))
+        for (;;) pause();
+    return &crash_report;
+}
+
+// The return addresses of this thread from glibc's backtrace, which unwinds through the signal frame, from the frame
+// at rip on (the handler's own frames dropped; all of them when rip is not among them), with their modules.
+static void crash_frames(PlatCrash *x, uintptr_t rip) {
+    void *f[64];
+    int n = backtrace(f, 64), from = 0;
+    for (int i = 0; i < n; i++)
+        if ((uintptr_t)f[i] == rip) { from = i; break; }
+    Dl_info self;
+    int have_self = dladdr((void *)plat_crash_hook, &self);
+    for (int i = from; i < n && x->nframes < (int)(sizeof x->frames / sizeof *x->frames); i++) {
+        Dl_info at;
+        int k = x->nframes++;
+        x->frames[k] = (uintptr_t)f[i];
+        if (!dladdr(f[i], &at) || !at.dli_fname) {
+            x->frame_module[k] = "", x->frame_offset[k] = (uintptr_t)f[i];
+        } else {
+            x->frame_offset[k] = (uintptr_t)f[i] - (uintptr_t)at.dli_fbase;
+            const char *nm = strrchr(at.dli_fname, '/');
+            x->frame_module[k] = have_self && at.dli_fbase == self.dli_fbase ? NULL : nm ? nm + 1 : at.dli_fname;
+        }
+    }
+}
 
 static void fault_handler(int sig, siginfo_t *si, void *uc) {
     ucontext_t *u = uc;
@@ -924,15 +959,38 @@ static void fault_handler(int sig, siginfo_t *si, void *uc) {
     if (sig == SIGSEGV && fault_hook && (err & 2) && fault_hook((uint64_t)(uintptr_t)si->si_addr)) return;
     uintptr_t rip = (uintptr_t)u->uc_mcontext.gregs[REG_RIP];
     Dl_info at, self;
-    if (crash_fn && dladdr((void *)rip, &at) && dladdr((void *)plat_crash_hook, &self) && at.dli_fbase == self.dli_fbase) {
-        PlatCrash c = {sig == SIGSEGV ? "access violation" : sig == SIGBUS ? "bus error"
-                       : sig == SIGILL ? "illegal instruction" : "arithmetic exception",
-                       (uint32_t)sig, rip, rip - (uintptr_t)self.dli_fbase, -1, 0};
+    if (crash_fn) {
+        int found = dladdr((void *)rip, &at) && at.dli_fname;
+        PlatCrash *c = crash_claim();
+        *c = (PlatCrash){sig == SIGSEGV ? "access violation" : sig == SIGBUS ? "bus error"
+                         : sig == SIGILL ? "illegal instruction" : "arithmetic exception",
+                         (uint32_t)sig, rip, found ? rip - (uintptr_t)at.dli_fbase : rip, -1, 0};
+        if (!found) {
+            c->module = "";
+        } else if (!dladdr((void *)plat_crash_hook, &self) || at.dli_fbase != self.dli_fbase) {
+            const char *n = strrchr(at.dli_fname, '/');
+            c->module = n ? n + 1 : at.dli_fname;
+        }
         if (sig == SIGSEGV || sig == SIGBUS)
-            c.access = (err & 16) ? 8 : (err & 2) ? 1 : 0, c.addr = (uint64_t)(uintptr_t)si->si_addr;
-        crash_fn(&c);
+            c->access = (err & 16) ? 8 : (err & 2) ? 1 : 0, c->addr = (uint64_t)(uintptr_t)si->si_addr;
+        crash_frames(c, rip);
+        crash_fn(c);
     }
     signal(sig, SIG_DFL);   // returns into the faulting instruction, which faults again with the default action
+}
+
+// abort() (a failed assert, std::terminate): the frames of its caller; rip is the innermost one in this executable.
+static void abort_handler(int sig) {
+    if (crash_fn) {
+        PlatCrash *c = crash_claim();
+        *c = (PlatCrash){"abort", (uint32_t)sig, 0, 0, -1, 0};
+        crash_frames(c, 0);
+        for (int i = 0; i < c->nframes; i++)
+            if (!c->frame_module[i]) { c->rip = c->frames[i], c->offset = c->frame_offset[i]; break; }
+        crash_fn(c);
+    }
+    signal(sig, SIG_DFL);
+    raise(sig);
 }
 
 static void fault_install(void) {
@@ -956,6 +1014,16 @@ void plat_mem_fault_hook(int (*fn)(uint64_t addr)) {
 void plat_crash_hook(void (*fn)(const PlatCrash *c)) {
     crash_fn = fn;
     fault_install();
+    void *warm[2];
+    backtrace(warm, 2);   // loads the unwinder (libgcc_s) now: a crash handler should not have to
+    signal(SIGABRT, abort_handler);
+}
+
+int plat_backtrace(uintptr_t *frames, int max, int skip) {
+    void *f[64];
+    int n = backtrace(f, 64), k = 0;
+    for (int i = skip + 1; i < n && k < max; i++) frames[k++] = (uintptr_t)f[i];
+    return k;
 }
 
 void plat_reexec(void) {
