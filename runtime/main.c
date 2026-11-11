@@ -9,6 +9,8 @@
 //     --probe-nvn, --probe-nvn-tex, --probe-window, --probe-shader, --probe-vkmem, --probe-vkexec    graphics probes
 //     --probe-astc      the compute ASTC decoder against astc_decode_ldr; needs no game files
 //     --probe-movie     host VP9 movie::Decoder on one RomFS movie; skips without game data
+//     --probe-mask      the bug report's masking (pii_mask.c) of the file XCX_PROBE_MASK_IN to stdout; the comma-
+//                       separated XCX_PROBE_MASK_NAMES are masked as user names too; needs no game files
 //     --boot            run the game to the first NVN call
 //     --seconds S       run the game (implies --boot's start-up) until the world clock (game time since the loaded
 //                       save's first frame) passed S seconds, then exit 0 at that present
@@ -32,6 +34,7 @@
 #endif
 #include "sha256.h"
 #include "bug_report.h"
+#include "pii_mask.h"
 
 #define MAX_MODULES 16
 
@@ -680,11 +683,35 @@ static int selftest(void) {
     return failures ? 1 : 0;
 }
 
+static int probe_mask(void) {
+    char in[PLAT_PATH_MAX], names[1024];
+    if (!plat_getenv("XCX_PROBE_MASK_IN", in, sizeof in)) {
+        fprintf(stderr, "probe-mask: set XCX_PROBE_MASK_IN to the file to mask\n");
+        return 2;
+    }
+    uint64_t n = 0;
+    uint8_t *text = plat_file_read(in, &n);
+    PiiMask *m = bug_report_masker();
+    if (!text || !m) {
+        fprintf(stderr, "probe-mask: cannot read %s\n", in);
+        return 2;
+    }
+    if (plat_getenv("XCX_PROBE_MASK_NAMES", names, sizeof names))
+        for (char *p = strtok(names, ","); p; p = strtok(NULL, ",")) pii_mask_name(m, p);
+    size_t k = 0;
+    uint8_t *out = pii_mask_text(m, text, (size_t)n, &k);
+    if (out) fwrite(out, 1, k, stdout);
+    free(out);
+    free(text);
+    pii_mask_free(m);
+    return out ? 0 : 1;
+}
+
 static int usage(const char *argv0) {
     fprintf(stderr, "usage: %s [--exefs DIR] [--romfs DIR] [--profile DIR] [--selftest | --probe-loader | "
                     "--probe-cfg | --probe-kernel | --probe-ipc | --probe-services | --probe-fs | --probe-gfx-abi | "
                     "--probe-nvn | --probe-nvn-tex | --probe-window | --probe-shader | --probe-vkmem | "
-                    "--probe-vkexec | --probe-astc | --probe-movie | --prepare-shaders | --warm-shaders | --boot |--seconds S [--shot PNG]]\n", argv0);
+                    "--probe-vkexec | --probe-astc | --probe-movie | --probe-mask | --prepare-shaders | --warm-shaders | --boot |--seconds S [--shot PNG]]\n", argv0);
     return 2;
 }
 
@@ -807,6 +834,7 @@ int main(int argc, char **argv) {
     if (!strcmp(mode, "--probe-astc")) return probe_astc();
     if (!strcmp(mode, "--probe-vkdevice")) return probe_vkdevice();
     if (!strcmp(mode, "--probe-movie")) return probe_movie();
+    if (!strcmp(mode, "--probe-mask")) return probe_mask();
     if (!strcmp(mode, "--prepare-shaders")) return vk_pipeline_prepare_shaders();
     if (!strcmp(mode, "--warm-shaders")) return vk_pipeline_warm_shaders();
     if (!strcmp(mode, "--boot")) { cfg.boot = 1; rt_boot(); return 0; }

@@ -8,6 +8,8 @@
 #include <execinfo.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <locale.h>
+#include <pwd.h>
 #include <linux/fs.h>
 #include <linux/futex.h>
 #include <linux/userfaultfd.h>
@@ -30,6 +32,7 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include <wctype.h>
 
 #include <SDL3/SDL_clipboard.h>
 
@@ -1257,6 +1260,35 @@ uint32_t plat_thread_id(void) {
     static __thread uint32_t tid;
     if (!tid) tid = (uint32_t)syscall(SYS_gettid);
     return tid;
+}
+
+void plat_identity(PlatIdentity *o) {
+    memset(o, 0, sizeof *o);
+    struct passwd pw, *got = NULL;
+    char buf[4096];
+    if (!getpwuid_r(getuid(), &pw, buf, sizeof buf, &got) && got) {
+        snprintf(o->user, sizeof o->user, "%s", pw.pw_name ? pw.pw_name : "");
+        if (pw.pw_gecos) snprintf(o->full_name, sizeof o->full_name, "%.*s", (int)strcspn(pw.pw_gecos, ","), pw.pw_gecos);
+        if (pw.pw_dir) snprintf(o->home, sizeof o->home, "%s", pw.pw_dir);
+    }
+    if (!o->user[0]) plat_getenv("USER", o->user, sizeof o->user);
+    const char *h = getenv("HOME");
+    if (h && *h) snprintf(o->home, sizeof o->home, "%s", h);
+    if (!gethostname(o->host, sizeof o->host)) o->host[sizeof o->host - 1] = 0;
+    else o->host[0] = 0;
+    snprintf(o->computer, sizeof o->computer, "%.*s", (int)strcspn(o->host, "."), o->host);
+}
+
+uint32_t plat_char_lower(uint32_t cp) {
+    if (cp < 0x80) return cp >= 'A' && cp <= 'Z' ? cp + 32 : cp;
+    static locale_t loc;   // the C locale's towlower knows ASCII only
+    if (!__atomic_load_n(&loc, __ATOMIC_ACQUIRE)) {
+        locale_t l = newlocale(LC_CTYPE_MASK, "C.UTF-8", (locale_t)0);
+        if (!l) return cp;
+        locale_t none = (locale_t)0;
+        if (!__atomic_compare_exchange_n(&loc, &none, l, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) freelocale(l);
+    }
+    return (uint32_t)towlower_l((wint_t)cp, loc);
 }
 
 // The first set variable of names ("ru_RU.UTF-8") as a BCP-47 tag ("ru-RU") into tag; "" for C and POSIX.

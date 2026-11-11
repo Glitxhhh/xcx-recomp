@@ -1,21 +1,18 @@
 // The in-game bug report (bug_report.h): collects the files a report needs into one zip (PKWARE APPNOTE 4.3.7 and
 // 4.3.12; entries deflated by mod_zip.c mod_deflate, or stored when that does not make them smaller). The zip is built
 // in memory and written with plat_file_write_atomic, so a failed run leaves no half-written file.
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <time.h>
-#ifndef _WIN32
-#include <unistd.h>
-#endif
 
 #include "bug_report.h"
 #include "host.h"
 #include "mod_zip.h"
 #include "platform/platform.h"
+#include "pii_mask.h"
 #include "romfs_mods.h"
+#include "sysinfo.h"
 
 extern const char rt_game_name[];
 
@@ -27,6 +24,7 @@ typedef struct {
     uint8_t *buf; size_t n, cap;
     uint8_t *central; size_t cn, ccap;
     int count, failed;
+    PiiMask *mask;         // for the text entries
     uint16_t time, date;   // MS-DOS local time of every entry: when the report was made
     char skipped[1024];    // the files left out, for the log
 } Zip;
@@ -86,99 +84,10 @@ static void zip_add_raw(Zip *z, const char *name, const uint8_t *data, size_t n)
     z->count++;
 }
 
-// ---- masking: the copies of the text files in the zip (logs, crash reports, system-info.txt, xcx.ini, the mod lists)
-// carry no personal names. The user's home folder becomes <home>, the user name <user>, the computer name <computer>;
-// the files on the disk stay as they are. Matches ignore case (Windows paths do) and treat / and \ alike; a name
-// matches only as a whole word, so "<user>" does not cut a longer word that holds the name, and the home folder only
-// up to a separator or the end of a word ("C:\Users\jo" leaves "C:\Users\joan" to the name rule).
-typedef struct { char text[PLAT_PATH_MAX]; size_t n; const char *with; int name; } Mask;   // name: a whole word
-static Mask g_masks[6];
-static int g_nmasks;
-
-static void mask_add(const char *text, const char *with, int name) {
-    size_t n = strlen(text);
-    while (n && (text[n - 1] == '/' || text[n - 1] == '\\')) n--;
-    if (n < 2 || n >= sizeof g_masks[0].text || g_nmasks >= (int)(sizeof g_masks / sizeof *g_masks)) return;
-    for (int i = 0; i < g_nmasks; i++)
-        if (g_masks[i].n == n && !strncasecmp(g_masks[i].text, text, n)) return;
-    Mask *m = &g_masks[g_nmasks++];
-    memcpy(m->text, text, n);
-    m->text[n] = 0;
-    m->n = n;
-    m->with = with;
-    m->name = name;
-}
-
-// Longest first, so the home folder goes before the user name inside it.
-static int by_length(const void *a, const void *b) {
-    size_t x = ((const Mask *)a)->n, y = ((const Mask *)b)->n;
-    return x < y ? 1 : x > y ? -1 : 0;
-}
-
-static void masks_init(void) {
-    char v[PLAT_PATH_MAX];
-    g_nmasks = 0;
-#ifdef _WIN32
-    if (plat_getenv("USERPROFILE", v, sizeof v)) mask_add(v, "<home>", 0);
-    if (plat_getenv("USERNAME", v, sizeof v)) mask_add(v, "<user>", 1);
-    if (plat_getenv("COMPUTERNAME", v, sizeof v)) mask_add(v, "<computer>", 1);
-#else
-    if (plat_getenv("HOME", v, sizeof v)) mask_add(v, "<home>", 0);
-    if (plat_getenv("USER", v, sizeof v)) mask_add(v, "<user>", 1);
-    if (plat_getenv("LOGNAME", v, sizeof v)) mask_add(v, "<user>", 1);
-    if (!gethostname(v, sizeof v)) v[sizeof v - 1] = 0, mask_add(v, "<computer>", 1);
-    else if (plat_getenv("HOSTNAME", v, sizeof v)) mask_add(v, "<computer>", 1);
-#endif
-    qsort(g_masks, (size_t)g_nmasks, sizeof *g_masks, by_length);
-}
-
-static int word_char(uint8_t c) { return isalnum(c) || c == '_' || c >= 0x80; }
-
-static int same(uint8_t a, uint8_t b) {
-    if ((a == '/' || a == '\\') && (b == '/' || b == '\\')) return 1;
-    return tolower(a) == tolower(b);
-}
-
-// The masked copy of src (malloc'd, its length in *out_n); NULL when out of memory.
-static uint8_t *mask_text(const uint8_t *src, size_t n, size_t *out_n) {
-    size_t cap = n + n / 8 + 64, at = 0;
-    uint8_t *out = malloc(cap);
-    if (!out) return NULL;
-    for (size_t i = 0; i < n;) {
-        const Mask *hit = NULL;
-        for (int k = 0; k < g_nmasks && !hit; k++) {
-            const Mask *m = &g_masks[k];
-            if (i + m->n > n || !same(src[i], (uint8_t)m->text[0])) continue;
-            size_t j = 1;
-            while (j < m->n && same(src[i + j], (uint8_t)m->text[j])) j++;
-            if (j < m->n) continue;
-            if (i + m->n < n && word_char(src[i + m->n])) continue;     // the match ends a word
-            if (m->name && i && word_char(src[i - 1])) continue;   // a name also starts one
-            hit = m;
-        }
-        size_t add = hit ? strlen(hit->with) : 1;
-        if (at + add > cap) {
-            size_t c = cap * 2 + add;
-            uint8_t *q = realloc(out, c);
-            if (!q) { free(out); return NULL; }
-            out = q, cap = c;
-        }
-        if (hit) {
-            memcpy(out + at, hit->with, add);
-            i += hit->n;
-        } else {
-            out[at] = src[i++];
-        }
-        at += add;
-    }
-    *out_n = at;
-    return out;
-}
-
-// A text entry: masked first.
+// A text entry: masked first (pii_mask.c).
 static void zip_add(Zip *z, const char *name, const uint8_t *data, size_t n) {
     size_t mn = 0;
-    uint8_t *m = n ? mask_text(data, n, &mn) : NULL;
+    uint8_t *m = n ? pii_mask_text(z->mask, data, n, &mn) : NULL;
     if (n && !m) {
         z->failed = 1;
         return;
@@ -280,6 +189,22 @@ static int mod_entry(const char *name, int kind, uint64_t size, void *ctx) {
     return 1;
 }
 
+PiiMask *bug_report_masker(void) {
+    PiiMask *m = pii_mask_new();
+    if (!m) return NULL;
+    char p[PLAT_PATH_MAX * 2], full[PLAT_PATH_MAX * 2];
+    if (plat_exe_path(p, sizeof p) && plat_last_sep(p)) {   // first: a folder that is the game's too keeps <game>
+        *plat_last_sep(p) = 0;
+        pii_mask_root(m, p, "<game>");
+    }
+    if (sysinfo_log_folder(p, sizeof p)) pii_mask_root(m, p, "<logs>");
+    const char *mods = romfs_mods_dir();
+    if (mods && plat_full_path(mods, full, sizeof full)) pii_mask_root(m, full, "<mods>");
+    const char *prof = rt_config()->profile;
+    if (prof && plat_full_path(prof, full, sizeof full)) pii_mask_root(m, full, "<profile>");
+    return m;
+}
+
 const char *bug_report_write(int with_save, const char *sysinfo, char *out, size_t cap) {
     const char *why = NULL;
     char exe_dir[PLAT_PATH_MAX], path[PLAT_PATH_MAX * 2], dir[PLAT_PATH_MAX * 2], line[256];
@@ -291,8 +216,8 @@ const char *bug_report_write(int with_save, const char *sysinfo, char *out, size
     *plat_last_sep(exe_dir) = 0;
     struct tm t;
     plat_local_time(&t);
-    masks_init();
-    Zip z = {.time = (uint16_t)(t.tm_hour << 11 | t.tm_min << 5 | t.tm_sec / 2),
+    Zip z = {.mask = bug_report_masker(),
+             .time = (uint16_t)(t.tm_hour << 11 | t.tm_min << 5 | t.tm_sec / 2),
              .date = (uint16_t)((t.tm_year - 80) << 9 | (t.tm_mon + 1) << 5 | t.tm_mday)};
 
     // the logs: this run's and the previous run's (log_open in main.c keeps xcx.1.log .. xcx.4.log beside xcx.log),
@@ -352,6 +277,7 @@ const char *bug_report_write(int with_save, const char *sysinfo, char *out, size
         }
     }
 
+    if (!z.mask) z.failed = 1;
     if (!zip_finish(&z)) {
         why = "out of memory";
     } else {
@@ -373,5 +299,6 @@ const char *bug_report_write(int with_save, const char *sysinfo, char *out, size
     }
     free(z.buf);
     free(z.central);
+    pii_mask_free(z.mask);
     return why;
 }

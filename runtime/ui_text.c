@@ -290,8 +290,8 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_COPY_INFO_DONE] = "Copied", [UI_MENU_ACTION_FAILED] = "did not work",
     [UI_MENU_BUG_REPORT] = "Make a bug report",
     [UI_MENU_BUG_REPORT_DESC] = "Packs the logs, xcx.ini, the crash reports, system info and the mod lists into one "
-                                "zip in the bug-reports folder and opens it. Your user and computer names are "
-                                "replaced by placeholders. Attach the zip to your report.",
+                                "zip in the bug-reports folder and opens it. Your folders, names and network "
+                                "addresses are replaced by placeholders. Attach the zip to your report.",
     [UI_MENU_BUG_REPORT_BUSY] = "writing...", [UI_MENU_BUG_REPORT_DONE] = "Saved to %s",
     [UI_MENU_BUG_REPORT_SAVE] = "Add the save to the bug report",
     [UI_MENU_BUG_REPORT_SAVE_DESC] = "Puts your save data into the zip as well, for bugs that depend on where you are "
@@ -583,7 +583,7 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_COPY_INFO_DONE] = "Скопировано", [UI_MENU_ACTION_FAILED] = "не получилось",
     [UI_MENU_BUG_REPORT] = "Создать отчёт об ошибке",
     [UI_MENU_BUG_REPORT_DESC] = "Собирает журналы, xcx.ini, отчёты о сбоях, сведения о системе и списки модов в один "
-                                "zip в папке bug-reports и открывает её. Имена пользователя и компьютера заменяются "
+                                "zip в папке bug-reports и открывает её. Ваши папки, имена и сетевые адреса заменяются "
                                 "заглушками. Приложите этот zip к сообщению об ошибке.",
     [UI_MENU_BUG_REPORT_BUSY] = "запись...", [UI_MENU_BUG_REPORT_DONE] = "Сохранено в %s",
     [UI_MENU_BUG_REPORT_SAVE] = "Добавить сохранение в отчёт",

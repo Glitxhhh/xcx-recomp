@@ -1144,6 +1144,48 @@ size_t plat_getenv(const char *name, char *out, size_t cap) {
 
 uint32_t plat_thread_id(void) { return GetCurrentThreadId(); }
 
+static void narrow(const wchar_t *w, char *out, size_t cap) {
+    if (!WideCharToMultiByte(CP_UTF8, 0, w, -1, out, (int)cap, NULL, NULL)) out[0] = 0;
+}
+
+void plat_identity(PlatIdentity *o) {
+    memset(o, 0, sizeof *o);
+    wchar_t w[WPATH];
+    DWORD n = 256;
+    if (GetUserNameW(w, &n)) narrow(w, o->user, sizeof o->user);
+    // the display name of the account (a Microsoft account's full name); secur32 loaded here, as nothing else needs it
+    typedef BOOLEAN (WINAPI *UserNameEx)(int format, wchar_t *name, ULONG *size);
+    void *sec = plat_lib_open("secur32.dll");
+    UserNameEx ex = sec ? (UserNameEx)plat_lib_sym(sec, "GetUserNameExW") : NULL;
+    ULONG un = WPATH;
+    if (ex && ex(3 /* NameDisplay */, w, &un)) narrow(w, o->full_name, sizeof o->full_name);
+    n = WPATH;
+    if (GetComputerNameExW(ComputerNameNetBIOS, w, &n)) narrow(w, o->computer, sizeof o->computer);
+    n = WPATH;
+    if (GetComputerNameExW(ComputerNameDnsHostname, w, &n)) narrow(w, o->host, sizeof o->host);
+    n = GetEnvironmentVariableW(L"USERPROFILE", w, WPATH);
+    if (n && n < WPATH) {
+        narrow(w, o->home, sizeof o->home);
+        wchar_t s[WPATH];
+        DWORD k = GetShortPathNameW(w, s, WPATH);
+        if (k && k < WPATH && wcscmp(s, w)) narrow(s, o->home_short, sizeof o->home_short);
+    }
+}
+
+uint32_t plat_char_lower(uint32_t cp) {
+    if (cp < 0x80) return cp >= 'A' && cp <= 'Z' ? cp + 32 : cp;
+    if (cp >= 0x10000) return cp;   // outside the BMP: as it is
+    static uint16_t memo[65536];    // 0: not asked yet; a benign race writes the same value
+    uint16_t m = __atomic_load_n(&memo[cp], __ATOMIC_RELAXED);
+    if (m) return m;
+    wchar_t in = (wchar_t)cp, out = 0;
+    if ((cp >= 0xd800 && cp < 0xe000) ||
+        LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_LOWERCASE, &in, 1, &out, 1, NULL, NULL, 0) != 1)
+        out = in;
+    __atomic_store_n(&memo[cp], (uint16_t)out, __ATOMIC_RELAXED);
+    return out;
+}
+
 const char *plat_ui_language(void) {
     static char tag[LOCALE_NAME_MAX_LENGTH];
     static int done;

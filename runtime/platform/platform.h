@@ -357,6 +357,16 @@ const char *plat_ui_language(void);
 // The user's regional format (locale) as a BCP-47 tag; "" when the system gives none. Valid for the process.
 const char *plat_user_locale(void);
 uint32_t plat_thread_id(void);                            // id of the calling thread, for unique file names
+// Who and where the player is, for the bug report's masking (pii_mask.c): UTF-8, "" when unknown. user: the login
+// name; full_name: the account's display name; computer and host: the NetBIOS and DNS names of the machine; home: the
+// home folder; home_short: its 8.3 form (Windows; "" when it has none or it equals home).
+typedef struct {
+    char user[256], full_name[256], computer[256], host[256], home[PLAT_PATH_MAX], home_short[PLAT_PATH_MAX];
+} PlatIdentity;
+void plat_identity(PlatIdentity *out);
+// The lowercase of a Unicode code point by the OS's invariant rules (not the C locale's ASCII-only tolower); cp itself
+// when it has none.
+uint32_t plat_char_lower(uint32_t cp);
 // A system font file with the glyphs of a catalog language ("ja", "ko", "zh-Hans", "zh-Hant"): the menu shows each
 // language's name in its own script. Copies the UTF-8 path into out; 0 when the system has none.
 int plat_font_path(const char *lang, char *out, size_t cap);
