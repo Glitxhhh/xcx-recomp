@@ -73,8 +73,8 @@ static void frame_limit_live(void);
 // frame; +0x4c is 30 / frame rate, the step of the updates that count 30 fps frames. In play the period is the
 // measured frame time (the 5-frame average of display intervals, at most 1/15 s, frame_step_present), so the game
 // keeps real time when frames miss the limit; in cutscenes it is 1/60 s with 2 vsyncs a frame, as on the console.
-// +0x48 is the game limiter's wait, the frame time of the limit; the pacer shows frames at the limit. The guest reads
-// each word whole.
+// +0x48 is the game limiter's wait, the frame time of the limit; the pacer shows frames at the limit. +0x78 is 1 / the
+// frame rate shown (1/30 s in a cutscene), the step of the UI root. The guest reads each word whole.
 static int xcx_rate = -2;
 static _Atomic uint32_t *xcx_words;
 static int xcx_cut;   // a cutscene runs at 30 fps: the step stays 1/30 s
@@ -93,6 +93,10 @@ static void xcx_rate_store(double hz, double fps) {   // hz: the game's vsync ra
     atomic_store_explicit(&xcx_words[0], p, memory_order_release);
     atomic_store_explicit(&xcx_words[1], r, memory_order_release);
     atomic_store_explicit(&xcx_words[3], t, memory_order_release);   // +0x4c
+    float frame = (float)(1.0 / fps);
+    uint32_t f;
+    memcpy(&f, &frame, 4);
+    atomic_store_explicit(&xcx_words[14], f, memory_order_release);   // +0x78: the time one frame shows
 }
 
 static void xcx_wait_store(double seconds) {

@@ -28,6 +28,13 @@ site xcx60 main 13a9af4 1e210800 @page:x8 bd404900
 site xcx60 main a1f05c 1e27d001 @page:x9 bd404521
 # A 1/30 s time constant (0x3d088889, 1.0.1 +0x569c0; the mod's 1/60): 1 / limit, the page's +0x40.
 site xcx60 main 56d40 72a7a108 @page:x8 b9404108
+# The UI's frame step (#107): the frame-rate pick above stores the rate and 1 / rate at +0x78 and +0x7c of the UI
+# root (main+0xa1f044, reached from the menu manager's setup, not each frame), and its per-frame update (main+0xa1f2f0)
+# keeps +0x80 = +0x7c * the speed at +0x94, the step its windows advance by each frame. With the rate fixed at the
+# boot value, windows opened at half speed in 30 fps cutscenes (Accept Mission, dialogue choices) and would run fast
+# above the boot rate. Each frame the update sets +0x7c to the page's +0x78 (1 / the frame rate shown) and +0x80 to
+# that times +0x94, as on the console, where the rate and the frame rate are both 30. x8 is not read again here.
+site xcx60 main a1f37c f9402e60 @page:x8 bd407900 bd007e60 bd409661 1e210800 bd008260 f9402e60
 
 # The game's frame update (main+0x1e287c, a virtual reached through main+0x1e2b44) passes its step, one per frame, on
 # to the field, battle and event updates. Most turn it into time themselves; three count it as 30 fps frames, so above
@@ -184,3 +191,42 @@ site uifit main a3ce48 1e282000 @page:x17 bd40763f 1e3f2000
 set viewsize XCX_VIEW_SIZE 0
 site viewsize main 972f84 b941a2a9 b941a2a9 511e012b 5ac0116b 53057d6b b943ca6c 4b09018c 1b0b7d8c 0b0c0129
 site viewsize main 972f8c 910692aa 910692aa b940014b 5110e16b 5ac0116b 53057d6b 910f326c cb0a018c 9b0b7d8c 8b0c014a
+
+# Events count their time in 30 fps frames: each update adds a constant 1.0 where a step belongs, so above 30 fps
+# (Mixed or no cutscene limit) event cameras and actors ran fast and then jumped to the timeline's keyframes, and
+# subtitles and voice lines ended early (#106). Each site takes the patch page's +0x4c (30 / frame rate) instead:
+# the event manager's update and late update hand 1.0 to every actor and to the camera system (main+0x2d0010,
+# main+0x2cfc40); the camera system forces 1.0 while an event runs (main+0x2aadc8); the event clock adds its rate,
+# 1.0 frame, per update (main+0x2dca18, read at +0x3c); a message's remaining time and a voice's start delay count
+# down by 1.0 (main+0x2e5d20, main+0x304dd0). x9 is free at each; at main+0x2dcb14 s4 is too.
+site xcx60 main 2d00b4 1e2e1008 @page:x9 bd404d28
+site xcx60 main 2d00f0 1e2e1000 @page:x9 bd404d20
+site xcx60 main 2cfcac 1e2e1008 @page:x9 bd404d28
+site xcx60 main 2cfcf0 1e2e1000 @page:x9 bd404d20
+site xcx60 main 2cfd60 1e2e1008 @page:x9 bd404d28
+site xcx60 main 2aae10 1e2e1000 @page:x9 bd404d20
+site xcx60 main 2dcb14 2d478e62 @page:x9 2d478e62 bd404d24 1e240842
+site xcx60 main 2e5d58 1e3e1001 @page:x9 bd404d21 1e214021
+site xcx60 main 304dd0 1e3e1001 @page:x9 bd404d21 1e214021
+# Event actors also use the step they are handed as their animations' play speed: main+0x2e9d0 sets each animation
+# slot's rate to its base rate times that value (through main+0x3f620). The animations already advance by the real
+# frame time, so with the step above at 30 / frame rate they played at half speed at 60 and a quarter at 120; in the
+# first NLA scene the camera then lost the Skell it rides with in the close-up (#106). main+0x2e9d0 now divides
+# the speed by the patch page's +0x4c, so only a speed the event sets itself remains. x9 is free at its entry.
+site xcx60 main 2e9ec 1e204008 @page:x9 bd404d28 1e281808
+
+# The HUD's text windows (#116: the yellow tips at the lower left, among others): opening one (main+0x5d870c,
+# main+0x5d8ebc, main+0x5d966c) stores its data row's DispTime column, a count of 30 fps frames, at +0x2a of the window,
+# and each update (main+0x5d88c8, main+0x5d9078, main+0x5d9828) takes 1 off it and closes the window at 0. Above 30 fps
+# the window closed early, less than a second at 150 fps. The count is divided by the patch page's +0x4c (30 / frame
+# rate) where it is stored, so it lasts DispTime / 30 s at any frame rate. x9, w0 and s0-s1 are free: x0 is reloaded and
+# a call follows at each.
+site xcx60 main 5d87a8 79005680 @page:x9 1e230000 bd404d21 1e211800 1e250000 79005680
+site xcx60 main 5d8f58 79005680 @page:x9 1e230000 bd404d21 1e211800 1e250000 79005680
+site xcx60 main 5d9708 79005680 @page:x9 1e230000 bd404d21 1e211800 1e250000 79005680
+# The field's enemy talk box (#116: "Tyrant Info" and the other lines enemies call out, at the lower left): the talk
+# manager's update (main+0x7fc330) opens the box, sets its hold to 300 frames at +0x80 (main+0x7fc8d0) and takes 1 off it
+# each update (main+0x7fc6dc), closing the box when it runs out. That is 10 s at the console's 30 fps but 5 s at 60 and
+# 2.5 s at 120. The 300 is divided by the patch page's +0x4c (30 / frame rate) instead, so the box holds 10 s at any
+# frame rate. x9 is set here anyway and s0-s1 are free: calls come just before and the function returns after.
+site xcx60 main 7fc8d0 52802589 @page:x9 bd404d21 52802589 1e230120 1e211800 1e250009
