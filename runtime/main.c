@@ -117,6 +117,15 @@ const char *rt_log_path(void) {
 
 const char *rt_crash_report_path(void) { return g_crash_path[0] ? g_crash_path : NULL; }
 
+int rt_crash_report_nth(int i, char *out, size_t cap) {
+    if (!g_crash_path[0] || snprintf(out, cap, "%s", g_crash_path) >= (int)cap) return 0;
+    if (!i) return 1;
+    size_t n = strlen(out);   // ".../crash.txt" -> ".../crash.<i>.txt"
+    if (n < 4) return 0;
+    out[n - 4] = 0;
+    return snprintf(out + n - 4, cap - (n - 4), ".%d.txt", i) < (int)(cap - (n - 4));
+}
+
 // Opens the log file for a game run (game = 1) and writes the buffered lines to it; anything else drops them. Runs on
 // the main thread before the boot starts other threads.
 static void log_open(int game) {
@@ -370,6 +379,11 @@ static void crash_begin(void) {
     snprintf(dir, sizeof dir, "%s", path);
     char *cut = plat_last_sep(dir);
     if (cut) *cut = 0, plat_file_mkdir_p(dir);
+    char from[sizeof g_crash_path + 16], to[sizeof g_crash_path + 16];
+    for (int i = RT_CRASH_KEEP - 1; i > 0; i--)   // crash.6.txt -> crash.7.txt, ..., crash.txt -> crash.1.txt
+        if (rt_crash_report_nth(i - 1, from, sizeof from) && rt_crash_report_nth(i, to, sizeof to) &&
+            plat_file_exists(from))
+            plat_file_replace(from, to);
     g_crash_file = plat_append_open(path);
     if (!g_crash_file) return;
     char line[512];

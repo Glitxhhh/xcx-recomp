@@ -289,8 +289,9 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_COPY_INFO_DESC] = "Copies GPU, driver, CPU, RAM and changed settings to the clipboard.",
     [UI_MENU_COPY_INFO_DONE] = "Copied", [UI_MENU_ACTION_FAILED] = "did not work",
     [UI_MENU_BUG_REPORT] = "Make a bug report",
-    [UI_MENU_BUG_REPORT_DESC] = "Packs the logs, xcx.ini, the last crash report, system info and the mod lists into "
-                                "one zip in the bug-reports folder and opens it. Attach the zip to your report.",
+    [UI_MENU_BUG_REPORT_DESC] = "Packs the logs, xcx.ini, the crash reports, system info and the mod lists into one "
+                                "zip in the bug-reports folder and opens it. Your user and computer names are "
+                                "replaced by placeholders. Attach the zip to your report.",
     [UI_MENU_BUG_REPORT_BUSY] = "writing...", [UI_MENU_BUG_REPORT_DONE] = "Saved to %s",
     [UI_MENU_BUG_REPORT_SAVE] = "Add the save to the bug report",
     [UI_MENU_BUG_REPORT_SAVE_DESC] = "Puts your save data into the zip as well, for bugs that depend on where you are "
@@ -581,8 +582,9 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_COPY_INFO_DESC] = "Копирует в буфер обмена видеокарту, драйвер, процессор, память и изменённые настройки.",
     [UI_MENU_COPY_INFO_DONE] = "Скопировано", [UI_MENU_ACTION_FAILED] = "не получилось",
     [UI_MENU_BUG_REPORT] = "Создать отчёт об ошибке",
-    [UI_MENU_BUG_REPORT_DESC] = "Собирает журналы, xcx.ini, последний отчёт о сбое, сведения о системе и списки модов "
-                                "в один zip в папке bug-reports и открывает её. Приложите этот zip к сообщению об ошибке.",
+    [UI_MENU_BUG_REPORT_DESC] = "Собирает журналы, xcx.ini, отчёты о сбоях, сведения о системе и списки модов в один "
+                                "zip в папке bug-reports и открывает её. Имена пользователя и компьютера заменяются "
+                                "заглушками. Приложите этот zip к сообщению об ошибке.",
     [UI_MENU_BUG_REPORT_BUSY] = "запись...", [UI_MENU_BUG_REPORT_DONE] = "Сохранено в %s",
     [UI_MENU_BUG_REPORT_SAVE] = "Добавить сохранение в отчёт",
     [UI_MENU_BUG_REPORT_SAVE_DESC] = "Кладёт в zip и ваши сохранения: для ошибок, которые зависят от места в игре. "

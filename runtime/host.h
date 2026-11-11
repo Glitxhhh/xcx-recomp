@@ -25,8 +25,12 @@ void rt_log_raw(const char *p, size_t n);
 const char *rt_log_path(void);                  // the log file, NULL when this run writes none
 // Where a crash report goes: crash.txt beside the log (logs\crash.txt in a game run); NULL when unknown. main.c's
 // crash handler and rt_fatal write it: the report of the log (the fault, the lifted function, guest registers and
-// call chain, host frames) and the log's last lines before it. Each crash replaces the file.
+// call chain, host frames) and the log's last lines before it. Each crash moves the earlier reports on to crash.1.txt ..
+// crash.<RT_CRASH_KEEP - 1>.txt (the oldest is dropped).
 const char *rt_crash_report_path(void);
+#define RT_CRASH_KEEP 8
+// The path of the i-th report, newest first: 0 crash.txt, 1 crash.1.txt, ...; 0 when there is no crash folder.
+int rt_crash_report_nth(int i, char *out, size_t cap);
 // rt_fatal's report (main.c): msg, the guest state of the calling thread and its host frames, to the log and the crash
 // report; ends the process with exit code 70.
 _Noreturn void rt_crash_fatal(const char *msg);

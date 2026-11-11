@@ -1,10 +1,15 @@
 // The in-game bug report (bug_report.h): collects the files a report needs into one zip (PKWARE APPNOTE 4.3.7 and
 // 4.3.12; entries deflated by mod_zip.c mod_deflate, or stored when that does not make them smaller). The zip is built
 // in memory and written with plat_file_write_atomic, so a failed run leaves no half-written file.
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 #include "bug_report.h"
 #include "host.h"
@@ -46,7 +51,7 @@ static void note_skip(Zip *z, const char *name, const char *why) {
 }
 
 // One entry; name uses '/' and is UTF-8 (general purpose flag bit 11).
-static void zip_add(Zip *z, const char *name, const uint8_t *data, size_t n) {
+static void zip_add_raw(Zip *z, const char *name, const uint8_t *data, size_t n) {
     if (z->failed) return;
     size_t nlen = strlen(name);
     if (z->count >= ZIP_MAX_ENTRIES || n > ZIP_FILE_LIMIT || z->n + n + nlen + 64 > ZIP_TOTAL_LIMIT) {
@@ -81,8 +86,109 @@ static void zip_add(Zip *z, const char *name, const uint8_t *data, size_t n) {
     z->count++;
 }
 
-// A file from the disk; a missing one is no entry.
-static void zip_file(Zip *z, const char *name, const char *path) {
+// ---- masking: the copies of the text files in the zip (logs, crash reports, system-info.txt, xcx.ini, the mod lists)
+// carry no personal names. The user's home folder becomes <home>, the user name <user>, the computer name <computer>;
+// the files on the disk stay as they are. Matches ignore case (Windows paths do) and treat / and \ alike; a name
+// matches only as a whole word, so "<user>" does not cut a longer word that holds the name, and the home folder only
+// up to a separator or the end of a word ("C:\Users\jo" leaves "C:\Users\joan" to the name rule).
+typedef struct { char text[PLAT_PATH_MAX]; size_t n; const char *with; int name; } Mask;   // name: a whole word
+static Mask g_masks[6];
+static int g_nmasks;
+
+static void mask_add(const char *text, const char *with, int name) {
+    size_t n = strlen(text);
+    while (n && (text[n - 1] == '/' || text[n - 1] == '\\')) n--;
+    if (n < 2 || n >= sizeof g_masks[0].text || g_nmasks >= (int)(sizeof g_masks / sizeof *g_masks)) return;
+    for (int i = 0; i < g_nmasks; i++)
+        if (g_masks[i].n == n && !strncasecmp(g_masks[i].text, text, n)) return;
+    Mask *m = &g_masks[g_nmasks++];
+    memcpy(m->text, text, n);
+    m->text[n] = 0;
+    m->n = n;
+    m->with = with;
+    m->name = name;
+}
+
+// Longest first, so the home folder goes before the user name inside it.
+static int by_length(const void *a, const void *b) {
+    size_t x = ((const Mask *)a)->n, y = ((const Mask *)b)->n;
+    return x < y ? 1 : x > y ? -1 : 0;
+}
+
+static void masks_init(void) {
+    char v[PLAT_PATH_MAX];
+    g_nmasks = 0;
+#ifdef _WIN32
+    if (plat_getenv("USERPROFILE", v, sizeof v)) mask_add(v, "<home>", 0);
+    if (plat_getenv("USERNAME", v, sizeof v)) mask_add(v, "<user>", 1);
+    if (plat_getenv("COMPUTERNAME", v, sizeof v)) mask_add(v, "<computer>", 1);
+#else
+    if (plat_getenv("HOME", v, sizeof v)) mask_add(v, "<home>", 0);
+    if (plat_getenv("USER", v, sizeof v)) mask_add(v, "<user>", 1);
+    if (plat_getenv("LOGNAME", v, sizeof v)) mask_add(v, "<user>", 1);
+    if (!gethostname(v, sizeof v)) v[sizeof v - 1] = 0, mask_add(v, "<computer>", 1);
+    else if (plat_getenv("HOSTNAME", v, sizeof v)) mask_add(v, "<computer>", 1);
+#endif
+    qsort(g_masks, (size_t)g_nmasks, sizeof *g_masks, by_length);
+}
+
+static int word_char(uint8_t c) { return isalnum(c) || c == '_' || c >= 0x80; }
+
+static int same(uint8_t a, uint8_t b) {
+    if ((a == '/' || a == '\\') && (b == '/' || b == '\\')) return 1;
+    return tolower(a) == tolower(b);
+}
+
+// The masked copy of src (malloc'd, its length in *out_n); NULL when out of memory.
+static uint8_t *mask_text(const uint8_t *src, size_t n, size_t *out_n) {
+    size_t cap = n + n / 8 + 64, at = 0;
+    uint8_t *out = malloc(cap);
+    if (!out) return NULL;
+    for (size_t i = 0; i < n;) {
+        const Mask *hit = NULL;
+        for (int k = 0; k < g_nmasks && !hit; k++) {
+            const Mask *m = &g_masks[k];
+            if (i + m->n > n || !same(src[i], (uint8_t)m->text[0])) continue;
+            size_t j = 1;
+            while (j < m->n && same(src[i + j], (uint8_t)m->text[j])) j++;
+            if (j < m->n) continue;
+            if (i + m->n < n && word_char(src[i + m->n])) continue;     // the match ends a word
+            if (m->name && i && word_char(src[i - 1])) continue;   // a name also starts one
+            hit = m;
+        }
+        size_t add = hit ? strlen(hit->with) : 1;
+        if (at + add > cap) {
+            size_t c = cap * 2 + add;
+            uint8_t *q = realloc(out, c);
+            if (!q) { free(out); return NULL; }
+            out = q, cap = c;
+        }
+        if (hit) {
+            memcpy(out + at, hit->with, add);
+            i += hit->n;
+        } else {
+            out[at] = src[i++];
+        }
+        at += add;
+    }
+    *out_n = at;
+    return out;
+}
+
+// A text entry: masked first.
+static void zip_add(Zip *z, const char *name, const uint8_t *data, size_t n) {
+    size_t mn = 0;
+    uint8_t *m = n ? mask_text(data, n, &mn) : NULL;
+    if (n && !m) {
+        z->failed = 1;
+        return;
+    }
+    zip_add_raw(z, name, m, mn);
+    free(m);
+}
+
+// A file from the disk; a missing one is no entry. text: masked (zip_add), else copied as it is (the save).
+static void zip_file_as(Zip *z, const char *name, const char *path, int text) {
     if (!path || !plat_file_exists(path)) return;
     int64_t size = plat_file_size(path);
     if (size < 0 || (uint64_t)size > ZIP_FILE_LIMIT) {
@@ -95,9 +201,12 @@ static void zip_file(Zip *z, const char *name, const char *path) {
         note_skip(z, name, "unreadable");
         return;
     }
-    zip_add(z, name, data, (size_t)n);
+    if (text) zip_add(z, name, data, (size_t)n);
+    else zip_add_raw(z, name, data, (size_t)n);
     free(data);
 }
+
+static void zip_file(Zip *z, const char *name, const char *path) { zip_file_as(z, name, path, 1); }
 
 static int zip_finish(Zip *z) {
     if (z->failed || !grow(&z->buf, &z->cap, z->n + z->cn + 22)) return 0;
@@ -145,7 +254,7 @@ static int walk_entry(const char *name, int kind, uint64_t size, void *ctx) {
         snprintf(entry, sizeof entry, "%s/%s", w->prefix, name) >= (int)sizeof entry)
         return 1;
     if (kind == PLAT_FS_FILE) {
-        zip_file(w->z, entry, path);
+        zip_file_as(w->z, entry, path, 0);
     } else if (kind == PLAT_FS_DIR && w->depth < 8) {
         Walk sub = {w->z, path, entry, w->depth + 1};
         plat_fs_list(path, walk_entry, &sub);
@@ -182,6 +291,7 @@ const char *bug_report_write(int with_save, const char *sysinfo, char *out, size
     *plat_last_sep(exe_dir) = 0;
     struct tm t;
     plat_local_time(&t);
+    masks_init();
     Zip z = {.time = (uint16_t)(t.tm_hour << 11 | t.tm_min << 5 | t.tm_sec / 2),
              .date = (uint16_t)((t.tm_year - 80) << 9 | (t.tm_mon + 1) << 5 | t.tm_mday)};
 
@@ -198,7 +308,13 @@ const char *bug_report_write(int with_save, const char *sysinfo, char *out, size
         snprintf(dir, sizeof dir, "logs/%s", base_of(path));
         zip_file(&z, dir, path);
     }
-    zip_file(&z, "crash.txt", rt_crash_report_path());
+    for (int i = 0; i < RT_CRASH_KEEP; i++)   // crash.txt, the newest, and the older ones
+        if (rt_crash_report_nth(i, path, sizeof path)) {
+            char entry[32];
+            if (i) snprintf(entry, sizeof entry, "crash.%d.txt", i);
+            else snprintf(entry, sizeof entry, "crash.txt");
+            zip_file(&z, entry, path);
+        }
     snprintf(path, sizeof path, "%s/xcx.ini", exe_dir);
     zip_file(&z, "xcx.ini", path);
 
