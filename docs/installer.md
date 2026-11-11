@@ -94,6 +94,11 @@ python -m installer --base FILE --update FILE --keys FILE --lang CODE --dest DIR
 ```
 
 - On a folder with `xcx-install.json` only `--dest` is needed; the game files only when the extraction must run again.
+- For a launcher or a script (RecompLauncher passes them, `recomplauncher.json`): `--game PATH` takes the game file or
+  a folder holding the base game, the update and the add-on content in place of `--base`, `--update` and `--dlc`,
+  and sorts the files by content (`installer/game_files.py`); `--lang auto` keeps the language already in `xcx.ini`;
+  `--dlss-file PATH` copies a DLSS library instead of downloading one; `--progress-lines` prints `progress 0.4 Text`
+  lines instead of JSON events.
 - stdout: one JSON event per line, types `start`, `plan`, `step` (started, done, skipped), `progress` (step, phase,
   done/total/unit), `space` (bytes needed and free on the install disk and the temp disk), `warning`, `error`, `end` (`installer/events.py`). Messages are ids with parameters;
   `installer/text/en.json` holds their English text. The human-readable log goes to `<temp>/logs/`.

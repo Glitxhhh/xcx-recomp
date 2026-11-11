@@ -1,6 +1,7 @@
 """Command line: python -m installer --base FILE --update FILE --keys FILE [--dlc FILE ...] --lang CODE --dest DIR
                                      [--root DIR] [--temp DIR] [--verify]
 
+--game PATH replaces --base, --update and --dlc: a game file or a folder holding them, sorted by content.
 A first install needs every option. On a folder with xcx-install.json (resume after a cancel or failure, or update
 with a newer release) only --dest is needed: --lang defaults to the recorded language, and the game files are needed
 only when the extraction has to run again. Prints JSON events on stdout (events.py). Exit code: 0 done, 1 failed,
@@ -13,12 +14,13 @@ import sys
 import time
 from pathlib import Path
 
+from . import game_files
 from . import guilogic
 from . import ini
 from . import layout as layouts
 from . import state as statefile
 from .events import Reporter
-from .runner import Context, run_steps
+from .runner import Context, InstallError, run_steps
 from .steps import all_steps
 
 EXIT = {'ok': 0, 'failed': 1, 'cancelled': 3}
@@ -56,6 +58,9 @@ def cancel(signum, frame):
 
 def main(argv=None):
     ap = Parser(prog='python -m installer', description=__doc__.splitlines()[0])
+    ap.add_argument('--game', type=Path, help='a game file or a folder holding the base game, the update and any '
+                                              'add-on content (XCI or NSP), found by content; --base, --update and '
+                                              '--dlc win over it')
     ap.add_argument('--base', type=Path, help='base game, XCI or NSP')
     ap.add_argument('--update', type=Path, help='2.0.0 update NSP')
     ap.add_argument('--dlc', type=Path, nargs='*', help='add-on content NSPs (optional)')
@@ -94,6 +99,13 @@ def main(argv=None):
         return 1
     if args.lang == 'auto':
         args.lang = auto_language(dest, state)
+    if args.game:
+        try:
+            game_files.resolve(args)
+        except InstallError as e:
+            rep.error(e.id, e.params)
+            rep.emit('end', result='failed', seconds=0)
+            return 1
     ctx = Context(layout, dest, temp, rep, args, state=state, verify=args.verify)
     steps = all_steps()
     rep.emit('start', release=layout.release, mode=ctx.mode, dev=layout.dev, dest=str(dest), log=str(log),
