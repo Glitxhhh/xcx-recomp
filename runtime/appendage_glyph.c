@@ -343,8 +343,9 @@ static SheetKind *sheet_resource(uint64_t resource) {
 enum { SHEET_SEEN = 48 };
 static uint64_t sheet_seen[SHEET_SEEN]; static unsigned sheet_seen_count;
 static void sheet_arm(Cpu *c, uint64_t node) {
-    // Hundreds of image panes bind per frame: with Original selected (the default) nothing below runs.
-    if (!inline_enabled || glyph_style_parse(cfg_value("XCX_GLYPH_STYLE")) == GLYPH_ORIGINAL) return;
+    // Hundreds of image panes bind per frame: with Original selected nothing below runs, and otherwise the checks stay
+    // cheap (glyph_style_setting is cached, plat_mem_readable reads a byte per page for these small ranges).
+    if (!inline_enabled || glyph_style_setting() == GLYPH_ORIGINAL) return;
     if (!plat_mem_readable(node, 0x350) || rd64(node) != MOD_MAIN_BASE + 0x1c94318 || *(uint8_t *)(uintptr_t)(node + 0x18) != 1) return;
     const SheetKind *kind = sheet_resource(rd64(node + 0xe0));
     if (!kind) return;
@@ -611,7 +612,7 @@ int appendage_glyph_source(uint64_t h, uint64_t serial, uint64_t storage) {
 // decides what they show.
 unsigned appendage_plain_signature(int layout) {
     plat_once(&once, init, NULL);
-    if (!inline_enabled || glyph_style_parse(cfg_value("XCX_GLYPH_STYLE")) == GLYPH_ORIGINAL) return 0;
+    if (!inline_enabled || glyph_style_setting() == GLYPH_ORIGINAL) return 0;
     int16_t art[GLYPH_SYMBOLS];
     if (!layout_symbols(layout, art)) return 0;
     return inline_signature_id(layout, art);

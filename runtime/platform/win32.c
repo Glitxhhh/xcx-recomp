@@ -600,7 +600,18 @@ int plat_mem_read(uint64_t addr, void *out, size_t n) {
     return ReadProcessMemory(GetCurrentProcess(), (const void *)(uintptr_t)addr, out, n, &got) && got == n;
 }
 
+// A range of up to 16 pages is checked by reading one byte of each page, as on Linux. VirtualQuery works out RegionSize by
+// walking the page table to the end of the region, and in the guest heap (one large committed region) a call takes about
+// 0.5 ms; the button icon checks (appendage_glyph.c) ask for a few hundred small ranges a frame. A read fails on
+// uncommitted and no-access pages. Larger ranges (whole textures, vk_texture.c) keep the query, which covers them in one call.
 int plat_mem_readable(uint64_t addr, uint64_t n) {
+    if (n <= 16 * 4096) {
+        uint8_t b;
+        uint64_t end = addr + (n ? n : 1);
+        for (uint64_t a = addr; a < end; a = (a | 4095) + 1)
+            if (!plat_mem_read(a, &b, 1)) return 0;
+        return 1;
+    }
     for (uint64_t a = addr, end = addr + n; a < end || a == addr;) {
         MEMORY_BASIC_INFORMATION mbi;
         if (!VirtualQuery((void *)(uintptr_t)a, &mbi, sizeof mbi) || mbi.State != MEM_COMMIT) return 0;
