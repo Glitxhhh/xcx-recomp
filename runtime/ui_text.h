@@ -145,6 +145,10 @@ typedef enum {
     UI_MENU_OPEN_LOG, UI_MENU_OPEN_LOG_DESC,
     UI_MENU_COPY_INFO, UI_MENU_COPY_INFO_DESC, UI_MENU_COPY_INFO_DONE,
     UI_MENU_ACTION_FAILED,    // beside a button whose action did not work (no clipboard, no folder)
+    UI_MENU_BUG_REPORT, UI_MENU_BUG_REPORT_DESC,
+    UI_MENU_BUG_REPORT_BUSY,  // beside the button while the zip is written
+    UI_MENU_BUG_REPORT_DONE,  // "Saved to %s": the zip's path, under the button after it was written
+    UI_MENU_BUG_REPORT_SAVE, UI_MENU_BUG_REPORT_SAVE_DESC,   // the opt-in row: the save goes into the zip too
     UI_MENU_RESET, UI_MENU_RESET_DESC, UI_MENU_RESET_CONFIRM, UI_MENU_RESET_YES, UI_MENU_RESET_NO,
 
     // Performance overlay
