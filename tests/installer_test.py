@@ -288,6 +288,12 @@ class CliTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             self.assertEqual(auto_language(Path(d), {'lang': 'ja'}), 'ja')
 
+    def test_auto_language_on_a_fresh_folder_is_a_game_language(self):
+        from installer import ini
+        from installer.cli import auto_language
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIn(auto_language(Path(d), None), ini.LANGUAGES)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -46,7 +46,8 @@ def auto_language(dest, state):
     A launcher passes it, so a language the player changed in xcx.ini survives an update."""
     path = dest / 'xcx.ini'
     chosen = ini.get_language(path.read_text(encoding='utf-8-sig')) if path.is_file() else None
-    return chosen or state.get('lang') or guilogic.default_game_language(guilogic.windows_ui_language())
+    recorded = (state or {}).get('lang')   # a fresh folder has no state
+    return chosen or recorded or guilogic.default_game_language(guilogic.windows_ui_language())
 
 
 def cancel(signum, frame):
