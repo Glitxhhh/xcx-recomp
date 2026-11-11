@@ -9,22 +9,18 @@ runs:
     - if: runner.os == 'Linux'
       shell: bash
       # On 2026-11-11 Canonical's names (azure.archive, archive and security.ubuntu.com) stopped resolving through the
-      # runner's DNS for hours and stopped the 0.1.19 release, while Cloudflare's resolver still answered. So a failed
-      # install retries against archive.ubuntu.com directly, and then with those hosts' addresses from Cloudflare's
-      # DNS over HTTPS written into /etc/hosts.
+      # runner's DNS for hours and stopped the 0.1.19 release, while Cloudflare's resolver still answered. So a host that
+      # does not resolve gets its address from Cloudflare's DNS over HTTPS, written into /etc/hosts.
       run: |
         pkgs="libvulkan1 mesa-vulkan-drivers xvfb xauth libxft2 libfontconfig1 libxss1 fonts-dejavu-core"
         apt_install() {
           sudo apt-get -o Acquire::Retries=3 update || true
           sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends $pkgs
         }
-        apt_install && exit 0
-        echo "::warning::apt through the runner's mirror failed; retrying against archive.ubuntu.com"
-        sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|http://archive.ubuntu.com/ubuntu/|g' \
-          /etc/apt/sources.list.d/*.sources /etc/apt/sources.list 2>/dev/null || true
-        apt_install && exit 0
-        echo "::warning::archive.ubuntu.com did not resolve either; taking its addresses from Cloudflare's DNS over HTTPS"
-        for h in archive.ubuntu.com security.ubuntu.com; do
+        # Checked before apt runs: apt waits out every DNS timeout, about 6 minutes a pass.
+        for h in azure.archive.ubuntu.com archive.ubuntu.com security.ubuntu.com; do
+          getent hosts "$h" > /dev/null && continue
+          echo "::warning::$h does not resolve on the runner; taking its address from Cloudflare's DNS over HTTPS"
           ip=$(curl -fsS --retry 3 -H 'accept: application/dns-json' "https://cloudflare-dns.com/dns-query?name=$h&type=A" |
             python3 -c 'import sys, json; print(next(a["data"] for a in json.load(sys.stdin).get("Answer", []) if a["type"] == 1))')
           echo "$ip $h" | sudo tee -a /etc/hosts
