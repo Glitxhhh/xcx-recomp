@@ -8,22 +8,29 @@ runs:
   steps:
     - if: runner.os == 'Linux'
       shell: bash
-      # The runner's sources go through its Azure mirror list (mirror+file:/etc/apt/apt-mirrors.txt), whose host failed to
-      # resolve for over an hour on 2026-11-11 and stopped the 0.1.19 release. A failed install retries against
-      # archive.ubuntu.com directly.
+      # On 2026-11-11 Canonical's names (azure.archive, archive and security.ubuntu.com) stopped resolving through the
+      # runner's DNS for hours and stopped the 0.1.19 release, while Cloudflare's resolver still answered. So a failed
+      # install retries against archive.ubuntu.com directly, and then with those hosts' addresses from Cloudflare's
+      # DNS over HTTPS written into /etc/hosts.
       run: |
         pkgs="libvulkan1 mesa-vulkan-drivers xvfb xauth libxft2 libfontconfig1 libxss1 fonts-dejavu-core"
         apt_install() {
           sudo apt-get -o Acquire::Retries=3 update || true
           sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends $pkgs
         }
-        if ! apt_install; then
-          echo "::warning::apt through the runner's mirror failed; retrying against archive.ubuntu.com"
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|http://archive.ubuntu.com/ubuntu/|g' \
-            /etc/apt/sources.list.d/*.sources /etc/apt/sources.list 2>/dev/null || true
-          for i in 1 2 3; do apt_install && exit 0; sleep 30; done
-          exit 1
-        fi
+        apt_install && exit 0
+        echo "::warning::apt through the runner's mirror failed; retrying against archive.ubuntu.com"
+        sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|http://archive.ubuntu.com/ubuntu/|g' \
+          /etc/apt/sources.list.d/*.sources /etc/apt/sources.list 2>/dev/null || true
+        apt_install && exit 0
+        echo "::warning::archive.ubuntu.com did not resolve either; taking its addresses from Cloudflare's DNS over HTTPS"
+        for h in archive.ubuntu.com security.ubuntu.com; do
+          ip=$(curl -fsS --retry 3 -H 'accept: application/dns-json' "https://cloudflare-dns.com/dns-query?name=$h&type=A" |
+            python3 -c 'import sys, json; print(next(a["data"] for a in json.load(sys.stdin).get("Answer", []) if a["type"] == 1))')
+          echo "$ip $h" | sudo tee -a /etc/hosts
+        done
+        for i in 1 2 3; do apt_install && exit 0; sleep 30; done
+        exit 1
 
     # check_bundle in tools/make_release.py runs the installer with a clean environment and PATH, so the loader goes
     # where the Vulkan runtime installer puts it (System32) and the driver into the registry, not into VK_DRIVER_FILES.
