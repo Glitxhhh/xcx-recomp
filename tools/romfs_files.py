@@ -50,7 +50,7 @@ def main():
     table = {'version': a.version, 'romfs_sha256': expected['romfs']['sha256'],
              'files': dict(sorted(file_hashes(a.romfs / 'romfs.bin', report['files']).items()))}
     out = ROOT / 'tools' / 'data' / f'romfs-files-xcx-{a.version}.json'
-    out.write_text(json.dumps(table, indent=1) + '\n', encoding='utf-8')
+    out.write_text(json.dumps(table, indent=1) + '\n', encoding='utf-8', newline='\n')
     print(f'romfs_files: {out.relative_to(ROOT).as_posix()}: {len(table["files"])} files')
 
 

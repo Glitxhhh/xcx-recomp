@@ -20,6 +20,7 @@ typedef struct {
 
 // Reads the cheats and starts their thread. Called once the game's modules are loaded.
 void cheats_start(void);
+int cheats_active(void);   // cheats are on and at least one is switched on (or a master code runs)
 // The buttons the game was handed this poll (nn::hid bits), for the cheats that wait for a button.
 void cheats_keys(uint64_t buttons);
 

@@ -25,6 +25,8 @@
 #include <sys/prctl.h>
 #include <sys/random.h>
 #include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/uio.h>
@@ -1738,4 +1740,45 @@ long plat_child_read(PlatChild *c, void *buf, size_t cap) {
     do k = read(c->out, buf, cap);
     while (k < 0 && errno == EINTR);
     return (long)k;
+}
+
+// ---- local channel (platform.h plat_ipc_*): a Unix stream socket the other program listens on
+struct PlatIpc { int fd; };
+
+PlatIpc *plat_ipc_connect(const char *name) {
+    struct sockaddr_un a = {.sun_family = AF_UNIX};
+    if (strlen(name) >= sizeof a.sun_path) return NULL;
+    strcpy(a.sun_path, name);
+    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (fd < 0) return NULL;
+    if (connect(fd, (struct sockaddr *)&a, sizeof a) != 0) { close(fd); return NULL; }
+    PlatIpc *c = malloc(sizeof *c);
+    if (!c) { close(fd); return NULL; }
+    c->fd = fd;
+    return c;
+}
+
+int plat_ipc_write(PlatIpc *c, const void *buf, size_t n) {
+    const char *p = buf;
+    while (n) {
+        ssize_t done = send(c->fd, p, n, MSG_NOSIGNAL);
+        if (done < 0 && errno == EINTR) continue;
+        if (done <= 0) return 0;
+        p += done;
+        n -= (size_t)done;
+    }
+    return 1;
+}
+
+int64_t plat_ipc_read(PlatIpc *c, void *buf, size_t cap) {
+    ssize_t got = recv(c->fd, buf, cap, MSG_DONTWAIT);
+    if (got > 0) return got;
+    if (got < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) return 0;
+    return -1;
+}
+
+void plat_ipc_close(PlatIpc *c) {
+    if (!c) return;
+    close(c->fd);
+    free(c);
 }
