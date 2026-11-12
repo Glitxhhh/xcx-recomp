@@ -92,8 +92,10 @@ class NszTest(unittest.TestCase):
 
     def test_headers_read_in_place(self):
         src = self.make(None)
-        names = [n for n, _, _ in nsz.nca_entries(nsz.compressed_entries(src))]
-        self.assertEqual(names, [n for n, _, _ in self.ncas] + [self.ticket[0]])
+        with src.open('rb') as f:
+            entries = [(n, s) for n, _, s in nsz.nca_entries(f, nsz.compressed_entries(src))]
+        # named and sized as the NCAs: the header checks compare the size an NCA header records with its entry's
+        self.assertEqual(entries, [(n, len(d)) for n, d, _ in self.ncas] + [(self.ticket[0], len(self.ticket[1]))])
 
     def test_damaged_ncz_is_refused(self):
         name, nca, sections = self.ncas[0]

@@ -225,10 +225,16 @@ def plain_path(path, temp, progress=None):
     return decompress(path, dst, progress)
 
 
-def nca_entries(entries):
-    """The entries with each .ncz named as its .nca: an NCZ starts with its NCA's header unchanged, so the header
-    checks (nca_inventory, program_nca, nca_ctr_key) read it in place."""
-    return [(name[:-4] + '.nca' if name.lower().endswith('.ncz') else name, offset, size) for name, offset, size in entries]
+def nca_entries(f, entries):
+    """The entries of the opened container f with each .ncz named and sized as its .nca: an NCZ starts with its NCA's
+    header unchanged, so the header checks (nca_inventory, program_nca, nca_ctr_key) read it in place, and they check
+    the size the header records against the entry's, which is the NCA's, not the smaller NCZ's."""
+    out = []
+    for name, offset, size in entries:
+        if name.lower().endswith('.ncz'):
+            name, size = name[:-4] + '.nca', Ncz(f, offset, size).nca_size
+        out.append((name, offset, size))
+    return out
 
 
 def plain_size(path):

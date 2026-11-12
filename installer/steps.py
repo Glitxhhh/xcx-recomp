@@ -357,7 +357,7 @@ class Check(Step):
         except ValueError as e:
             raise_if_damaged(e, name, path)
             raise InstallError('check.not_game_file', input=name) from None
-        entries = nsz.nca_entries(entries)   # an NSZ's headers read in place
+        entries = nsz.nca_entries(f, entries)   # an NSZ's headers read in place
         if is_update and kind != 'nsp':
             raise InstallError('check.update_not_nsp')
         try:
@@ -653,7 +653,7 @@ def dlc_record(f, path, keys):
     """(title id, NCA record) of the add-on content in an opened NSP. InstallError when it holds none of this game's."""
     try:
         kind, entries = container_entries(f, path.stat().st_size)
-        records = nca_inventory(f, nsz.nca_entries(entries), keys)
+        records = nca_inventory(f, nsz.nca_entries(f, entries), keys)
     except ValueError as e:
         raise_if_damaged(e, 'dlc', path)
         raise InstallError('check.file_unreadable', input='dlc', detail=str(e)) from None

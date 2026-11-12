@@ -23,7 +23,7 @@ def kind_of(path, keys):
     try:
         with path.open('rb') as f:
             _, entries = container_entries(f, path.stat().st_size)
-            records = nca_inventory(f, nsz.nca_entries(entries), keys)
+            records = nca_inventory(f, nsz.nca_entries(f, entries), keys)
     except (ValueError, OSError):
         return None
     programs = [header for record, header in records if record['content_type'] == PROGRAM]
