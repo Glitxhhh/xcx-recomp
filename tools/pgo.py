@@ -1,0 +1,162 @@
+"""Adapted from TotK PC Recomp tools/pgo.py (MIT, Copyright (c) 2026 Valiantsin Dzerakh).
+
+Merge the raw profiles of an instrumented build into the .profdata that build_game.py --pgo FILE reads.
+
+    python tools/pgo.py merge build/upd-pgogen --version upd [--out build/pgo/pgo-upd.profdata]
+
+An instrumented build (build_game.py --pgo gen) writes <build>/pgo/default_<id>.profraw while xcx.exe runs (every
+minute and at exit); successive runs of the same exe add to that file. llvm-profdata comes from the llvm-mingw toolchain
+the instrumented build used: its raw format is tied to the compiler version.
+
+Beside the profile goes <out>.json, the training record: the game version, the git tree of recomp/ at the merge and
+the digests of the runtime/ headers the generated C includes (gen_headers; their inline helpers end up inside every
+lifted function). The profile matches the generated C of that generator and those headers; tools/make_release.py warns
+when either changed, since llvm-profdata matches functions by name and control-flow hash and a changed function
+silently loses its counts. Merge right after the training runs, from the checkout and commit they were built at.
+"""
+import argparse
+import datetime
+import hashlib
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import build_game  # noqa: E402
+
+ROOT = Path(__file__).resolve().parent.parent
+EXE = '.exe' if sys.platform == 'win32' else ''
+DEFAULT_DIR = ROOT / 'build' / 'pgo'   # merge writes pgo-<version>.profdata here
+SHIP_DIR = ROOT / 'tools' / 'data' / 'pgo'   # ship: the compressed profile releases and installs compile with
+
+
+def llvm_profdata(toolchain):
+    if toolchain:
+        tool = toolchain / 'bin' / f'llvm-profdata{EXE}'
+    else:
+        found = sorted((ROOT / 'toolchain').glob(f'llvm-mingw-*/llvm-mingw-*/bin/llvm-profdata{EXE}'))
+        tool = found[-1] if found else Path(f'llvm-profdata{EXE}')
+    if not tool.is_file():
+        sys.exit(f'{tool} not found: pass --toolchain')
+    return tool
+
+
+def recomp_tree():
+    """The git tree id of recomp/ at HEAD; None when recomp/ has uncommitted changes."""
+    dirty = subprocess.run(['git', '-C', str(ROOT), 'status', '--porcelain', '--', 'recomp'], capture_output=True,
+                           text=True).stdout.strip()
+    if dirty:
+        return None
+    return subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD:recomp'], capture_output=True,
+                          text=True).stdout.strip() or None
+
+
+def header_digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+
+
+def gen_headers(build):
+    """{runtime-relative path: digest} of the runtime/ headers the generated objects of an instrumented build include,
+    from its Ninja deps log. Their inline helpers (simd_fp.h, cpu.h, ...) become part of every lifted function before
+    the profile is matched, so a change to one invalidates the profile as surely as a generator change."""
+    env = dict(os.environ, PATH=str(build_game.UCRT) + os.pathsep + os.environ.get('PATH', ''))
+    r = subprocess.run([str(build_game.NINJA), '-f', str(build / 'build.ninja'), '-t', 'deps'], cwd=ROOT, env=env,
+                       capture_output=True, text=True)
+    if r.returncode:
+        sys.exit(f'ninja -t deps failed in {build}: {(r.stdout + r.stderr).strip()[-500:]}')
+    runtime = (ROOT / 'runtime').resolve()
+    found, cur = {}, False
+    for line in r.stdout.splitlines():
+        if not line.startswith(' '):
+            target = line.split(': #deps')[0].replace('\\', '/')
+            cur = '/obj/' in target and '/obj/runtime/' not in target
+            continue
+        if not cur:
+            continue
+        p = Path(line.strip())
+        p = (p if p.is_absolute() else ROOT / p).resolve()
+        try:
+            rel = p.relative_to(runtime).as_posix()
+        except ValueError:
+            continue
+        if rel not in found:
+            found[rel] = header_digest(p)
+    if not found:
+        sys.exit(f'no runtime/ header in the deps log of {build}: was it built from this checkout?')
+    return dict(sorted(found.items()))
+
+
+def stale_headers(record, root):
+    """The headers of a training record that differ in root/runtime now (missing ones included); None when the record
+    predates the header list."""
+    headers = record.get('gen_headers')
+    if headers is None:
+        return None
+    rt = root / 'runtime'
+    return [h for h, d in headers.items() if not (rt / h).is_file() or header_digest(rt / h) != d]
+
+
+def merge(build, out, version, toolchain):
+    raw = sorted((build / 'pgo').glob('*.profraw'))
+    if not raw:
+        sys.exit(f'no .profraw in {build / "pgo"}: run the instrumented xcx.exe first')
+    tree = recomp_tree()
+    if not tree:
+        sys.exit('recomp/ has uncommitted changes: the record could not name the generator the profile matches')
+    headers = gen_headers(build)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix('.profdata.tmp')
+    cmd = [str(llvm_profdata(toolchain)), 'merge', '--failure-mode=all', '-o', str(tmp), *map(str, raw)]
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    if p.returncode:
+        tmp.unlink(missing_ok=True)
+        sys.exit(f'llvm-profdata merge failed: {(p.stdout + p.stderr).strip()[-2000:]}')
+    tmp.replace(out)
+    record = {'version': version, 'recomp_tree': tree, 'merged': datetime.date.today().isoformat(),
+              'raw_files': len(raw), 'gen_headers': headers}
+    out.with_suffix('.json').write_text(json.dumps(record, indent=1) + '\n', encoding='utf-8')
+    size = sum(f.stat().st_size for f in raw)
+    print(f'{out}: {len(raw)} raw files ({size / 2**20:.1f} MiB) -> {out.stat().st_size / 2**20:.1f} MiB; '
+          f'recomp tree {tree[:12]}, {len(headers)} runtime headers')
+
+
+def ship(src, version):
+    """Compress <src> (a merged .profdata) to tools/data/pgo/pgo-<version>.profdata.xz and copy its training record
+    beside it: the files tools/make_release.py builds the runtime with and the installer compiles the game with. The
+    profile is derived from playing the game (run counts of its lifted functions, named by guest address); it holds no
+    code or data of the game, and it is the one game-derived file the repository and the packages carry
+    (docs/building.md, "Profile-guided build")."""
+    import lzma
+    import shutil
+    SHIP_DIR.mkdir(parents=True, exist_ok=True)
+    dst = SHIP_DIR / f'pgo-{version}.profdata.xz'
+    dst.write_bytes(lzma.compress(src.read_bytes(), preset=9 | lzma.PRESET_EXTREME))
+    rec = src.with_suffix('.json')
+    if rec.is_file():
+        shutil.copy2(rec, SHIP_DIR / f'pgo-{version}.json')
+    print(f'pgo: {dst.relative_to(ROOT).as_posix()}: {src.stat().st_size >> 10} KiB -> {dst.stat().st_size >> 10} KiB')
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest='cmd', required=True)
+    m = sub.add_parser('merge', help='merge <build>/pgo/*.profraw into one .profdata and its training record')
+    m.add_argument('build', type=Path, help='the instrumented build directory')
+    m.add_argument('--version', required=True, help='game version the build was made for (upd)')
+    m.add_argument('--out', type=Path, help=f'default {DEFAULT_DIR.relative_to(ROOT).as_posix()}/pgo-<version>.profdata')
+    m.add_argument('--toolchain', type=Path, help='llvm-mingw directory (default: the newest under toolchain/)')
+    s = sub.add_parser('ship', help='compress a merged profile into tools/data/pgo for releases and installs')
+    s.add_argument('--version', required=True, help='game version of the profile (upd)')
+    s.add_argument('--profile', type=Path, help=f'default {DEFAULT_DIR.relative_to(ROOT).as_posix()}/pgo-<version>.profdata')
+    a = ap.parse_args()
+    if a.cmd == 'ship':
+        ship((a.profile or DEFAULT_DIR / f'pgo-{a.version}.profdata').resolve(), a.version)
+        return
+    out = (a.out or DEFAULT_DIR / f'pgo-{a.version}.profdata').resolve()
+    merge(a.build.resolve(), out, a.version, a.toolchain)
+
+
+if __name__ == '__main__':
+    main()

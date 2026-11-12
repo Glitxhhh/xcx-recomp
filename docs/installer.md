@@ -132,8 +132,12 @@ xcx.ini.example, VERSION  the default ini; the release string (the repository's 
 
 - SDL3 comes from the upstream release, not MSYS2: MSYS2's DLL imports the LGPL libiconv.
 - Every bundled third-party piece gets a row in `THIRD_PARTY_NOTICES.md`.
-- The release contains nothing game-derived; `make_release.py` runs `tools/check_content.py` over the folder before it
-  finishes.
+- The release contains nothing game-derived but the execution profile `tools/data/pgo/pgo-upd.profdata.xz` (run counts
+  of the lifted functions, named by guest address; docs/building.md, "Profile-guided build"). `make_release.py` runs
+  `tools/check_content.py` over the folder before it finishes, and that check lets the profile through only as an xz
+  stream holding an LLVM indexed profile.
+- On Windows the Compile step builds the game with that profile at -O2 (`installer/layout.py` pgo); Linux has none,
+  since the profile belongs to the LLVM of the Windows toolchain.
 
 ## Linux release
 
@@ -175,7 +179,7 @@ bin/                  xcx_xlate, hactool, ninja, libSDL3.so.0
 
 `.github/workflows/release.yml` builds both packages with no game files. `libxcxrt.a` takes `MOD_COUNT` and
 `MOD_MAIN_BASE`, all the runtime reads of the module layout, from `tools/runtime-layout/layout.h`; nothing game-derived
-reaches a runner or a package.
+reaches a runner or a package except the committed execution profile, which also builds the Windows `libxcxrt.a`.
 
 Each run builds `XCX-Setup-<version>-windows.zip` on Windows and `XCX-Setup-<version>-linux.AppImage` on Linux, with
 `check_content`, the check-only installer pass and the window's `--selftest` inside `tools/make_release.py` and

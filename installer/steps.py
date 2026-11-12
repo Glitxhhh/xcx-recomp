@@ -670,8 +670,9 @@ class Compile(Step):
         layout = ctx.layout
         clang = subprocess.run([str(layout.clang), '--version'], capture_output=True, text=True).stdout
         tools = [layout.tools / n for n in ('build_game.py', 'build_shaders.py', 'romfs_index.py', 'check_content.py')]
-        return fingerprint('compile-1', ctx.keys['lift'], layout.runtime, self.runtime_lib(ctx), layout.deps or 'system',
-                           layout.sysroot or 'host', *tools, clang, *[d.name for d in layout.dlls])
+        pgo = layout.pgo(game_version(ctx))
+        return fingerprint('compile-2', ctx.keys['lift'], layout.runtime, self.runtime_lib(ctx), layout.deps or 'system',
+                           layout.sysroot or 'host', *tools, clang, *[d.name for d in layout.dlls], pgo or 'no profile')
 
     @staticmethod
     def v3(ctx):
@@ -712,7 +713,7 @@ class Compile(Step):
             '--cpu', 'x86-64-v3' if self.v3(ctx) else 'x86-64-v2',
             '--version', version_tag(game_version(ctx)), '--expected', layout.expected(game_version(ctx)),
             '--exefs', dest / 'exefs', '--romfs', dest / 'romfs',
-            '--profile', dest / 'profile'], parse)
+            '--profile', dest / 'profile', *(['--pgo', pgo] if (pgo := layout.pgo(game_version(ctx))) else [])], parse)
         exe = build / ('xcx' + EXE)
         if code or not exe.is_file():
             raise InstallError('compile.failed', code=code, log=str(log))

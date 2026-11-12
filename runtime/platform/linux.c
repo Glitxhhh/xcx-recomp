@@ -1365,7 +1365,16 @@ int plat_stderr_path(char *out, size_t cap) {
 
 // ---- process
 
+#ifdef XCX_PGO_GEN
+// compiler-rt's profile runtime (an instrumented build, tools/build_game.py --pgo gen). It writes its counters from an
+// atexit handler, which _exit skips; __llvm_profile_dump writes them once and makes later writes no-ops.
+int __llvm_profile_dump(void);
+#endif
+
 void plat_exit(int code) {
+#ifdef XCX_PGO_GEN
+    __llvm_profile_dump();
+#endif
     if (!code) rt_mods_shutdown();
     fflush(stdout);
     fflush(stderr);

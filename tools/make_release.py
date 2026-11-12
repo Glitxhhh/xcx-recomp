@@ -380,16 +380,40 @@ def take_prebuilt(out, src):
 
 # ---- runtime/, recomp/, tools/, data/ ---------------------------------------------------------------------------------
 
+PGO_SHIPPED = ROOT / 'tools' / 'data' / 'pgo'   # pgo-<version>.profdata.xz + .json (tools/pgo.py ship)
+
+
+def profile(version=VERSION_TAG):
+    """The shipped execution profile of an update (tools/pgo.py ship), None without one. A profile trained on another
+    recomp/ than this one still works but misses the functions whose generated C changed since: warn, so the next
+    release retrains (docs/building.md, "Profile-guided build")."""
+    p = PGO_SHIPPED / f'pgo-{version}.profdata.xz'
+    if not p.is_file():
+        print(f'make_release: no execution profile {p.name}: installs compile the game without one', file=sys.stderr)
+        return None
+    rec = PGO_SHIPPED / f'pgo-{version}.json'
+    record = json.loads(rec.read_text(encoding='utf-8')) if rec.is_file() else {}
+    tree = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD:recomp'], capture_output=True,
+                          text=True).stdout.strip()
+    if tree and record.get('recomp_tree') != tree:
+        print(f'make_release: warning: {p.name} was trained on recomp tree {record.get("recomp_tree", "unknown")[:12]}, '
+              f'this is {tree[:12]}: functions whose generated C changed build without a profile; retrain',
+              file=sys.stderr)
+    return p
+
+
 def runtime_lib(out, llvm):
     """Build libxcxrt.a, and libxcxrt-v2.a for CPUs without AVX2, with the folder's llvm/ and copy them, the headers and
-    the install-side sources into runtime/."""
+    the install-side sources into runtime/. The runtime compiles with the update's execution profile when there is one:
+    the training build instrumented it as well."""
     rt = out / 'runtime'
+    pgo = profile()
     for cpu, name in RUNTIME_LIBS:
         build = MAIN_ROOT / 'build' / 'release-check' / f'rtlib-{cpu}'
         run([sys.executable, ROOT / 'tools' / 'build_game.py', '--make-runtime-lib', '--version', VERSION_TAG,
              '--expected', ROOT / 'tools' / 'data' / EXPECTED, '--toolchain', llvm, '--cpu', cpu,
              '--deps', out / 'runtime' / 'deps', '--ninja', out / 'bin' / 'ninja.exe', '--gen', RUNTIME_LAYOUT,
-             '--out', build], env=clean_env(llvm / 'bin', out / 'bin'))
+             '--out', build, *(['--pgo', pgo] if pgo else [])], env=clean_env(llvm / 'bin', out / 'bin'))
         shutil.copy2(build / 'libxcxrt.a', rt / name)
     for p in sorted((ROOT / 'runtime').rglob('*')):
         if p.suffix in RUNTIME_SUFFIXES and p.is_file():
@@ -529,13 +553,14 @@ def prove(out):
     chk = MAIN_ROOT / 'build' / 'release-check'
     check_runtime_layout(gen)
     env = clean_env(out / 'python', out / 'llvm' / 'bin', out / 'bin')
+    pgo = out / 'tools' / 'data' / 'pgo' / f'pgo-{VERSION_TAG}.profdata.xz'
     t0 = time.time()
     run([out / 'python' / 'python.exe', out / 'tools' / 'build_game.py', '--version', VERSION_TAG,
          '--expected', out / 'tools' / 'data' / EXPECTED, '--toolchain', out / 'llvm',
          '--deps', out / 'runtime' / 'deps', '--runtime', out / 'runtime', '--runtime-lib', out / 'runtime' / 'libxcxrt.a',
          '--ninja', out / 'bin' / 'ninja.exe', '--gen', gen, '--out', chk, '--exefs', ext / 'exefs', '--romfs', ext / 'romfs',
-         '--profile', chk / 'profile'], env=env)
-    print(f'prove: build {time.time() - t0:.0f} s')
+         '--profile', chk / 'profile', *(['--pgo', pgo] if pgo.is_file() else [])], env=env)
+    print(f'prove: build {time.time() - t0:.0f} s{" with the execution profile" if pgo.is_file() else ""}')
     for dll in ('SDL3.dll', 'libopus-0.dll'):
         shutil.copy2(out / 'bin' / dll, chk / dll)
     for dll in ('libc++.dll', 'libunwind.dll', 'libwinpthread-1.dll'):   # installer/layout.py release_dlls
