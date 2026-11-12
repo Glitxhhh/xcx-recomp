@@ -407,6 +407,9 @@ uint64_t plat_thread_affinity(PlatThread *t, uint64_t mask) {
     return prev;
 }
 
+uint32_t plat_thread_prefer_fast_cores(void) { return 0; }
+void plat_power_full_speed(void) {}
+
 uint32_t plat_cpu_count(void) {
     cpu_set_t set;
     if (!sched_getaffinity(0, sizeof set, &set) && CPU_COUNT(&set) > 0) return (uint32_t)CPU_COUNT(&set);
@@ -1362,7 +1365,16 @@ int plat_stderr_path(char *out, size_t cap) {
 
 // ---- process
 
+#ifdef XCX_PGO_GEN
+// compiler-rt's profile runtime (an instrumented build, tools/build_game.py --pgo gen). It writes its counters from an
+// atexit handler, which _exit skips; __llvm_profile_dump writes them once and makes later writes no-ops.
+int __llvm_profile_dump(void);
+#endif
+
 void plat_exit(int code) {
+#ifdef XCX_PGO_GEN
+    __llvm_profile_dump();
+#endif
     if (!code) rt_mods_shutdown();
     fflush(stdout);
     fflush(stderr);

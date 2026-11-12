@@ -132,8 +132,12 @@ xcx.ini.example, VERSION  the default ini; the release string (the repository's 
 
 - SDL3 comes from the upstream release, not MSYS2: MSYS2's DLL imports the LGPL libiconv.
 - Every bundled third-party piece gets a row in `THIRD_PARTY_NOTICES.md`.
-- The release contains nothing game-derived; `make_release.py` runs `tools/check_content.py` over the folder before it
-  finishes.
+- The release contains nothing game-derived but the execution profile `tools/data/pgo/pgo-upd.profdata.xz` (run counts
+  of the lifted functions, named by guest address; docs/building.md, "Profile-guided build"). `make_release.py` runs
+  `tools/check_content.py` over the folder before it finishes, and that check lets the profile through only as an xz
+  stream holding an LLVM indexed profile.
+- On Windows the Compile step builds the game with that profile at -O2 (`installer/layout.py` pgo); Linux has none,
+  since the profile belongs to the LLVM of the Windows toolchain.
 
 ## Linux release
 
@@ -175,7 +179,7 @@ bin/                  xcx_xlate, hactool, ninja, libSDL3.so.0
 
 `.github/workflows/release.yml` builds both packages with no game files. `libxcxrt.a` takes `MOD_COUNT` and
 `MOD_MAIN_BASE`, all the runtime reads of the module layout, from `tools/runtime-layout/layout.h`; nothing game-derived
-reaches a runner or a package.
+reaches a runner or a package except the committed execution profile, which also builds the Windows `libxcxrt.a`.
 
 Each run builds `XCX-Setup-<version>-windows.zip` on Windows and `XCX-Setup-<version>-linux.AppImage` on Linux, with
 `check_content`, the check-only installer pass and the window's `--selftest` inside `tools/make_release.py` and
@@ -183,8 +187,11 @@ Each run builds `XCX-Setup-<version>-windows.zip` on Windows and `XCX-Setup-<ver
 (`.github/actions/software-vulkan`). A second runner then unpacks each package and repeats those checks
 (`tools/check_release.py`). Downloads are cached from `toolchain/release-dl/`.
 
-For a test build, start the Release workflow on a branch from the Actions tab (or `gh workflow run release.yml --ref
-<branch>`). The packages are the run's artifacts.
+For a test build, push a tag `test-<name>` on the commit to try (`git tag test-issue123 && git push origin
+test-issue123`), or start the Release workflow on a branch from the Actions tab (`gh workflow run release.yml --ref
+<branch>`). Either only builds and checks: no draft release is made. The packages are the run's artifacts, named
+`XCX-Setup-test-<name>-windows.zip` and `XCX-Setup-test-<name>-linux.AppImage` for a tag (the `VERSION` for a run
+started by hand); link the run in the issue for the reporter.
 
 For a release:
 

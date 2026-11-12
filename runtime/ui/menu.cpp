@@ -829,6 +829,7 @@ static void tab_advanced(float scale) {
     opt_toggle("XCX_REPLAY_ASYNC", UI_MENU_REPLAY_ASYNC, UI_MENU_REPLAY_ASYNC_DESC);
     opt_toggle("XCX_FREE_CORES", UI_MENU_FREE_CORES, UI_MENU_FREE_CORES_DESC);
     opt_toggle("XCX_TIMER_1MS", UI_MENU_TIMER_1MS, UI_MENU_TIMER_1MS_DESC);
+    opt_toggle("XCX_FAST_CORES", UI_MENU_FAST_CORES, UI_MENU_FAST_CORES_DESC);
 
     opt_group(UI_MENU_GROUP_SHADERS);
     static const UiTextId wait[] = {UI_MENU_PIPE_WAIT_DEFAULT, UI_MENU_PIPE_WAIT_DRAW};
