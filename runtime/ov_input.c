@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "cfg.h"
+#include "cheats.h"
 #include "host.h"
 #include "input.h"
 #include "ov.h"
@@ -93,6 +94,7 @@ static void npad_states(Cpu *c, uint32_t want) {
     if (live) {
         s.attributes = ATTR_CONNECTED;
         input_poll(&s.buttons, &s.lx, &s.ly, &s.rx, &s.ry);
+        cheats_keys(s.buttons);
     }
     *out = s;
     ret_x(c, 1);

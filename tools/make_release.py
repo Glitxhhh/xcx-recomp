@@ -106,7 +106,7 @@ LLVM_SKIP_DIRS = {'aarch64-w64-mingw32', 'armv7-w64-mingw32', 'i686-w64-mingw32'
 LLVM_SKIP_SUFFIXES = {'.idl', '.tlb'}
 
 # tools/ files the installer steps run (and what they import), copied from the repo.
-TOOLS_FILES = ['build_game.py', 'build_shaders.py', 'check_content.py', 'extract.py', 'package_select.py', 'romfs_index.py', 'mod_support.py']
+TOOLS_FILES = ['build_game.py', 'build_shaders.py', 'check_content.py', 'extract.py', 'package_select.py', 'romfs_index.py', 'mod_support.py', 'cheats.py']
 TOOLS_DIRS = ['vendor/macnativegames', 'data']   # data/: expected hashes
 RUNTIME_LAYOUT = ROOT / 'tools' / 'runtime-layout'   # build_game.py --gen of libxcxrt.a
 # The runtime libraries a release ships, by build_game.py --cpu: the installer picks by the host's x86-64 level
@@ -115,7 +115,7 @@ RUNTIME_SUFFIXES = {'.h', '.inc', '.ico'}   # .ico: the installer window icon
 
 VERSION_TAG = 'upd'   # installer/layout.py version_tag: the generated/ and build/extracted/ name of 2.0.0
 EXPECTED = 'expected-xcx-2.0.0.json'
-PROBES = ['--probe-kernel', '--probe-vkexec', '--probe-nvn-tex', '--probe-shader']
+PROBES = ['--probe-kernel', '--probe-vkexec', '--probe-nvn-tex', '--probe-shader', '--probe-cheats']
 
 
 def sha256_file(path):

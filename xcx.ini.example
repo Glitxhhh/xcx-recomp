@@ -170,6 +170,11 @@
 # the game's own menu (+ / Start).
 # pause_in_background = 0
 
+[cheats]
+# 1 turns cheats on: the F1 menu gets its Cheats tab, and the cheats switched on there run. 0 (default) keeps every
+# cheat off and hides the tab; the cheats chosen in it are kept for the next time. Takes effect at once.
+# cheats = 0
+
 [input]
 # Gamepad motion controls (0 = off) and vibration (0 = off).
 # motion = 1
