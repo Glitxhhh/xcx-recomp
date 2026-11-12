@@ -114,6 +114,16 @@ void rt_log(const char *fmt, ...) {
     rt_log_raw(buf, n);
 }
 
+void rt_fast_cores(void) {
+    static int on = -1, logged;
+    if (on < 0) on = cfg_bool("XCX_FAST_CORES");
+    uint32_t n = on ? plat_thread_prefer_fast_cores() : 0;
+    if (!__atomic_exchange_n(&logged, 1, __ATOMIC_RELAXED))
+        rt_log(!on ? "cpu: fast cores off (fast_cores = 0)"
+               : n ? "cpu: hybrid CPU: the game's threads prefer the %u logical processors of its fastest cores"
+                   : "cpu: one kind of core: every thread may run on any of them", n);
+}
+
 const char *rt_log_path(void) {
     return __atomic_load_n(&g_log_state, __ATOMIC_ACQUIRE) == LOG_FILE ? g_log_path : NULL;
 }
@@ -777,6 +787,7 @@ int main(int argc, char **argv) {
     // Timed guest waits (kernel.c block_inner) sleep in whole milliseconds; at the default 15.6 ms tick a 1 ms wait
     // costs a full tick. XCX_TIMER_1MS=0 keeps the default for comparison.
     if (cfg_bool("XCX_TIMER_1MS")) plat_timer_1ms();
+    plat_power_full_speed();   // before the window exists: Windows would slow a hidden or background game
     cfg = (RtConfig){.exefs = rt_default_exefs, .romfs = rt_default_romfs, .profile = rt_default_profile,
                      .gpu = cfg_get("XCX_GPU")};
     portable_paths(&cfg);   // command-line paths below still win

@@ -30,6 +30,8 @@
 # free_cores = 0
 # Windows timer resolution of 1 ms for steadier frame pacing (0 = the Windows default).
 # timer_1ms = 1
+# On a CPU with P- and E-cores, the game's main threads prefer the P-cores (0 = Windows places them).
+# fast_cores = 1
 
 # Shaders and pipelines.
 # Draws whose pipeline is still building: default waits on a reserved worker; draw is the previous scheduling.

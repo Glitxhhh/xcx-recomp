@@ -228,6 +228,9 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_FREE_CORES_DESC] = "Lets only one thread run per virtual core, as on the console.",
     [UI_MENU_TIMER_1MS] = "1 ms Windows timer",
     [UI_MENU_TIMER_1MS_DESC] = "Raises the system timer resolution to 1 ms for steadier frame pacing.",
+    [UI_MENU_FAST_CORES] = "Prefer P-cores",
+    [UI_MENU_FAST_CORES_DESC] = "On a CPU with P- and E-cores, the game's main threads prefer the fast P-cores. "
+                                "No effect on other CPUs.",
     [UI_MENU_PIPE_WAIT] = "Waiting draw handling",
     [UI_MENU_PIPE_WAIT_DESC] = "Default keeps the current scheduling with a reserved worker for waiting draws; Old (draw) uses the previous scheduling.",
     [UI_MENU_PIPE_WAIT_DEFAULT] = "Default", [UI_MENU_PIPE_WAIT_DRAW] = "Old (draw)",
@@ -519,6 +522,9 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_FREE_CORES_DESC] = "На каждом виртуальном ядре работает один поток, как на консоли.",
     [UI_MENU_TIMER_1MS] = "Таймер Windows 1 мс",
     [UI_MENU_TIMER_1MS_DESC] = "Повышает точность системного таймера до 1 мс для ровного темпа кадров.",
+    [UI_MENU_FAST_CORES] = "Предпочитать P-ядра",
+    [UI_MENU_FAST_CORES_DESC] = "На процессоре с P- и E-ядрами основные потоки игры идут на быстрые P-ядра. "
+                                "На других процессорах ничего не меняет.",
     [UI_MENU_PIPE_WAIT] = "Обработка ожидающих отрисовок",
     [UI_MENU_PIPE_WAIT_DESC] = "«По умолчанию» — текущее планирование с отдельным потоком для ожидающих отрисовок; «Старый способ» — прежнее планирование.",
     [UI_MENU_PIPE_WAIT_DEFAULT] = "По умолчанию", [UI_MENU_PIPE_WAIT_DRAW] = "Старый способ",

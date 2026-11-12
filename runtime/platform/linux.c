@@ -407,6 +407,9 @@ uint64_t plat_thread_affinity(PlatThread *t, uint64_t mask) {
     return prev;
 }
 
+uint32_t plat_thread_prefer_fast_cores(void) { return 0; }
+void plat_power_full_speed(void) {}
+
 uint32_t plat_cpu_count(void) {
     cpu_set_t set;
     if (!sched_getaffinity(0, sizeof set, &set) && CPU_COUNT(&set) > 0) return (uint32_t)CPU_COUNT(&set);
