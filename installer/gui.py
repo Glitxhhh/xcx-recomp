@@ -293,9 +293,9 @@ class App:
         self.fit()
 
     def pick_file(self, name, pick_id):
-        types = [(self.cat('ui.type_game'), '*.nsp *.xci'), (self.cat('ui.type_all'), '*.*')]
+        types = [(self.cat('ui.type_game'), '*.nsp *.xci *.nsz *.xcz'), (self.cat('ui.type_all'), '*.*')]
         if name in ('update', 'dlc'):
-            types = [(self.cat('ui.type_nsp'), '*.nsp'), (self.cat('ui.type_all'), '*.*')]
+            types = [(self.cat('ui.type_nsp'), '*.nsp *.nsz'), (self.cat('ui.type_all'), '*.*')]
         if name == 'keys':
             types = [(self.cat('ui.type_keys'), '*.keys'), (self.cat('ui.type_all'), '*.*')]
         path = filedialog.askopenfilename(title=self.cat(pick_id), filetypes=types)

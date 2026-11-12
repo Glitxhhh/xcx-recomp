@@ -6,27 +6,29 @@
   "inputs": [
     {
       "id": "base",
-      "label": "Your Xenoblade Chronicles X: Definitive Edition base game (.nsp or .xci).",
+      "label": "Your Xenoblade Chronicles X: Definitive Edition base game (.nsp, .xci, .nsz or .xcz), or a folder with the extracted 2.0.0 game (exefs and romfs).",
       "role": "game",
       "formats": [
-        { "type": "file", "extensions": ["nsp", "xci"], "requires": ["keys"] }
+        { "type": "file", "extensions": ["nsp", "xci", "nsz", "xcz"], "requires": ["keys"] },
+        { "type": "folder" }
       ]
     },
     {
       "id": "update",
-      "label": "Your 2.0.0 update (.nsp).",
+      "label": "Your 2.0.0 update (.nsp or .nsz). Not needed with an extracted game folder.",
       "role": "update",
+      "optional": true,
       "formats": [
-        { "type": "file", "extensions": ["nsp"] }
+        { "type": "file", "extensions": ["nsp", "nsz"] }
       ]
     },
     {
       "id": "dlc",
-      "label": "Your add-on content (.nsp), if you have it.",
+      "label": "Your add-on content (.nsp or .nsz), if you have it.",
       "role": "dlc",
       "optional": true,
       "formats": [
-        { "type": "file", "extensions": ["nsp"] }
+        { "type": "file", "extensions": ["nsp", "nsz"] }
       ]
     },
     {
@@ -48,7 +50,7 @@
     "args": [
       "-m", "installer",
       "--base", "{input:base}",
-      "--update", "{input:update}",
+      "--update={input:update}",
       "--dlc={input:dlc}",
       "--keys", "{input:keys}",
       "--dlss-file={input:dlss}",

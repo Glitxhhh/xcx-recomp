@@ -78,12 +78,16 @@ def main(argv=None):
     ap.add_argument('--progress-lines', action='store_true',
                     help='print "progress <0 to 1> <text>" lines instead of JSON events')
     args = ap.parse_args(argv)
-    # A launcher fills optional inputs the player left empty with nothing (--dlc= or --dlss-file=), which Path reads as
-    # the current folder: treat those as not given
+    # A launcher fills optional inputs the player left empty with nothing (--dlc=, --update=, --dlss-file=), which Path
+    # reads as the current folder: treat those as not given
     if args.dlc is not None:
         args.dlc = [p for p in args.dlc if str(p) not in ('', '.')] or None
-    if args.dlss_file is not None and str(args.dlss_file) in ('', '.'):
-        args.dlss_file = None
+    for name in ('base', 'update', 'keys', 'dlss_file'):
+        if getattr(args, name) is not None and str(getattr(args, name)) in ('', '.'):
+            setattr(args, name, None)
+    # A folder as the base game (RecompLauncher's folder input): an extracted game, read as --game
+    if args.base and Path(args.base).is_dir() and not args.game:
+        args.game, args.base = args.base, None
 
     # The window cancels with Ctrl+Break to the installer's process group (CREATE_NEW_PROCESS_GROUP), which also reaches
     # the tools it runs; Python's default for it ends the process without recording anything.
