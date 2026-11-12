@@ -183,8 +183,11 @@ Each run builds `XCX-Setup-<version>-windows.zip` on Windows and `XCX-Setup-<ver
 (`.github/actions/software-vulkan`). A second runner then unpacks each package and repeats those checks
 (`tools/check_release.py`). Downloads are cached from `toolchain/release-dl/`.
 
-For a test build, start the Release workflow on a branch from the Actions tab (or `gh workflow run release.yml --ref
-<branch>`). The packages are the run's artifacts.
+For a test build, push a tag `test-<name>` on the commit to try (`git tag test-issue123 && git push origin
+test-issue123`), or start the Release workflow on a branch from the Actions tab (`gh workflow run release.yml --ref
+<branch>`). Either only builds and checks: no draft release is made. The packages are the run's artifacts, named
+`XCX-Setup-test-<name>-windows.zip` and `XCX-Setup-test-<name>-linux.AppImage` for a tag (the `VERSION` for a run
+started by hand); link the run in the issue for the reporter.
 
 For a release:
 
