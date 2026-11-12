@@ -172,6 +172,7 @@
  "step.dlss": "Загрузка NVIDIA DLSS",
  "phase.dlss.download": "Загрузка nvngx_dlss.dll из DLSS SDK от NVIDIA",
  "warn.dlss_kept": "В папке установки уже есть библиотека DLSS ({path}); установка её оставляет.",
+ "warn.dlss_file_wrong": "{path} не является nvngx_dlss.dll {version} от NVIDIA (SHA-256 {sha}...), поэтому установка его не скопировала. Игра работает без DLSS.",
  "warn.dlss_download_failed": "Не удалось загрузить NVIDIA DLSS с {url}: {detail}. Игра работает и без него; при следующем запуске установка попробует снова.",
  "ui.dlss": "Загрузить NVIDIA DLSS (nvngx_dlss.dll) для видеокарт NVIDIA RTX",
  "ui.dlss_help": "Из DLSS SDK от NVIDIA на GitHub, по лицензии NVIDIA RTX SDK (github.com/NVIDIA/DLSS). Без него настройка апскейлера DLSS не работает, и игра использует FSR.",
