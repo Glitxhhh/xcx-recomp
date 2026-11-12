@@ -124,6 +124,14 @@ def set_pgo(pgo, out):
         PGO_INPUT = Path(pgo).resolve()
         if not PGO_INPUT.is_file():
             sys.exit(f'--pgo {pgo}: no such profile')
+        if PGO_INPUT.suffix == '.xz':   # the shipped form (tools/data/pgo, tools/pgo.py ship): unpacked beside the build
+            import lzma
+            data = lzma.decompress(PGO_INPUT.read_bytes())
+            dst = out / 'pgo-input' / PGO_INPUT.stem
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if not dst.is_file() or dst.read_bytes() != data:   # an unchanged profile keeps the objects up to date
+                dst.write_bytes(data)
+            PGO_INPUT = dst
         # unprofiled: chunks the training never entered; out-of-date and backend-plugin: functions whose code changed
         # since the training, which then compile without a profile
         flags = [f'-fprofile-use={cmd_path(PGO_INPUT)}', '-Wno-profile-instr-unprofiled',

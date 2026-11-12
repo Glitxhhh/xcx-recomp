@@ -28,7 +28,8 @@ import build_game  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 EXE = '.exe' if sys.platform == 'win32' else ''
-DEFAULT_DIR = ROOT / 'build' / 'pgo'   # tools/make_release.py takes pgo-<version>.profdata from here
+DEFAULT_DIR = ROOT / 'build' / 'pgo'   # merge writes pgo-<version>.profdata here
+SHIP_DIR = ROOT / 'tools' / 'data' / 'pgo'   # ship: the compressed profile releases and installs compile with
 
 
 def llvm_profdata(toolchain):
@@ -121,6 +122,23 @@ def merge(build, out, version, toolchain):
           f'recomp tree {tree[:12]}, {len(headers)} runtime headers')
 
 
+def ship(src, version):
+    """Compress <src> (a merged .profdata) to tools/data/pgo/pgo-<version>.profdata.xz and copy its training record
+    beside it: the files tools/make_release.py builds the runtime with and the installer compiles the game with. The
+    profile is derived from playing the game (run counts of its lifted functions, named by guest address); it holds no
+    code or data of the game, and it is the one game-derived file the repository and the packages carry
+    (docs/building.md, "Profile-guided build")."""
+    import lzma
+    import shutil
+    SHIP_DIR.mkdir(parents=True, exist_ok=True)
+    dst = SHIP_DIR / f'pgo-{version}.profdata.xz'
+    dst.write_bytes(lzma.compress(src.read_bytes(), preset=9 | lzma.PRESET_EXTREME))
+    rec = src.with_suffix('.json')
+    if rec.is_file():
+        shutil.copy2(rec, SHIP_DIR / f'pgo-{version}.json')
+    print(f'pgo: {dst.relative_to(ROOT).as_posix()}: {src.stat().st_size >> 10} KiB -> {dst.stat().st_size >> 10} KiB')
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -129,7 +147,13 @@ def main():
     m.add_argument('--version', required=True, help='game version the build was made for (upd)')
     m.add_argument('--out', type=Path, help=f'default {DEFAULT_DIR.relative_to(ROOT).as_posix()}/pgo-<version>.profdata')
     m.add_argument('--toolchain', type=Path, help='llvm-mingw directory (default: the newest under toolchain/)')
+    s = sub.add_parser('ship', help='compress a merged profile into tools/data/pgo for releases and installs')
+    s.add_argument('--version', required=True, help='game version of the profile (upd)')
+    s.add_argument('--profile', type=Path, help=f'default {DEFAULT_DIR.relative_to(ROOT).as_posix()}/pgo-<version>.profdata')
     a = ap.parse_args()
+    if a.cmd == 'ship':
+        ship((a.profile or DEFAULT_DIR / f'pgo-{a.version}.profdata').resolve(), a.version)
+        return
     out = (a.out or DEFAULT_DIR / f'pgo-{a.version}.profdata').resolve()
     merge(a.build.resolve(), out, a.version, a.toolchain)
 
