@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "achievements.h"
 #include "cfg.h"
 #include "cheats.h"
 #include "fs.h"
@@ -412,6 +413,7 @@ void rt_boot(void) {
     frame_step_init();
     res_init();
     cheats_start();
+    achievements_start();
     cb_addr[0] = hostfn_register("<rtld loader_ready>", cb_loader_ready);
     cb_addr[1] = hostfn_register("<rtld module_inits>", cb_module_inits);
     cb_addr[2] = hostfn_register("<rtld module_finis>", cb_module_finis);

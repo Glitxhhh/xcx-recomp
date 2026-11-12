@@ -374,6 +374,50 @@ void plat_cond_broadcast(PlatCond *c) { WakeAllConditionVariable((PCONDITION_VAR
 
 // ---- files
 
+// ---- local channel (platform.h plat_ipc_*): a byte-mode named pipe the other program created
+struct PlatIpc { HANDLE h; };
+
+PlatIpc *plat_ipc_connect(const char *name) {
+    wchar_t w[512];
+    if (!MultiByteToWideChar(CP_UTF8, 0, name, -1, w, 512)) return NULL;
+    for (int tries = 0; tries < 3; tries++) {   // busy: the other side has a spare instance coming up
+        HANDLE h = CreateFileW(w, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+        if (h != INVALID_HANDLE_VALUE) {
+            PlatIpc *c = malloc(sizeof *c);
+            if (!c) { CloseHandle(h); return NULL; }
+            c->h = h;
+            return c;
+        }
+        if (GetLastError() != ERROR_PIPE_BUSY || !WaitNamedPipeW(w, 500)) return NULL;
+    }
+    return NULL;
+}
+
+int plat_ipc_write(PlatIpc *c, const void *buf, size_t n) {
+    const char *p = buf;
+    while (n) {
+        DWORD done = 0;
+        if (!WriteFile(c->h, p, n > 65536 ? 65536 : (DWORD)n, &done, NULL) || !done) return 0;
+        p += done;
+        n -= done;
+    }
+    return 1;
+}
+
+int64_t plat_ipc_read(PlatIpc *c, void *buf, size_t cap) {
+    DWORD avail = 0, got = 0;
+    if (!PeekNamedPipe(c->h, NULL, 0, NULL, &avail, NULL)) return -1;
+    if (!avail) return 0;
+    if (!ReadFile(c->h, buf, avail < cap ? avail : (DWORD)cap, &got, NULL)) return -1;
+    return got;
+}
+
+void plat_ipc_close(PlatIpc *c) {
+    if (!c) return;
+    CloseHandle(c->h);
+    free(c);
+}
+
 static int widen(const char *s, wchar_t *w, int cap) {
     int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, w, cap);
     if (!n) w[0] = 0;

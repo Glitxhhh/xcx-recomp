@@ -1,6 +1,8 @@
 """--game: one path (a game file or a folder) instead of --base, --update and --dlc.
 
-A launcher or a script that holds the player's game folder passes it as is. Each .nsp and .xci in the folder is opened
+A folder holding exefs/ and the RomFS of the updated game is an extracted game (installer/extracted.py) instead.
+
+A launcher or a script that holds the player's game folder passes it as is. Each .nsp, .xci, .nsz and .xcz in the folder is opened
 with the keys and sorted by what is in it, never by its name: a Program NCA that is a BKTR patch is the update, any
 other Program NCA is the base game, and a package with only Meta NCAs is add-on content. A file given with --base,
 --update or --dlc wins over what --game finds. Several files of one kind: the first by name.
@@ -8,10 +10,11 @@ other Program NCA is the base game, and a package with only Meta NCAs is add-on 
 from pathlib import Path
 
 from .runner import InstallError
+from . import extracted, nsz
 from .steps import container_entries, load_keys, nca_inventory
 from package_select import is_bktr   # on sys.path since steps.py imported the tools
 
-CONTAINERS = ('.nsp', '.xci')
+CONTAINERS = ('.nsp', '.xci', '.nsz', '.xcz')
 PROGRAM, META = 0, 1   # NCA content types
 
 
@@ -20,7 +23,7 @@ def kind_of(path, keys):
     try:
         with path.open('rb') as f:
             _, entries = container_entries(f, path.stat().st_size)
-            records = nca_inventory(f, entries, keys)
+            records = nca_inventory(f, nsz.nca_entries(f, entries), keys)
     except (ValueError, OSError):
         return None
     programs = [header for record, header in records if record['content_type'] == PROGRAM]
@@ -45,6 +48,12 @@ def resolve(options):
     game = Path(options.game)
     if not game.exists():
         raise InstallError('check.input_missing', input='game', path=str(game))
+    found_extracted = extracted.find(game)
+    if found_extracted and not (options.base or options.update):
+        # An extracted game (installer/extracted.py): no base or update file and no keys needed; add-on content
+        # still comes from --dlc
+        options.extracted = found_extracted
+        return
     if not options.keys or not Path(options.keys).is_file():
         raise InstallError('check.inputs_needed')
     try:
