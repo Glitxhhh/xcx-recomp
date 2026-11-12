@@ -433,6 +433,7 @@ def build_sources(out):
         copy_tree(ROOT / 'tools' / d, out / 'tools' / d, lambda r: '__pycache__' in r or r.endswith('.md'))
     copy_tree(ROOT / 'installer', out / 'installer', lambda r: '__pycache__' in r or r.startswith('launcher/'))
     shutil.copy2(ROOT / 'xcx.ini.example', out / 'xcx.ini.example')
+    shutil.copy2(ROOT / 'recomplauncher.json', out / 'recomplauncher.json')   # RecompLauncher reads it from the release
     from mod_support import source_files
     for src, relative in source_files(ROOT, development=True):
         dest = out / relative

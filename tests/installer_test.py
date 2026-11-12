@@ -250,6 +250,22 @@ class EventsTest(unittest.TestCase):
             self.assertIn('40 GB needed, 3 GB free', log)
             self.assertIn('[check.disk_space]', log)
 
+    def test_progress_lines_are_for_a_launcher_and_not_json(self):
+        out = io.StringIO()
+        rep = Reporter(out=out, lines=True)
+        rep.emit('start', release='1', mode='install', dev=False, dest='x', log='y', steps=['check', 'extract'])
+        rep.step('check', 'done', seconds=1)
+        rep.progress('extract', 'copy', 5, 10, 'bytes', force=True)
+        lines = out.getvalue().splitlines()
+        self.assertEqual([line.split()[0] for line in lines], ['progress'] * 3)
+        self.assertEqual([line.split()[1] for line in lines], ['0', '0.500', '0.750'])
+
+    def test_progress_lines_name_a_failure_in_words(self):
+        out = io.StringIO()
+        rep = Reporter(out=out, lines=True)
+        rep.error('check.lang_missing', {})
+        self.assertTrue(out.getvalue().startswith('error: '))
+
     def test_catalog_has_every_id_the_code_uses(self):
         catalog = json.loads((ROOT / 'installer' / 'text' / 'en.json').read_text(encoding='utf-8'))
         used = set()
@@ -258,6 +274,25 @@ class EventsTest(unittest.TestCase):
             used |= set(re.findall(r"warning\('([a-z_.]+)'", path.read_text()))
             used |= {f'phase.{s}.{p}' for s, p in re.findall(r"progress\('(\w+)', '(\w+)'[,)]", path.read_text())}
         self.assertEqual(sorted(i for i in used if i not in catalog), [])
+
+
+class CliTest(unittest.TestCase):
+    def test_auto_language_keeps_the_one_in_the_ini(self):
+        from installer.cli import auto_language
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'xcx.ini').write_text('[language]\nlang = de\n', encoding='utf-8')
+            self.assertEqual(auto_language(Path(d), {'lang': 'ja'}), 'de')
+
+    def test_auto_language_falls_back_to_the_recorded_one(self):
+        from installer.cli import auto_language
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(auto_language(Path(d), {'lang': 'ja'}), 'ja')
+
+    def test_auto_language_on_a_fresh_folder_is_a_game_language(self):
+        from installer import ini
+        from installer.cli import auto_language
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIn(auto_language(Path(d), None), ini.LANGUAGES)
 
 
 if __name__ == '__main__':

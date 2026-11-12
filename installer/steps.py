@@ -845,6 +845,9 @@ class Dlss(Step):
     id = 'dlss'
 
     def key(self, ctx):
+        given = getattr(ctx.options, 'dlss_file', None)
+        if given:
+            return fingerprint('dlss-1', 'file', file_sha256(given) if given.is_file() else 'missing')
         if not getattr(ctx.options, 'dlss', False):
             return fingerprint('dlss-1', 'off')
         return fingerprint('dlss-1', DLSS_VERSION, DLSS_SHA256)
@@ -855,6 +858,16 @@ class Dlss(Step):
         return not record.get('installed') or (ctx.dest / DLSS_DLL).is_file()
 
     def run(self, ctx):
+        given = getattr(ctx.options, 'dlss_file', None)
+        if given:
+            # A launcher fetched the file (--dlss-file): copy it over any library an older run left, but only when it
+            # is the same NVIDIA release the download takes, so the setup never installs an unchecked DLL
+            sha = file_sha256(given) if given.is_file() else 'missing'
+            if sha != DLSS_SHA256:
+                ctx.reporter.warning('warn.dlss_file_wrong', path=str(given), sha=sha[:16], version=DLSS_VERSION)
+                return {'failed': True}
+            replace_file(given, ctx.dest / DLSS_DLL)
+            return {'installed': DLSS_VERSION}
         if not getattr(ctx.options, 'dlss', False):
             return {}
         if os.name != 'nt':
