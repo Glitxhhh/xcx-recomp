@@ -30,6 +30,8 @@
 # free_cores = 0
 # Windows timer resolution of 1 ms for steadier frame pacing (0 = the Windows default).
 # timer_1ms = 1
+# On a CPU with P- and E-cores, the game's main threads prefer the P-cores (0 = Windows places them).
+# fast_cores = 1
 
 # Shaders and pipelines.
 # Draws whose pipeline is still building: default waits on a reserved worker; draw is the previous scheduling.
@@ -167,6 +169,11 @@
 # 0 (default) keeps the game running in the background, so cutscenes and their sound always stay together; pause with
 # the game's own menu (+ / Start).
 # pause_in_background = 0
+
+[cheats]
+# 1 turns cheats on: the F1 menu gets its Cheats tab, and the cheats switched on there run. 0 (default) keeps every
+# cheat off and hides the tab; the cheats chosen in it are kept for the next time. Takes effect at once.
+# cheats = 0
 
 [input]
 # Gamepad motion controls (0 = off) and vibration (0 = off).

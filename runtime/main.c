@@ -9,6 +9,8 @@
 //     --probe-nvn, --probe-nvn-tex, --probe-window, --probe-shader, --probe-vkmem, --probe-vkexec    graphics probes
 //     --probe-astc      the compute ASTC decoder against astc_decode_ldr; needs no game files
 //     --probe-movie     host VP9 movie::Decoder on one RomFS movie; skips without game data
+//     --probe-mask      the bug report's masking (pii_mask.c) of the file XCX_PROBE_MASK_IN to stdout; the comma-
+//                       separated XCX_PROBE_MASK_NAMES are masked as user names too; needs no game files
 //     --boot            run the game to the first NVN call
 //     --seconds S       run the game (implies --boot's start-up) until the world clock (game time since the loaded
 //                       save's first frame) passed S seconds, then exit 0 at that present
@@ -31,6 +33,8 @@
 #include <psapi.h>
 #endif
 #include "sha256.h"
+#include "bug_report.h"
+#include "pii_mask.h"
 
 #define MAX_MODULES 16
 
@@ -51,9 +55,25 @@ static char g_log_path[PLAT_PATH_MAX * 3];
 static char g_log_early[32768];
 static size_t g_log_early_n;
 static uint64_t g_log_bytes;
+static char g_crash_path[PLAT_PATH_MAX * 3 + 16];   // rt_crash_report_path; set by log_open
+
+// The last 64 KiB written to the log, for the crash report's "last log lines": a ring every write copies into. Lines
+// of threads that write at once may interleave in it; the report is for reading, so that is fine.
+#define LOG_TAIL (64u << 10)
+static char g_log_tail[LOG_TAIL];
+static uint64_t g_log_tail_at;
+
+static void tail_put(const char *p, size_t n) {
+    if (n > LOG_TAIL) p += n - LOG_TAIL, n = LOG_TAIL;
+    uint64_t at = __atomic_fetch_add(&g_log_tail_at, n, __ATOMIC_RELAXED);
+    size_t o = (size_t)(at % LOG_TAIL), first = n < LOG_TAIL - o ? n : LOG_TAIL - o;
+    memcpy(g_log_tail + o, p, first);
+    memcpy(g_log_tail, p + first, n - first);
+}
 
 void rt_log_raw(const char *p, size_t n) {
     fwrite(p, 1, n, stderr);
+    tail_put(p, n);
     int state = __atomic_load_n(&g_log_state, __ATOMIC_ACQUIRE);
     if (state == LOG_EARLY) {
         size_t at = __atomic_fetch_add(&g_log_early_n, n, __ATOMIC_RELAXED);
@@ -94,8 +114,29 @@ void rt_log(const char *fmt, ...) {
     rt_log_raw(buf, n);
 }
 
+void rt_fast_cores(void) {
+    static int on = -1, logged;
+    if (on < 0) on = cfg_bool("XCX_FAST_CORES");
+    uint32_t n = on ? plat_thread_prefer_fast_cores() : 0;
+    if (!__atomic_exchange_n(&logged, 1, __ATOMIC_RELAXED))
+        rt_log(!on ? "cpu: fast cores off (fast_cores = 0)"
+               : n ? "cpu: hybrid CPU: the game's threads prefer the %u logical processors of its fastest cores"
+                   : "cpu: one kind of core: every thread may run on any of them", n);
+}
+
 const char *rt_log_path(void) {
     return __atomic_load_n(&g_log_state, __ATOMIC_ACQUIRE) == LOG_FILE ? g_log_path : NULL;
+}
+
+const char *rt_crash_report_path(void) { return g_crash_path[0] ? g_crash_path : NULL; }
+
+int rt_crash_report_nth(int i, char *out, size_t cap) {
+    if (!g_crash_path[0] || snprintf(out, cap, "%s", g_crash_path) >= (int)cap) return 0;
+    if (!i) return 1;
+    size_t n = strlen(out);   // ".../crash.txt" -> ".../crash.<i>.txt"
+    if (n < 4) return 0;
+    out[n - 4] = 0;
+    return snprintf(out + n - 4, cap - (n - 4), ".%d.txt", i) < (int)(cap - (n - 4));
 }
 
 // Opens the log file for a game run (game = 1) and writes the buffered lines to it; anything else drops them. Runs on
@@ -119,6 +160,10 @@ static void log_open(int game) {
         }
         snprintf(g_log_path, sizeof g_log_path, "%s/xcx.log", dir);
         g_log_file = plat_append_open(g_log_path);
+        snprintf(g_crash_path, sizeof g_crash_path, "%s/crash.txt", dir);
+    } else if (plat_stderr_path(dir, sizeof dir) && (cut = plat_last_sep(dir))) {   // run_game.py, `2> file`
+        *cut = 0;
+        snprintf(g_crash_path, sizeof g_crash_path, "%s/crash.txt", dir);
     }
     if (!g_log_file) {
         __atomic_store_n(&g_log_state, LOG_OFF, __ATOMIC_RELEASE);
@@ -201,6 +246,9 @@ static uint64_t lifted_function(uintptr_t rip) {
                 fn_rev[fn_rev_n++] = (FnRev){(uintptr_t)mods[i].fns[k], mods[i].addrs[k]};
         qsort(fn_rev, fn_rev_n, sizeof *fn_rev, by_host);
     }
+    // The lifted code is one range with the host code after it; an address above the last function start is taken for
+    // host code, which costs only the last function's body.
+    if (!fn_rev_n || rip > fn_rev[fn_rev_n - 1].host) return 0;
     uint64_t lo = 0, hi = fn_rev_n;
     while (lo < hi) {
         uint64_t mid = (lo + hi) / 2;
@@ -313,37 +361,160 @@ static LONG CALLBACK diag_handler(EXCEPTION_POINTERS *ep) {
 }
 #endif
 
+// The crash report: each line goes to the log (stderr and logs\xcx.log) and to crash.txt (rt_crash_report_path),
+// which a player can attach on its own; the bug report zip of the menu carries it too.
+static PlatAppend *g_crash_file;
+static uint64_t g_crash_tail;   // the log tail's length when the crash began: the lines before the report
+
+static void crash_out(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void crash_out(const char *fmt, ...) {
+    char buf[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    if (n <= 0) return;
+    if (n >= (int)sizeof buf) n = sizeof buf - 1;
+    rt_log_raw(buf, (size_t)n);
+    if (g_crash_file) plat_append_write(g_crash_file, buf, (size_t)n);
+}
+
+static void crash_file_only(const char *p, size_t n) {
+    if (g_crash_file && n) plat_append_write(g_crash_file, p, n);
+}
+
+// Opens crash.txt and writes its head: what it is, the version, the time and the log it belongs to.
+static void crash_begin(void) {
+    g_crash_tail = __atomic_load_n(&g_log_tail_at, __ATOMIC_RELAXED);
+    const char *path = rt_crash_report_path();
+    if (!path) return;
+    char dir[sizeof g_crash_path];
+    snprintf(dir, sizeof dir, "%s", path);
+    char *cut = plat_last_sep(dir);
+    if (cut) *cut = 0, plat_file_mkdir_p(dir);
+    char from[sizeof g_crash_path + 16], to[sizeof g_crash_path + 16];
+    for (int i = RT_CRASH_KEEP - 1; i > 0; i--)   // crash.6.txt -> crash.7.txt, ..., crash.txt -> crash.1.txt
+        if (rt_crash_report_nth(i - 1, from, sizeof from) && rt_crash_report_nth(i, to, sizeof to) &&
+            plat_file_exists(from))
+            plat_file_replace(from, to);
+    g_crash_file = plat_append_open(path);
+    if (!g_crash_file) return;
+    char line[512];
+    struct tm t;
+    plat_local_time(&t);
+    bug_report_version_line(line, sizeof line);
+    int n = snprintf(line + strlen(line), sizeof line - strlen(line),
+                     "\nXCX Recomp crash report, %04d-%02d-%02d %02d:%02d:%02d local time\nLog: %s\n\n",
+                     t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec,
+                     rt_log_path() ? rt_log_path() : "stderr");
+    (void)n;
+    crash_file_only(line, strlen(line));
+}
+
+// The log's last lines before the report into crash.txt (the log has them already), then a line in the log that tells
+// the player where the report is. Ends the process.
+#define CRASH_TAIL_LINES 80
+_Noreturn static void crash_end(int code) {
+    uint64_t total = g_crash_tail, have = total < LOG_TAIL ? total : LOG_TAIL;
+    static char tail[LOG_TAIL];
+    for (uint64_t i = 0; i < have; i++) tail[i] = g_log_tail[(total - have + i) % LOG_TAIL];
+    size_t start = 0;
+    if (total > LOG_TAIL)   // the oldest line is cut: begin at the next one
+        while (start < have && tail[start++] != '\n') {}
+    size_t at = (size_t)have;
+    for (int lines = 0; at > start && lines <= CRASH_TAIL_LINES; at--)
+        if (tail[at - 1] == '\n' && ++lines > CRASH_TAIL_LINES) break;
+    static const char head[] = "\nThe last lines of the log before the crash:\n";
+    crash_file_only(head, sizeof head - 1);
+    crash_file_only(tail + at, (size_t)have - at);
+    if (g_crash_file)
+        rt_logf("[host] crash: the report is in %s. Attach it to a bug report, or after a restart use F1 > Advanced > "
+                "Make a bug report, which packs it with the logs.\n", rt_crash_report_path());
+    fflush(stderr);
+    plat_exit(code);
+}
+
+// The guest side of the crashed thread: the registers, the host function a guest call entered, and the guest call
+// chain by the frame-pointer chain (x29).
+static void crash_guest(void) {
+    char d[160];
+    Cpu *c = kern_cpu();
+    if (!c) {
+        crash_out("  not on a guest thread\n");
+        return;
+    }
+    crash_out("guest registers:\n");
+    for (int i = 0; i < 31; i++)
+        crash_out("  x%-2d %016llx%s", i, (unsigned long long)c->x[i], i % 4 == 3 ? "\n" : "");
+    const char *hf = hostfn_name(c->pc);   // a crash inside a host function: c->pc is its synthetic address
+    crash_out("  sp  %016llx\n  pc  %016llx%s%s  lr %s\n", (unsigned long long)c->sp, (unsigned long long)c->pc,
+              hf ? " host function " : "", hf ? hf : "", ldr_describe(c->x[30], d, sizeof d));
+    crash_out("guest call chain:\n");
+    uint64_t fp = c->x[29];
+    for (int n = 0; n < 32 && fp && !(fp & 7) && readable(fp, 16); n++) {
+        uint64_t next = LD64(fp), lr = LD64(fp + 8);
+        crash_out("  guest frame %2d: %s\n", n, ldr_describe(lr, d, sizeof d));
+        if (next <= fp || next - fp > (64u << 20)) break;
+        fp = next;
+    }
+}
+
+// One host return address: its module and offset, and for this executable the lifted function it is in.
+static void crash_host_frame(int i, uintptr_t pc, const char *module, uintptr_t offset) {
+    char d[160];
+    if (module) {
+        crash_out("  host frame %2d: %s+%#llx\n", i, *module ? module : "outside every module", (unsigned long long)offset);
+        return;
+    }
+    uint64_t g = lifted_function(pc);
+    if (g) crash_out("  host frame %2d: xcx+%#llx in lifted function f_%llx = %s\n", i, (unsigned long long)offset,
+                     (unsigned long long)g, ldr_describe(g, d, sizeof d));
+    else crash_out("  host frame %2d: xcx+%#llx\n", i, (unsigned long long)offset);
+}
+
+static volatile int32_t g_crash_busy;
+
 static void crash_handler(const PlatCrash *x) {
-    static volatile int32_t busy;
-    if (plat_xchg32(&busy, 1)) plat_exit(71);
+    if (plat_xchg32(&g_crash_busy, 1)) plat_exit(71);
     char d[160];
     uintptr_t rip = x->rip;
-    rt_logf("FATAL: %s (%#x) at host %p (xcx+%#llx)", x->what, x->code, (void *)rip, (unsigned long long)x->offset);
+    crash_begin();
+    crash_out("FATAL: %s (%#x) at host %p (", x->what, x->code, (void *)rip);
+    if (x->module && !*x->module) crash_out("outside every module)");
+    else crash_out("%s+%#llx)", x->module ? x->module : "xcx", (unsigned long long)x->offset);
     if (x->access >= 0)
-        rt_logf(", %s address %#llx", x->access == 1 ? "writing" : x->access == 8 ? "executing" : "reading",
-                (unsigned long long)x->addr);
-    rt_log_raw("\n", 1);
-    uint64_t f = lifted_function(rip);
-    if (f) rt_logf("  in lifted function f_%llx = %s\n", (unsigned long long)f, ldr_describe(f, d, sizeof d));
-    Cpu *c = kern_cpu();
-    if (c) {
-        for (int i = 0; i < 31; i++)
-            rt_logf("  x%-2d %016llx%s", i, (unsigned long long)c->x[i], i % 4 == 3 ? "\n" : "");
-        const char *hf = hostfn_name(c->pc);   // a crash inside a host function: c->pc is its synthetic address
-        rt_logf("  sp  %016llx\n  pc  %016llx%s%s  lr %s\n", (unsigned long long)c->sp, (unsigned long long)c->pc,
-                hf ? " host function " : "", hf ? hf : "", ldr_describe(c->x[30], d, sizeof d));
-        uint64_t fp = c->x[29];
-        for (int n = 0; n < 32 && fp && !(fp & 7) && readable(fp, 16); n++) {
-            uint64_t next = LD64(fp), lr = LD64(fp + 8);
-            rt_logf("  guest frame %2d: %s\n", n, ldr_describe(lr, d, sizeof d));
-            if (next <= fp || next - fp > (64u << 20)) break;
-            fp = next;
-        }
-    } else {
-        rt_logf("  not on a guest thread\n");
+        crash_out(", %s address %#llx", x->access == 1 ? "writing" : x->access == 8 ? "executing" : "reading",
+                  (unsigned long long)x->addr);
+    crash_out("\n");
+    if (x->cxx_type)
+        crash_out("  C++ type %s%s%s\n", x->cxx_type, x->cxx_what ? ", what(): " : "", x->cxx_what ? x->cxx_what : "");
+    uint64_t f = x->module ? 0 : lifted_function(rip);
+    if (f) crash_out("  in lifted function f_%llx = %s\n", (unsigned long long)f, ldr_describe(f, d, sizeof d));
+    crash_guest();
+    if (x->nframes) crash_out("host stack:\n");
+    for (int i = 0; i < x->nframes; i++) crash_host_frame(i, x->frames[i], x->frame_module[i], x->frame_offset[i]);
+    if (x->frames_left_out) crash_out("  (%d frames in other modules left out)\n", x->frames_left_out);
+    crash_end(71);
+}
+
+_Noreturn void rt_crash_fatal(const char *msg) {
+    if (plat_xchg32(&g_crash_busy, 1)) plat_exit(70);
+    crash_begin();
+    crash_out("FATAL: %s\n", msg);
+    crash_guest();
+    uintptr_t frames[32];
+    int n = plat_backtrace(frames, 32, 2);   // past rt_crash_fatal and its caller, rt_fatal
+    uintptr_t exe = plat_exe_base();
+    if (n) crash_out("host stack:\n");
+    for (int i = 0; i < n; i++) {
+        char name[128];
+        uintptr_t base = 0;
+        if (plat_module_of(frames[i], name, sizeof name, &base))
+            crash_host_frame(i, frames[i], base == exe ? NULL : name, frames[i] - base);
+        else
+            crash_host_frame(i, frames[i], "", frames[i]);
     }
-    fflush(stderr);
-    plat_exit(71);
+    crash_end(70);
 }
 
 // ---- self-test: layout, dispatch table, host-function registry, without game files
@@ -522,11 +693,35 @@ static int selftest(void) {
     return failures ? 1 : 0;
 }
 
+static int probe_mask(void) {
+    char in[PLAT_PATH_MAX], names[1024];
+    if (!plat_getenv("XCX_PROBE_MASK_IN", in, sizeof in)) {
+        fprintf(stderr, "probe-mask: set XCX_PROBE_MASK_IN to the file to mask\n");
+        return 2;
+    }
+    uint64_t n = 0;
+    uint8_t *text = plat_file_read(in, &n);
+    PiiMask *m = bug_report_masker();
+    if (!text || !m) {
+        fprintf(stderr, "probe-mask: cannot read %s\n", in);
+        return 2;
+    }
+    if (plat_getenv("XCX_PROBE_MASK_NAMES", names, sizeof names))
+        for (char *p = strtok(names, ","); p; p = strtok(NULL, ",")) pii_mask_name(m, p);
+    size_t k = 0;
+    uint8_t *out = pii_mask_text(m, text, (size_t)n, &k);
+    if (out) fwrite(out, 1, k, stdout);
+    free(out);
+    free(text);
+    pii_mask_free(m);
+    return out ? 0 : 1;
+}
+
 static int usage(const char *argv0) {
     fprintf(stderr, "usage: %s [--exefs DIR] [--romfs DIR] [--profile DIR] [--selftest | --probe-loader | "
-                    "--probe-cfg | --probe-kernel | --probe-ipc | --probe-services | --probe-fs | --probe-gfx-abi | "
+                    "--probe-cfg | --probe-cheats | --probe-kernel | --probe-ipc | --probe-services | --probe-fs | --probe-gfx-abi | "
                     "--probe-nvn | --probe-nvn-tex | --probe-window | --probe-shader | --probe-vkmem | "
-                    "--probe-vkexec | --probe-astc | --probe-movie | --prepare-shaders | --warm-shaders | --boot |--seconds S [--shot PNG]]\n", argv0);
+                    "--probe-vkexec | --probe-astc | --probe-movie | --probe-mask | --prepare-shaders | --warm-shaders | --boot |--seconds S [--shot PNG]]\n", argv0);
     return 2;
 }
 
@@ -592,6 +787,7 @@ int main(int argc, char **argv) {
     // Timed guest waits (kernel.c block_inner) sleep in whole milliseconds; at the default 15.6 ms tick a 1 ms wait
     // costs a full tick. XCX_TIMER_1MS=0 keeps the default for comparison.
     if (cfg_bool("XCX_TIMER_1MS")) plat_timer_1ms();
+    plat_power_full_speed();   // before the window exists: Windows would slow a hidden or background game
     cfg = (RtConfig){.exefs = rt_default_exefs, .romfs = rt_default_romfs, .profile = rt_default_profile,
                      .gpu = cfg_get("XCX_GPU")};
     portable_paths(&cfg);   // command-line paths below still win
@@ -635,6 +831,7 @@ int main(int argc, char **argv) {
     if (!strcmp(mode, "--selftest")) return selftest();
     if (!strcmp(mode, "--probe-loader")) return probe_loader();
     if (!strcmp(mode, "--probe-cfg")) return probe_cfg();
+    if (!strcmp(mode, "--probe-cheats")) return probe_cheats();
     if (!strcmp(mode, "--probe-kernel")) return probe_kernel();
     if (!strcmp(mode, "--probe-ipc")) return probe_ipc();
     if (!strcmp(mode, "--probe-services")) return probe_services();
@@ -649,6 +846,7 @@ int main(int argc, char **argv) {
     if (!strcmp(mode, "--probe-astc")) return probe_astc();
     if (!strcmp(mode, "--probe-vkdevice")) return probe_vkdevice();
     if (!strcmp(mode, "--probe-movie")) return probe_movie();
+    if (!strcmp(mode, "--probe-mask")) return probe_mask();
     if (!strcmp(mode, "--prepare-shaders")) return vk_pipeline_prepare_shaders();
     if (!strcmp(mode, "--warm-shaders")) return vk_pipeline_warm_shaders();
     if (!strcmp(mode, "--boot")) { cfg.boot = 1; rt_boot(); return 0; }

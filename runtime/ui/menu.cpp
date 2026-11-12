@@ -28,6 +28,7 @@ extern "C" {
 
 extern "C" {
 #include "cfg.h"
+#include "cheats.h"
 #include "mods.h"
 #include "mod_settings.h"
 #include "mod_menu.h"
@@ -36,8 +37,10 @@ extern "C" {
 #include "input_wsys.h"
 #include "perfmon.h"
 #include "platform/platform.h"
+#include "romfs_mods.h"
 #include "swkbd.h"
 #include "sysinfo.h"
+#include "bug_report.h"
 #include "ui/menu.h"
 #include "ui_text.h"
 // host.h and vk.h pull in cpu.h, which is C only: the functions the menu needs from them, as declared there.
@@ -320,7 +323,10 @@ extern "C" void menu_vk_release(void) {
 // XCX_MENU_TEST_SET=<frame>:<key>=<value>[,<key>=<value>...][;<frame>:...]: cfg_set of each key (XCX_ prefix
 // optional) at that presented frame; changes live settings with no input, menu open or not. xcx.ini is written only by
 // the pseudo-key SAVE=1 (cfg_save, as a row change does; a failed write shows the menu's save note).
-enum { TAB_SCREEN, TAB_GAME, TAB_SOUND, TAB_CONTROLS, TAB_MENU, TAB_ADVANCED, TAB_MODS, TAB_COUNT };
+// XCX_BUG_REPORT_TEST=<frame>[:save]: at that presented frame, what "Make a bug report" does (with the save for :save,
+// whatever the opt-in row says), without opening the folder; the Advanced tab then scrolls to the button, so an
+// XCX_MENU_TEST page shot after it shows the zip's path.
+enum { TAB_SCREEN, TAB_GAME, TAB_SOUND, TAB_CONTROLS, TAB_MENU, TAB_ADVANCED, TAB_MODS, TAB_CHEATS, TAB_COUNT };
 enum { TEST_PAGE_FRAMES = 30, TEST_SETS = 16 };
 struct TestSet { uint64_t frame; char key[64], value[64]; };
 static struct {
@@ -331,7 +337,9 @@ static struct {
     int page;             // the tab being shot; -1 none
     TestSet sets[TEST_SETS];
     int n_sets, next_set; // XCX_MENU_TEST_SET, in frame order
-} g_test = {0, 0, 0, 0, -1, {}, 0, 0};
+    uint64_t report_at;   // XCX_BUG_REPORT_TEST frame; 0 none or done
+    bool report_save;
+} g_test = {0, 0, 0, 0, -1, {}, 0, 0, 0, false};
 
 static void test_parse(void) {
     g_test.parsed = 1;
@@ -340,6 +348,11 @@ static void test_parse(void) {
         if (const char *c = strchr(e, ':')) per = atoll(c + 1);
         g_test.at = at > 0 ? (uint64_t)at : 0;
         g_test.per_page = per > 0 ? (uint64_t)per : TEST_PAGE_FRAMES;
+    }
+    if (const char *e = cfg_get("XCX_BUG_REPORT_TEST")) {
+        long long at = atoll(e);
+        g_test.report_at = at > 0 ? (uint64_t)at : 0;
+        g_test.report_save = strstr(e, ":save") != nullptr;
     }
     const char *s = cfg_get("XCX_MENU_TEST_SET");
     while (s && *s) {   // groups "<frame>:<key>=<value>,..." separated by ';'
@@ -584,6 +597,7 @@ static void tab_game(float scale) {
     row_game_lang();
     static const UiTextId mode[] = {UI_MENU_MODE_DOCKED, UI_MENU_MODE_HANDHELD};
     opt_choice("XCX_OPERATION_MODE", UI_MENU_OPERATION_MODE, mode, 2, UI_MENU_OPERATION_MODE_DESC);
+    opt_toggle("XCX_CHEATS", UI_MENU_CHEATS, UI_MENU_CHEATS_DESC);
     opt_end();
 }
 
@@ -621,6 +635,71 @@ static void tab_menu(float scale) {
     opt_begin("##menu", scale);
     static const UiTextId langs[] = {UI_MENU_MENU_LANG_AUTO, UI_MENU_LANGNAME_EN, UI_MENU_LANGNAME_RU};
     opt_choice("XCX_MENU_LANG", UI_MENU_MENU_LANG, langs, 3, UI_MENU_MENU_LANG_DESC);
+    opt_end();
+}
+
+// ---- Cheats: the built-in cheats, then each mod folder's (cheats.c). Nothing here is a setting: the rows are built from
+// the cheat files and cheats-enabled.txt keeps them.
+static void tab_cheats(float scale) {
+    opt_begin("##cheats", scale);
+    char line[4400];
+    int n = cheats_count();
+    if (n) opt_text(UI_CHEATS_WARN, true);
+    else opt_text(UI_CHEATS_NONE);
+    const char *group = NULL;
+    for (int i = 0; i < n; i++) {
+        CheatRow c = cheats_row(i);
+        if (!group || strcmp(group, c.source)) {   // a heading per source, as the rows come in source order
+            group = c.source;
+            ImGui::Dummy(ImVec2(0, 6 * scale));
+            opt_text_raw(c.source);
+            if (!strcmp(c.source, CHEATS_BUILTIN)) opt_text(UI_CHEATS_CREDITS);
+        }
+        size_t len_name = strlen(c.name);   // "--- Combat ---": a group label of the cheat list
+        if (len_name > 8 && !strncmp(c.name, "--- ", 4) && !strcmp(c.name + len_name - 4, " ---")) {
+            snprintf(line, sizeof line, "%.*s", (int)(len_name - 8), c.name + 4);
+            opt_group_raw(line);
+            continue;
+        }
+        if (c.state == CHEAT_HIDDEN) continue;   // a code cave, a restore or a note: nothing of its own to switch
+        char id[32], desc[1024];
+        snprintf(id, sizeof id, "##cheat%d", i);
+        int builtin = !strcmp(c.source, CHEATS_BUILTIN);
+        bool runs = c.state == CHEAT_OK || c.state == CHEAT_PATCHED;
+        int len = snprintf(desc, sizeof desc, "%s",
+                           menu_text(c.state == CHEAT_WRITES_CODE ? UI_CHEATS_CODE
+                                     : c.state == CHEAT_NOT_BUILT ? UI_CHEATS_NOT_BUILT
+                                     : c.state == CHEAT_UNSUPPORTED ? UI_CHEATS_UNSUPPORTED
+                                     : c.state == CHEAT_MALFORMED ? UI_CHEATS_BAD
+                                     : c.master                   ? UI_CHEATS_MASTER
+                                     : c.refused                  ? UI_CHEATS_REFUSED
+                                     : c.state == CHEAT_PATCHED   ? UI_CHEATS_PATCHED
+                                     : builtin                    ? UI_CHEATS_BUILTIN
+                                                                  : UI_CHEATS_DESC));
+        if (len > 0 && len < (int)sizeof desc && c.state == CHEAT_UNSUPPORTED && *c.note)
+            len += snprintf(desc + len, sizeof desc - len, "\n\n%s", c.note);
+        if (len > 0 && len < (int)sizeof desc && c.buttons)
+            snprintf(desc + len, sizeof desc - len, menu_text(UI_CHEATS_BUTTONS), (unsigned)c.buttons);
+        if (c.state == CHEAT_WRITES_CODE || c.state == CHEAT_UNSUPPORTED) opt_disable_next(UI_CHEATS_NOTE_CODE);
+        else if (c.state == CHEAT_NOT_BUILT) opt_disable_next(UI_CHEATS_NOTE_SETUP);
+        else if (c.state == CHEAT_MALFORMED) opt_disable_next(UI_CHEATS_NOTE_BAD);
+        else if (c.master) opt_disable_next(UI_CHEATS_NOTE_MASTER);
+        if (opt_row_text(id, c.name, desc, (c.enabled || c.master) && runs) && runs && !c.master)
+            cheats_set(i, !c.enabled);
+    }
+    opt_group(UI_CHEATS_WHERE);
+    if (opt_button("##cheats_reload", UI_CHEATS_RELOAD, UI_CHEATS_RELOAD_DESC)) cheats_reload();
+    if (cheats_other_builds()) {
+        snprintf(line, sizeof line, menu_text(UI_CHEATS_OTHER_BUILDS), cheats_other_builds());
+        opt_text_raw(line);
+    }
+    snprintf(line, sizeof line, menu_text(UI_CHEATS_BUILD), *cheats_build_id() ? cheats_build_id() : "?");
+    opt_text_raw(line);
+    const char *dir = romfs_mods_dir();
+    if (dir) {
+        snprintf(line, sizeof line, "%s", dir);
+        opt_text_raw(line);
+    }
     opt_end();
 }
 
@@ -677,6 +756,68 @@ static const char *action_value(const ActionNote &a, UiTextId done_text) {
 
 static void action_done(ActionNote &a, bool ok) { a = {plat_now_ns() + 3000000000ull, ok ? 1 : -1}; }
 
+// "Make a bug report": bug_report_write on a thread of its own (a long log takes a while to pack), then the folder opens
+// and the zip's path shows under the button until the game ends. The save goes in only when the opt-in row is on,
+// which starts off in every run.
+enum { REPORT_IDLE, REPORT_BUSY, REPORT_DONE, REPORT_FAILED };
+static struct {
+    std::atomic<int> state{REPORT_IDLE};
+    bool with_save, open_folder;
+    char *info;                       // sysinfo_text, made on the menu's thread
+    char path[PLAT_PATH_MAX * 2];
+} g_report;
+static bool g_report_save;
+static int g_report_focus;            // the test hook: the Advanced tab scrolls to the button, this many frames
+
+static void report_thread(void *arg) {
+    (void)arg;
+    bool ok = !bug_report_write(g_report.with_save, g_report.info, g_report.path, sizeof g_report.path);
+    free(g_report.info);
+    g_report.info = nullptr;
+    if (ok && g_report.open_folder) {
+        char dir[sizeof g_report.path];
+        snprintf(dir, sizeof dir, "%s", g_report.path);
+        if (char *s = plat_last_sep(dir)) *s = 0;
+        plat_open_folder(dir);
+    }
+    g_report.state.store(ok ? REPORT_DONE : REPORT_FAILED);
+}
+
+static void report_start(bool with_save, bool open_folder) {
+    if (g_report.state.load() == REPORT_BUSY) return;
+    g_report.with_save = with_save;
+    g_report.open_folder = open_folder;
+    g_report.info = (char *)malloc(16384);
+    if (g_report.info && sysinfo_text(g_report.info, 16384) <= 0) g_report.info[0] = 0;
+    g_report.state.store(REPORT_BUSY);
+    if (!plat_thread_spawn(report_thread, nullptr, "bug_report", 0)) {
+        free(g_report.info);
+        g_report.info = nullptr;
+        g_report.state.store(REPORT_FAILED);
+    }
+}
+
+static void report_rows(void) {
+    int st = g_report.state.load();
+    if (g_report_focus) {   // a few frames: on the page's first frame ImGui does not know its height yet
+        opt_focus_key("##reset");   // the page's last row: the button and the path above it show too
+        g_report_focus--;
+    }
+    if (opt_button("##bug_report_save", UI_MENU_BUG_REPORT_SAVE, UI_MENU_BUG_REPORT_SAVE_DESC,
+                   menu_text(g_report_save ? UI_MENU_ON : UI_MENU_OFF)))
+        g_report_save = !g_report_save;
+    const char *value = st == REPORT_BUSY ? menu_text(UI_MENU_BUG_REPORT_BUSY)
+                      : st == REPORT_FAILED ? menu_text(UI_MENU_ACTION_FAILED) : "";
+    if (opt_button("##bug_report", UI_MENU_BUG_REPORT, UI_MENU_BUG_REPORT_DESC, value)) report_start(g_report_save, true);
+    if (st == REPORT_DONE) {
+        char line[sizeof g_report.path + 64];
+        snprintf(line, sizeof line, menu_text(UI_MENU_BUG_REPORT_DONE), g_report.path);
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextDisabled("%s", line);
+        ImGui::PopTextWrapPos();
+    }
+}
+
 static void tab_advanced(float scale) {
     static ActionNote copy_note, log_note;
     opt_begin("##advanced", scale);
@@ -688,6 +829,7 @@ static void tab_advanced(float scale) {
     opt_toggle("XCX_REPLAY_ASYNC", UI_MENU_REPLAY_ASYNC, UI_MENU_REPLAY_ASYNC_DESC);
     opt_toggle("XCX_FREE_CORES", UI_MENU_FREE_CORES, UI_MENU_FREE_CORES_DESC);
     opt_toggle("XCX_TIMER_1MS", UI_MENU_TIMER_1MS, UI_MENU_TIMER_1MS_DESC);
+    opt_toggle("XCX_FAST_CORES", UI_MENU_FAST_CORES, UI_MENU_FAST_CORES_DESC);
 
     opt_group(UI_MENU_GROUP_SHADERS);
     static const UiTextId wait[] = {UI_MENU_PIPE_WAIT_DEFAULT, UI_MENU_PIPE_WAIT_DRAW};
@@ -748,6 +890,7 @@ static void tab_advanced(float scale) {
         static char text[16384];
         action_done(copy_note, sysinfo_text(text, sizeof text) > 0 && plat_clipboard_set(text));
     }
+    report_rows();
     bool ask = opt_button("##reset", UI_MENU_RESET, UI_MENU_RESET_DESC);
     opt_end();
     if (ask) ImGui::OpenPopup("##reset_confirm");   // at the level BeginPopupModal looks it up
@@ -782,7 +925,8 @@ static void tab_advanced(float scale) {
 }
 
 static const UiTextId kTabNames[TAB_COUNT] = {UI_MENU_TAB_SCREEN, UI_MENU_TAB_GAME, UI_MENU_TAB_SOUND,
-                                              UI_MENU_TAB_CONTROLS, UI_MENU_TAB_MENU, UI_MENU_TAB_ADVANCED, UI_MENU_TAB_MODS};
+                                              UI_MENU_TAB_CONTROLS, UI_MENU_TAB_MENU, UI_MENU_TAB_ADVANCED, UI_MENU_TAB_MODS,
+                                              UI_MENU_TAB_CHEATS};
 static int g_tab;               // the tab shown
 static uint64_t g_registered_epoch;
 static char g_registered_owner[65];
@@ -1125,13 +1269,15 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
              : ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false) || ImGui::IsKeyPressed(ImGuiKey_E, false) ? 1
              : ImGui::IsKeyPressed(ImGuiKey_GamepadL1, false) || ImGui::IsKeyPressed(ImGuiKey_Q, false) ? -1
                                                                                                          : 0;
-    if (step) g_tab_request = (g_tab + step + TAB_COUNT) % TAB_COUNT;
+    int tabs = cfg_bool("XCX_CHEATS") ? TAB_COUNT : TAB_CHEATS;   // the Cheats tab is last and shows while cheats are on
+    if (g_tab >= tabs) g_tab_request = TAB_GAME;   // cheats turned off on their own tab: back to the switch
+    if (step) g_tab_request = (g_tab + step + tabs) % tabs;
     if (g_tab_request >= 0) g_focus_page = g_tab_request;   // the new page's first row takes the cursor
 
     const ImGuiStyle &st = ImGui::GetStyle();
     float bottom = ImGui::GetFrameHeight() + st.ItemSpacing.y * 2;
     if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_NoTabListScrollingButtons)) {
-        for (int k = 0; k < TAB_COUNT; k++) {
+        for (int k = 0; k < tabs; k++) {
             char label[128];
             snprintf(label, sizeof label, "  %s  ###tab%d", menu_text(kTabNames[k]), k);   // the id stays per language
             if (!ImGui::BeginTabItem(label, nullptr, g_tab_request == k ? ImGuiTabItemFlags_SetSelected : 0)) continue;
@@ -1154,6 +1300,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
             case TAB_MENU: tab_menu(scale); break;
             case TAB_ADVANCED: tab_advanced(scale); break;
             case TAB_MODS: mods_page(scale,bottom,focus_page); break;
+            case TAB_CHEATS: tab_cheats(scale); break;
             }
             ImGui::EndTabItem();
         }
@@ -1432,6 +1579,13 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
     *shot = NULL;
     if (!g_test.parsed) test_parse();
     if (g_test.next_set < g_test.n_sets && frame >= g_test.sets[g_test.next_set].frame) test_apply_sets(frame);
+    if (g_test.report_at && frame >= g_test.report_at) {   // XCX_BUG_REPORT_TEST: the button's action, no folder opened
+        rt_log("menu: test hook: frame %llu: bug report%s", (unsigned long long)frame,
+               g_test.report_save ? " with the save" : "");
+        g_test.report_at = 0;
+        g_report_focus = 5;
+        report_start(g_test.report_save, false);
+    }
     if (g_perf_save.exchange(0)) cfg_save();
     perf_tick(plat_now_ns(), t);
     bool open = g_open.load(std::memory_order_relaxed);

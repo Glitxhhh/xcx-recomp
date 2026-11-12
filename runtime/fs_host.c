@@ -25,6 +25,7 @@
 #include "fs.h"
 #include "host.h"
 #include "platform/platform.h"
+#include "romfs_mods.h"
 #include "romfs_path.h"
 
 #define XCX_APPLICATION_ID 0x0100453019aa8000ull   // XCX DE (the name stays to keep the diff against XCX Recomp small)
@@ -958,13 +959,19 @@ static int64_t host_read_at(PlatFile *f, void *buf, uint32_t n, uint64_t off) {
 }
 
 static uint32_t open_file(uint64_t *out, const char *path, int mode) {
-    if (romfs_owns(path)) return romfs_open(out, path, mode);
-    fs_trace(mode & FS_OPEN_WRITE ? "write" : "read", path);
-    if (!out || !(mode & (FS_OPEN_READ | FS_OPEN_WRITE)) || (mode & ~7)) return FS_R_INVALID_ARGUMENT;
     char p[PATH_CAP];
     int kind = M_FREE;
-    uint32_t r = host_path_kind(path, p, sizeof p, &kind);
-    if (r) return r;
+    if (romfs_owns(path)) {
+        // An enabled loose mod's file comes before the RomFS image (runtime/romfs_mods.c), read-only like the RomFS
+        if (mode != FS_OPEN_READ || !romfs_mod_file(path, p, sizeof p)) return romfs_open(out, path, mode);
+        fs_trace("mod", path);
+        if (!out) return FS_R_INVALID_ARGUMENT;
+    } else {
+        fs_trace(mode & FS_OPEN_WRITE ? "write" : "read", path);
+        if (!out || !(mode & (FS_OPEN_READ | FS_OPEN_WRITE)) || (mode & ~7)) return FS_R_INVALID_ARGUMENT;
+        uint32_t r = host_path_kind(path, p, sizeof p, &kind);
+        if (r) return r;
+    }
     if (plat_fs_kind(p) != PLAT_FS_FILE) return FS_R_PATH_NOT_FOUND;
     if ((kind == M_SAVE_RO || kind == M_AOC) && (mode & FS_OPEN_WRITE)) return FS_R_UNSUPPORTED_OPEN;
     int save_writer = kind == M_SAVE && (mode & FS_OPEN_WRITE);
@@ -1115,7 +1122,13 @@ static uint32_t rename_file(const char *from, const char *to) {
 }
 
 static uint32_t entry_type(int *out, const char *path) {
-    if (romfs_owns(path)) return romfs_entry_type(out, path);
+    if (romfs_owns(path)) {
+        if (out && romfs_mod_file(path, NULL, 0)) {   // a loose mod's file (runtime/romfs_mods.c)
+            *out = FS_ENTRY_FILE;
+            return 0;
+        }
+        return romfs_entry_type(out, path);
+    }
     char p[PATH_CAP];
     uint32_t r = host_path(path, p, sizeof p);
     if (r) return r;

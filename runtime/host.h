@@ -23,6 +23,21 @@ void rt_logf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void rt_vlogf(const char *fmt, va_list ap);
 void rt_log_raw(const char *p, size_t n);
 const char *rt_log_path(void);                  // the log file, NULL when this run writes none
+// The calling thread prefers the fast cores of a hybrid CPU (plat_thread_prefer_fast_cores) unless XCX_FAST_CORES=0.
+// The guest threads, the present thread and the replay thread call it as they start; the shader and pipeline workers
+// keep every core. The first call logs what it found.
+void rt_fast_cores(void);
+// Where a crash report goes: crash.txt beside the log (logs\crash.txt in a game run); NULL when unknown. main.c's
+// crash handler and rt_fatal write it: the report of the log (the fault, the lifted function, guest registers and
+// call chain, host frames) and the log's last lines before it. Each crash moves the earlier reports on to crash.1.txt ..
+// crash.<RT_CRASH_KEEP - 1>.txt (the oldest is dropped).
+const char *rt_crash_report_path(void);
+#define RT_CRASH_KEEP 8
+// The path of the i-th report, newest first: 0 crash.txt, 1 crash.1.txt, ...; 0 when there is no crash folder.
+int rt_crash_report_nth(int i, char *out, size_t cap);
+// rt_fatal's report (main.c): msg, the guest state of the calling thread and its host frames, to the log and the crash
+// report; ends the process with exit code 70.
+_Noreturn void rt_crash_fatal(const char *msg);
 enum { RT_TRACE_SVC = 1, RT_TRACE_HOSTCALL = 2, RT_TRACE_IPC = 4, RT_TRACE_FS = 8, RT_TRACE_GFX = 16, RT_TRACE_PERF = 32,
        RT_TRACE_SCHED = 64, RT_TRACE_AUDIO = 128, RT_TRACE_PRESENT = 256 };
 extern unsigned rt_trace;                       // from XCX_TRACE=svc,host,ipc,fs,gfx,perf,sched,audio,present (or all)
@@ -296,6 +311,7 @@ void rt_boot(void);                                        // boot.c
 // Modes of xcx.exe. main.c has run mem_init and parsed the paths; each mode calls ldr_load itself if it needs the
 // modules, registers its host functions, then seals (hostfn_seal, or implicitly at the first rt_call). Return the
 // process exit code.
+int probe_cheats(void);                                    // cheat_probe.c
 int probe_cfg(void);                                       // cfg_probe.c
 int probe_loader(void), probe_kernel(void), probe_ipc(void), probe_services(void), probe_fs(void);
 int probe_gfx_abi(void);                                   // gfx_abi_probe.c

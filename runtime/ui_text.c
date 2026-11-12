@@ -26,6 +26,60 @@ typedef struct { const char *lang; const char *const *text; } Row;
 
 static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_TAB_MODS] = "Mods",
+    [UI_MODS_LIBRARY] = "Mod library",
+    [UI_MODS_LOADING] = "Reading the mod library...",
+    [UI_MODS_DOWNLOADING] = "Installing %s: %.1f of %.1f MB",
+    [UI_MODS_WORKING] = "Working on %s...",
+    [UI_MODS_REFRESH] = "Refresh",
+    [UI_MODS_INSTALL] = "Install",
+    [UI_MODS_UPDATE] = "Update",
+    [UI_MODS_REMOVE] = "Remove",
+    [UI_MODS_REMOVE_CONFIRM] = "Press again to remove",
+    [UI_MODS_ON] = "On",
+    [UI_MODS_STATE_AVAILABLE] = "Not installed",
+    [UI_MODS_STATE_ON] = "On",
+    [UI_MODS_STATE_OFF] = "Off",
+    [UI_MODS_STATE_UPDATE] = "Update available",
+    [UI_MODS_BY] = "by %s",
+    [UI_MODS_SOURCE] = "Install downloads %.1f MB from the author's page, %s, and checks it against the library.",
+    [UI_MODS_KIND_ROMFS] = "Game files. Switching applies to what the game loads next (a new area, a menu, a model "
+                           "coming into view); mods that change data tables apply after a restart. A save made with a "
+                           "mod can lose missions or items it added when the mod is removed.",
+    [UI_MODS_KIND_LUA] = "Lua mod. Installing and switching apply at the next start of the game.",
+    [UI_MODS_EMPTY] = "No mods yet. When the library has been read, its mods are listed here to install.",
+    [UI_MODS_LUA] = "Lua mod settings",
+    [UI_MODS_NO_LUA] = "No Lua mods running. Lua mods turned on in the library start with the next start of the game.",
+    [UI_MENU_TAB_CHEATS] = "Cheats",
+    [UI_MENU_CHEATS] = "Cheats",
+    [UI_MENU_CHEATS_DESC] = "Shows the Cheats tab, where cheats are switched on one by one. Off keeps every cheat off; "
+                            "the ones chosen are kept for the next time.",
+    [UI_CHEATS_CREDITS] = "Cheat codes by pspmaster, TomSwitch, ranma99vn, Nic87, zzpong and WiduraGoez, collected by "
+                          "Muezaa. Thank you!",
+    [UI_CHEATS_WARN] = "Cheats change the running game and the save it writes. Back up your saves first.",
+    [UI_CHEATS_NONE] = "No cheats for this version of the game. A mod's cheats go in mods/<mod>/cheats/, in a file "
+                       "named after the build below.",
+    [UI_CHEATS_DESC] = "Applies at once, 12 times a second, and stays on after a restart.",
+    [UI_CHEATS_BUILTIN] = "Comes with the recomp. Applies once a save is loaded, 12 times a second, and stays on after "
+                          "a restart.",
+    [UI_CHEATS_MASTER] = "A master code: it always runs, because other cheats of the file may depend on it.",
+    [UI_CHEATS_REFUSED] = "Some of its writes went to memory that cannot be written. It was probably made for another "
+                          "version of the game.",
+    [UI_CHEATS_CODE] = "This cheat changes the game's code. The game here is compiled ahead of time, so it cannot be "
+                       "changed that way while running.",
+    [UI_CHEATS_BAD] = "This cheat is not valid: a line of it is not code the format knows.",
+    [UI_CHEATS_NOTE_CODE] = "changes code, cannot run", [UI_CHEATS_NOTE_BAD] = "not valid",
+    [UI_CHEATS_NOTE_MASTER] = "always on",
+    [UI_CHEATS_RELOAD] = "Reload cheats",
+    [UI_CHEATS_RELOAD_DESC] = "Reads the cheat files again, for adding or editing one while the game runs.",
+    [UI_CHEATS_OTHER_BUILDS] = "%d mods have cheats only for other versions of the game, so they do not load.",
+    [UI_CHEATS_WHERE] = "Cheat files", [UI_CHEATS_BUILD] = "Game build for cheat files: %s",
+    [UI_CHEATS_PATCHED] = "Changes the game's code. The setup built it into the game, so it switches at once and stays on "
+                          "after a restart.",
+    [UI_CHEATS_NOT_BUILT] = "Changes the game's code, which has to be built into the game: run the setup again (Install "
+                            "or Update) to add this cheat, then restart.",
+    [UI_CHEATS_UNSUPPORTED] = "Changes the game's code in a way the setup cannot build into the recompiled game yet.",
+    [UI_CHEATS_NOTE_SETUP] = "needs the setup again",
+    [UI_CHEATS_BUTTONS] = "\n\nActs only while its buttons are held (button mask %X).",
     [UI_SWKBD_GRID_HINT] = "Controller: %s selects a key, %s confirms, %s cancels. D-pad or left stick moves. %s: Backspace. %s: Delete. Hold %s: Shift. %s: Caps Lock. %s / %s: text cursor.",
     [UI_SWKBD_SHIFT] = "Caps Lock", [UI_SWKBD_MOMENTARY_SHIFT] = "Shift",
     [UI_SWKBD_PALETTE] = "Controller keyboard: Latin letters, digits and space. You can also type with your keyboard.",
@@ -205,6 +259,9 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_FREE_CORES_DESC] = "Lets only one thread run per virtual core, as on the console.",
     [UI_MENU_TIMER_1MS] = "1 ms Windows timer",
     [UI_MENU_TIMER_1MS_DESC] = "Raises the system timer resolution to 1 ms for steadier frame pacing.",
+    [UI_MENU_FAST_CORES] = "Prefer P-cores",
+    [UI_MENU_FAST_CORES_DESC] = "On a CPU with P- and E-cores, the game's main threads prefer the fast P-cores. "
+                                "No effect on other CPUs.",
     [UI_MENU_PIPE_WAIT] = "Waiting draw handling",
     [UI_MENU_PIPE_WAIT_DESC] = "Default keeps the current scheduling with a reserved worker for waiting draws; Old (draw) uses the previous scheduling.",
     [UI_MENU_PIPE_WAIT_DEFAULT] = "Default", [UI_MENU_PIPE_WAIT_DRAW] = "Old (draw)",
@@ -265,6 +322,14 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_COPY_INFO] = "Copy system info",
     [UI_MENU_COPY_INFO_DESC] = "Copies GPU, driver, CPU, RAM and changed settings to the clipboard.",
     [UI_MENU_COPY_INFO_DONE] = "Copied", [UI_MENU_ACTION_FAILED] = "did not work",
+    [UI_MENU_BUG_REPORT] = "Make a bug report",
+    [UI_MENU_BUG_REPORT_DESC] = "Packs the logs, xcx.ini, the crash reports, system info and the mod lists into one "
+                                "zip in the bug-reports folder and opens it. Your folders, names and network "
+                                "addresses are replaced by placeholders. Attach the zip to your report.",
+    [UI_MENU_BUG_REPORT_BUSY] = "writing...", [UI_MENU_BUG_REPORT_DONE] = "Saved to %s",
+    [UI_MENU_BUG_REPORT_SAVE] = "Add the save to the bug report",
+    [UI_MENU_BUG_REPORT_SAVE_DESC] = "Puts your save data into the zip as well, for bugs that depend on where you are "
+                                     "in the game. Off each time the game starts.",
     [UI_MENU_RESET] = "Reset all settings to defaults", [UI_MENU_RESET_DESC] = "Applies to every tab.",
     [UI_MENU_RESET_CONFIRM] = "Reset every setting to its default?", [UI_MENU_RESET_YES] = "Reset",
     [UI_MENU_RESET_NO] = "Cancel",
@@ -289,6 +354,60 @@ static const char *const text_en[UI_TEXT_COUNT] = {
 
 static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_TAB_MODS] = "Моды",
+    [UI_MODS_LIBRARY] = "Библиотека модов",
+    [UI_MODS_LOADING] = "Чтение библиотеки модов...",
+    [UI_MODS_DOWNLOADING] = "Установка %s: %.1f из %.1f МБ",
+    [UI_MODS_WORKING] = "%s: выполняется...",
+    [UI_MODS_REFRESH] = "Обновить список",
+    [UI_MODS_INSTALL] = "Установить",
+    [UI_MODS_UPDATE] = "Обновить",
+    [UI_MODS_REMOVE] = "Удалить",
+    [UI_MODS_REMOVE_CONFIRM] = "Нажмите ещё раз, чтобы удалить",
+    [UI_MODS_ON] = "Включён",
+    [UI_MODS_STATE_AVAILABLE] = "Не установлен",
+    [UI_MODS_STATE_ON] = "Включён",
+    [UI_MODS_STATE_OFF] = "Выключен",
+    [UI_MODS_STATE_UPDATE] = "Есть обновление",
+    [UI_MODS_BY] = "автор: %s",
+    [UI_MODS_SOURCE] = "Установка загрузит %.1f МБ со страницы автора, %s, и сверит файл с библиотекой.",
+    [UI_MODS_KIND_ROMFS] = "Файлы игры. Переключение действует на то, что игра загрузит дальше (новую область, меню, "
+                           "модель в поле зрения); моды таблиц данных действуют после перезапуска. Сохранение, "
+                           "сделанное с модом, может потерять добавленные им задания или предметы после его удаления.",
+    [UI_MODS_KIND_LUA] = "Lua-мод. Установка и переключение действуют после следующего запуска игры.",
+    [UI_MODS_EMPTY] = "Модов пока нет. Когда библиотека будет прочитана, её моды появятся здесь.",
+    [UI_MODS_LUA] = "Настройки Lua-модов",
+    [UI_MODS_NO_LUA] = "Lua-моды не запущены. Lua-моды, включённые в библиотеке, запустятся при следующем запуске игры.",
+    [UI_MENU_TAB_CHEATS] = "Читы",
+    [UI_MENU_CHEATS] = "Читы",
+    [UI_MENU_CHEATS_DESC] = "Показывает вкладку «Читы», где читы включаются по одному. Выключено: все читы выключены, "
+                            "выбранные сохраняются до следующего раза.",
+    [UI_CHEATS_CREDITS] = "Коды читов: pspmaster, TomSwitch, ranma99vn, Nic87, zzpong и WiduraGoez, собрал Muezaa. "
+                          "Спасибо!",
+    [UI_CHEATS_WARN] = "Читы меняют запущенную игру и её сохранения. Сначала сделайте копию сохранений.",
+    [UI_CHEATS_NONE] = "Для этой версии игры читов нет. Читы мода лежат в mods/<мод>/cheats/, в файле, названном по "
+                       "сборке ниже.",
+    [UI_CHEATS_DESC] = "Применяется сразу, 12 раз в секунду, и остаётся включённым после перезапуска.",
+    [UI_CHEATS_BUILTIN] = "Входит в рекомпиляцию. Работает после загрузки сохранения, 12 раз в секунду, и остаётся "
+                          "включённым после перезапуска.",
+    [UI_CHEATS_MASTER] = "Мастер-код: работает всегда, от него могут зависеть другие читы файла.",
+    [UI_CHEATS_REFUSED] = "Часть записей попала в память, недоступную для записи. Вероятно, чит сделан для другой "
+                          "версии игры.",
+    [UI_CHEATS_CODE] = "Этот чит меняет код игры. Игра скомпилирована заранее, поэтому так изменить её во время работы "
+                       "нельзя.",
+    [UI_CHEATS_BAD] = "Чит недействителен: в нём есть строка, которой нет в формате.",
+    [UI_CHEATS_NOTE_CODE] = "меняет код, не запустится", [UI_CHEATS_NOTE_BAD] = "недействителен",
+    [UI_CHEATS_NOTE_MASTER] = "всегда включён",
+    [UI_CHEATS_RELOAD] = "Перечитать читы",
+    [UI_CHEATS_RELOAD_DESC] = "Заново читает файлы читов, чтобы добавлять или править их во время игры.",
+    [UI_CHEATS_OTHER_BUILDS] = "Модов с читами только для других версий игры: %d. Они не загружаются.",
+    [UI_CHEATS_WHERE] = "Файлы читов", [UI_CHEATS_BUILD] = "Сборка игры для файлов читов: %s",
+    [UI_CHEATS_PATCHED] = "Меняет код игры. Установщик встроил его в игру, поэтому он включается сразу и остаётся "
+                          "включённым после перезапуска.",
+    [UI_CHEATS_NOT_BUILT] = "Меняет код игры, поэтому его нужно встроить в игру: запустите установщик ещё раз (Install "
+                            "или Update), затем перезапустите игру.",
+    [UI_CHEATS_UNSUPPORTED] = "Меняет код игры так, что установщик пока не может встроить это в рекомпилированную игру.",
+    [UI_CHEATS_NOTE_SETUP] = "нужен повторный запуск установщика",
+    [UI_CHEATS_BUTTONS] = "\n\nДействует, только пока зажаты его кнопки (маска кнопок %X).",
     [UI_SWKBD_GRID_HINT] = "Контроллер: %s — выбрать клавишу, %s — подтвердить, %s — отменить. Крестовина или левый стик — перемещение. %s — назад удалить. %s — удалить вперёд. Удерживать %s — Shift. %s — Caps Lock. %s / %s — курсор.",
     [UI_SWKBD_SHIFT] = "Caps Lock", [UI_SWKBD_MOMENTARY_SHIFT] = "Shift",
     [UI_SWKBD_PALETTE] = "Клавиатура контроллера: латинские буквы, цифры и пробел. Можно вводить текст и с обычной клавиатуры.",
@@ -465,6 +584,9 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_FREE_CORES_DESC] = "На каждом виртуальном ядре работает один поток, как на консоли.",
     [UI_MENU_TIMER_1MS] = "Таймер Windows 1 мс",
     [UI_MENU_TIMER_1MS_DESC] = "Повышает точность системного таймера до 1 мс для ровного темпа кадров.",
+    [UI_MENU_FAST_CORES] = "Предпочитать P-ядра",
+    [UI_MENU_FAST_CORES_DESC] = "На процессоре с P- и E-ядрами основные потоки игры идут на быстрые P-ядра. "
+                                "На других процессорах ничего не меняет.",
     [UI_MENU_PIPE_WAIT] = "Обработка ожидающих отрисовок",
     [UI_MENU_PIPE_WAIT_DESC] = "«По умолчанию» — текущее планирование с отдельным потоком для ожидающих отрисовок; «Старый способ» — прежнее планирование.",
     [UI_MENU_PIPE_WAIT_DEFAULT] = "По умолчанию", [UI_MENU_PIPE_WAIT_DRAW] = "Старый способ",
@@ -527,6 +649,14 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_COPY_INFO] = "Копировать сведения о системе",
     [UI_MENU_COPY_INFO_DESC] = "Копирует в буфер обмена видеокарту, драйвер, процессор, память и изменённые настройки.",
     [UI_MENU_COPY_INFO_DONE] = "Скопировано", [UI_MENU_ACTION_FAILED] = "не получилось",
+    [UI_MENU_BUG_REPORT] = "Создать отчёт об ошибке",
+    [UI_MENU_BUG_REPORT_DESC] = "Собирает журналы, xcx.ini, отчёты о сбоях, сведения о системе и списки модов в один "
+                                "zip в папке bug-reports и открывает её. Ваши папки, имена и сетевые адреса заменяются "
+                                "заглушками. Приложите этот zip к сообщению об ошибке.",
+    [UI_MENU_BUG_REPORT_BUSY] = "запись...", [UI_MENU_BUG_REPORT_DONE] = "Сохранено в %s",
+    [UI_MENU_BUG_REPORT_SAVE] = "Добавить сохранение в отчёт",
+    [UI_MENU_BUG_REPORT_SAVE_DESC] = "Кладёт в zip и ваши сохранения: для ошибок, которые зависят от места в игре. "
+                                     "Выключается при каждом запуске игры.",
     [UI_MENU_RESET] = "Сбросить все настройки", [UI_MENU_RESET_DESC] = "Действует на все вкладки.",
     [UI_MENU_RESET_CONFIRM] = "Сбросить все настройки к значениям по умолчанию?", [UI_MENU_RESET_YES] = "Сбросить",
     [UI_MENU_RESET_NO] = "Отмена",

@@ -8,6 +8,7 @@ Standard library only, so it runs before any environment is set up.
 """
 
 import argparse
+import lzma
 import re
 import subprocess
 import sys
@@ -37,6 +38,32 @@ KEY_LINE = re.compile(
 )
 
 
+# The one game-derived file the repository carries: the execution profile of the profile-guided build (tools/pgo.py
+# ship; docs/building.md, "Profile-guided build"). It holds run counts of the lifted functions, named by guest address,
+# and no code or data of the game. Over MAX_BYTES, so it is let through by its path and checked by its contents: an xz
+# stream holding one LLVM indexed profile.
+PGO_PROFILE = re.compile(r"^tools/data/pgo/pgo-[a-z0-9]+\.profdata\.xz$")
+PGO_MAX_BYTES = 16 * 1024 * 1024
+LLVM_INDEXED_PROFILE = bytes.fromhex("ff6c70726f666981")   # llvm/ProfileData/InstrProf.h IndexedInstrProf::Magic, LE
+
+
+def pgo_problems(path: Path) -> list[str]:
+    if path.stat().st_size > PGO_MAX_BYTES:
+        return [f"execution profile over the {PGO_MAX_BYTES >> 20} MiB limit"]
+    try:
+        data = lzma.decompress(path.read_bytes(), format=lzma.FORMAT_XZ)
+    except lzma.LZMAError:
+        return ["execution profile that is not an xz stream"]
+    if not data.startswith(LLVM_INDEXED_PROFILE):
+        return ["execution profile that is not an LLVM indexed profile"]
+    found = []
+    if GENERATED_MARKER.encode() in data:
+        found.append("generated from game code")
+    if KEY_LINE.search(data.decode("utf-8", errors="ignore")):
+        found.append("contains a key in prod.keys format")
+    return found
+
+
 def list_files(staged: bool) -> list[Path]:
     if staged:
         cmd = ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"]
@@ -57,6 +84,8 @@ def problems_for(path: Path, allow_large: bool = False) -> list[str]:
         found.append("name of a Switch executable module")
     if not path.is_file():
         return found
+    if PGO_PROFILE.match(path.as_posix()):
+        return found + pgo_problems(path)
     size = path.stat().st_size
     if size > MAX_BYTES and allow_large:
         if GENERATED_MARKER.encode() in path.read_bytes():

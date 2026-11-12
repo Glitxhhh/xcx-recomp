@@ -1,5 +1,7 @@
 # Builds the release packages with no game files and checks them on a second runner; a version tag also makes a draft
-# release, which a person publishes after the local steps in docs/installer.md ("Making a release"). Never run
+# release, which a person publishes after the local steps in docs/installer.md ("Making a release"). A test tag
+# (test-<name>) or a run started by hand only builds and checks: the packages are the run's artifacts, named after the
+# tag, for a reporter to try a fix. Never run
 # make_release.py --prove here: it reads generated/upd and build/extracted/upd, which are game-derived and stay local.
 name: Release
 
@@ -7,6 +9,7 @@ on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
+      - "test-*"
   workflow_dispatch:
 
 permissions:
@@ -22,7 +25,8 @@ jobs:
       - id: version
         run: |
           version=$(cat VERSION)
-          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+          case "$GITHUB_REF_NAME" in test-*) [ "$GITHUB_REF_TYPE" = tag ] && version=$GITHUB_REF_NAME ;; esac
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ] && [ "$GITHUB_REF_NAME" != "$version" ]; then
             echo "::error::tag $GITHUB_REF_NAME does not match VERSION $version"
             exit 1
           fi
@@ -123,7 +127,7 @@ jobs:
       - run: ${{ matrix.wrapper }} python tools/check_release.py dist/${{ matrix.package }}
 
   draft:
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     needs: [version, verify]
     runs-on: ubuntu-24.04
     permissions:

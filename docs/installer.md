@@ -38,6 +38,29 @@ release that changes nothing game-derived skips the rebuild.
 Given another update file than the recorded one (1.2.1, then 1.4.3), the installer extracts and builds again from it and
 keeps `profile/`. Saves carry over both ways: 1.4.3 converts a 1.2.1 save on load, and 1.2.1 loads the saves 1.4.3 wrote.
 
+## Mods
+
+**Mods** (on the first screen and the finish screen) opens the mod manager for the install folder in the form
+(`installer/gui_mods.py` over `installer/mods.py`; `python -m installer.mods --dest DIR ...` is the same from a
+console). It lists the mod library, [jmars125/xcx-recomp-mods](https://github.com/jmars125/xcx-recomp-mods), next to
+what is in `mods/`:
+
+- Lua mods are hosted in the library; each file is checked against the size and SHA-256 in its `index.json`. They
+  are on when listed in `mods/enabled.txt` and apply when the game starts.
+- Game-file mods are listed by link: the manager downloads the zip from the author's page (GameBanana), checks its
+  size and SHA-256, and unpacks its `romfs/` (or `romfs/mod/`) folder into `mods/<id>/romfs/`; `exefs/` is left out.
+  **Add zip...** does the same for a zip the player downloaded. They are on when listed in `mods/romfs-enabled.txt`,
+  which the game reads again twice a second (`runtime/romfs_mods.c`), so they switch while it runs.
+
+Saves are never touched. The game uses a game-file mod's copy the next time it loads the file, so data read at
+start-up (the bdat tables) needs a restart.
+
+The game's F1 menu has the same manager on its **Mods** tab (`runtime/mod_library.c`: WinHTTP downloads on Windows,
+curl on Linux, `runtime/mod_zip.c` unpacks), with the same checks and folder layout. Both write
+`mods/<id>/library.ini` (name, author, version, kind), so each sees the other's installs and updates.
+
+Setup's look (`installer/theme.py`) takes the colours of the F1 menu (`runtime/ui/menu.cpp`, `style_init`).
+
 ## Setup steps
 
 1. **Check** before writing anything: the files open with the keys, the update is 1.2.1 or 1.4.3 (by hash, as
@@ -71,6 +94,11 @@ python -m installer --base FILE --update FILE --keys FILE --lang CODE --dest DIR
 ```
 
 - On a folder with `xcx-install.json` only `--dest` is needed; the game files only when the extraction must run again.
+- For a launcher or a script (RecompLauncher passes them, `recomplauncher.json`): `--game PATH` takes the game file or
+  a folder holding the base game, the update and the add-on content in place of `--base`, `--update` and `--dlc`,
+  and sorts the files by content (`installer/game_files.py`); `--lang auto` keeps the language already in `xcx.ini`;
+  `--dlss-file PATH` copies a DLSS library instead of downloading one; `--progress-lines` prints `progress 0.4 Text`
+  lines instead of JSON events.
 - stdout: one JSON event per line, types `start`, `plan`, `step` (started, done, skipped), `progress` (step, phase,
   done/total/unit), `space` (bytes needed and free on the install disk and the temp disk), `warning`, `error`, `end` (`installer/events.py`). Messages are ids with parameters;
   `installer/text/en.json` holds their English text. The human-readable log goes to `<temp>/logs/`.
@@ -109,8 +137,12 @@ xcx.ini.example, VERSION  the default ini; the release string (the repository's 
 
 - SDL3 comes from the upstream release, not MSYS2: MSYS2's DLL imports the LGPL libiconv.
 - Every bundled third-party piece gets a row in `THIRD_PARTY_NOTICES.md`.
-- The release contains nothing game-derived; `make_release.py` runs `tools/check_content.py` over the folder before it
-  finishes.
+- The release contains nothing game-derived but the execution profile `tools/data/pgo/pgo-upd.profdata.xz` (run counts
+  of the lifted functions, named by guest address; docs/building.md, "Profile-guided build"). `make_release.py` runs
+  `tools/check_content.py` over the folder before it finishes, and that check lets the profile through only as an xz
+  stream holding an LLVM indexed profile.
+- On Windows the Compile step builds the game with that profile at -O2 (`installer/layout.py` pgo); Linux has none,
+  since the profile belongs to the LLVM of the Windows toolchain.
 
 ## Linux release
 
@@ -152,7 +184,7 @@ bin/                  xcx_xlate, hactool, ninja, libSDL3.so.0
 
 `.github/workflows/release.yml` builds both packages with no game files. `libxcxrt.a` takes `MOD_COUNT` and
 `MOD_MAIN_BASE`, all the runtime reads of the module layout, from `tools/runtime-layout/layout.h`; nothing game-derived
-reaches a runner or a package.
+reaches a runner or a package except the committed execution profile, which also builds the Windows `libxcxrt.a`.
 
 Each run builds `XCX-Setup-<version>-windows.zip` on Windows and `XCX-Setup-<version>-linux.AppImage` on Linux, with
 `check_content`, the check-only installer pass and the window's `--selftest` inside `tools/make_release.py` and
@@ -160,8 +192,11 @@ Each run builds `XCX-Setup-<version>-windows.zip` on Windows and `XCX-Setup-<ver
 (`.github/actions/software-vulkan`). A second runner then unpacks each package and repeats those checks
 (`tools/check_release.py`). Downloads are cached from `toolchain/release-dl/`.
 
-For a test build, start the Release workflow on a branch from the Actions tab (or `gh workflow run release.yml --ref
-<branch>`). The packages are the run's artifacts.
+For a test build, push a tag `test-<name>` on the commit to try (`git tag test-issue123 && git push origin
+test-issue123`), or start the Release workflow on a branch from the Actions tab (`gh workflow run release.yml --ref
+<branch>`). Either only builds and checks: no draft release is made. The packages are the run's artifacts, named
+`XCX-Setup-test-<name>-windows.zip` and `XCX-Setup-test-<name>-linux.AppImage` for a tag (the `VERSION` for a run
+started by hand); link the run in the issue for the reporter.
 
 For a release:
 

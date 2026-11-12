@@ -61,6 +61,26 @@ int glyph_style_parse(const char *value) {
     for (int i = 0; value && i < GLYPH_STYLE_COUNT; i++) if (!strcmp(value, values[i])) return i;
     return GLYPH_ORIGINAL;
 }
+// The Button Icon Type and Button Appearance settings, read again only when the settings change (cfg_version): the icon
+// checks ask on every image pane the game binds, hundreds of times a frame, and cfg_value starts with a getenv.
+static unsigned style_version = ~0u, appearance_version = ~0u;
+static int style_cached, appearance_cached;
+int glyph_style_setting(void) {
+    unsigned v = cfg_version();
+    if (__atomic_load_n(&style_version, __ATOMIC_ACQUIRE) != v) {
+        __atomic_store_n(&style_cached, glyph_style_parse(cfg_value("XCX_GLYPH_STYLE")), __ATOMIC_RELAXED);
+        __atomic_store_n(&style_version, v, __ATOMIC_RELEASE);
+    }
+    return __atomic_load_n(&style_cached, __ATOMIC_RELAXED);
+}
+int glyph_appearance_setting(void) {
+    unsigned v = cfg_version();
+    if (__atomic_load_n(&appearance_version, __ATOMIC_ACQUIRE) != v) {
+        __atomic_store_n(&appearance_cached, glyph_appearance_parse(cfg_value("XCX_GLYPH_APPEARANCE")), __ATOMIC_RELAXED);
+        __atomic_store_n(&appearance_version, v, __ATOMIC_RELEASE);
+    }
+    return __atomic_load_n(&appearance_cached, __ATOMIC_RELAXED);
+}
 const char *glyph_style_name(int style) { return style >= 0 && style < GLYPH_STYLE_COUNT ? names[style] : names[0]; }
 static int pad_style(int style) { return style == GLYPH_PLAYSTATION || style == GLYPH_XBOX || style == GLYPH_STEAM; }
 // The style a preference resolves to for the current source and controller family (Automatic follows the last-used device).
@@ -200,8 +220,8 @@ void glyph_decide_symbol_set(int preference, int source, int family, int layout,
 void glyph_current_symbol_set(int16_t art[GLYPH_SYMBOLS]) {
     int source, family, layout; InputMap map;
     input_glyph_snapshot(&source, &family, &layout, &map);
-    glyph_decide_symbol_set(glyph_style_parse(cfg_value("XCX_GLYPH_STYLE")), source, family, layout, &map,
-                            glyph_appearance_parse(cfg_value("XCX_GLYPH_APPEARANCE")), art);
+    glyph_decide_symbol_set(glyph_style_setting(), source, family, layout, &map,
+                            glyph_appearance_setting(), art);
 }
 // The eight ordinary buttons only, in the order A, B, X, Y, L, R, ZL, ZR (the first inline-atlas pass).
 static const int inline_symbols[GLYPH_INLINE_SET] = {SYM_A, SYM_B, SYM_X, SYM_Y, SYM_L, SYM_R, SYM_ZL, SYM_ZR};
@@ -223,25 +243,25 @@ int glyph_build_supported(void) {
 }
 int glyph_appearance_parse(const char *value) { return value && !strcmp(value,"colored") ? GLYPH_COLORED : GLYPH_STANDARD; }
 static GlyphDecision appearance(GlyphDecision d) {
-    int variant = glyph_appearance_parse(cfg_value("XCX_GLYPH_APPEARANCE"));
+    int variant = glyph_appearance_setting();
     for (int i=0;i<3;i++) if (d.art[i]>=0) d.art[i]=glyph_art_variant(d.art[i],variant);
     return d;
 }
 GlyphDecision glyph_current_decision(void) {
     int source, family, layout; InputMap map;
     input_glyph_snapshot(&source,&family,&layout,&map);
-    return appearance(glyph_decide(glyph_style_parse(cfg_value("XCX_GLYPH_STYLE")),source,family,layout,&map));
+    return appearance(glyph_decide(glyph_style_setting(),source,family,layout,&map));
 }
 GlyphDecision glyph_current_button(int action) {
     int source,family,layout; InputMap map;
     input_glyph_snapshot(&source,&family,&layout,&map);
-    return appearance(glyph_decide_button(glyph_style_parse(cfg_value("XCX_GLYPH_STYLE")),source,family,layout,&map,action));
+    return appearance(glyph_decide_button(glyph_style_setting(),source,family,layout,&map,action));
 }
 const char *glyph_status(void) {
     static _Thread_local char status[1280];
     int source,family,layout; InputMap map;
     input_glyph_snapshot(&source,&family,&layout,&map);
-    int preference = glyph_style_parse(cfg_value("XCX_GLYPH_STYLE"));
+    int preference = glyph_style_setting();
     GlyphDecision d = glyph_decide(preference,source,family,layout,&map);
     GlyphDecision weapon = glyph_decide_button(preference,source,family,layout,&map,B_X);
     GlyphDecision target = glyph_decide_button(preference,source,family,layout,&map,B_R);

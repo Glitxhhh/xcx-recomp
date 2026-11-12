@@ -1,0 +1,169 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "XCX Recomp",
+  "repo": "jmars125/xcx-recomp",
+  "inputs": [
+    {
+      "id": "base",
+      "label": "Your Xenoblade Chronicles X: Definitive Edition base game (.nsp or .xci).",
+      "role": "game",
+      "formats": [
+        { "type": "file", "extensions": ["nsp", "xci"], "requires": ["keys"] }
+      ]
+    },
+    {
+      "id": "update",
+      "label": "Your 2.0.0 update (.nsp).",
+      "role": "update",
+      "formats": [
+        { "type": "file", "extensions": ["nsp"] }
+      ]
+    },
+    {
+      "id": "dlc",
+      "label": "Your add-on content (.nsp), if you have it.",
+      "role": "dlc",
+      "optional": true,
+      "formats": [
+        { "type": "file", "extensions": ["nsp"] }
+      ]
+    },
+    {
+      "id": "keys",
+      "label": "Your Nintendo Switch prod.keys",
+      "role": "key",
+      "shared": "switch.prod-keys"
+    },
+    {
+      "id": "dlss",
+      "label": "NVIDIA DLSS",
+      "role": "runtime",
+      "shared": "nvidia.dlss",
+      "optional": true
+    }
+  ],
+  "prepare": {
+    "program": ["python/python.exe", "XCX-Setup.AppImage"],
+    "args": [
+      "-m", "installer",
+      "--base", "{input:base}",
+      "--update", "{input:update}",
+      "--dlc={input:dlc}",
+      "--keys", "{input:keys}",
+      "--dlss-file={input:dlss}",
+      "--lang", "auto",
+      "--dest", "{install}/game",
+      "--progress-lines"
+    ],
+    "label": "Building the game from your files",
+    "timeout": 7200
+  },
+  "start": {
+    "program": ["game/xcx.exe", "game/xcx"]
+  },
+  "config": [
+    {
+      "id": "main",
+      "format": "ini",
+      "file": [{ "path": "{install}/game/xcx.ini" }]
+    }
+  ],
+  "saves": ["{install}/game/profile"],
+  "folders": {
+    "saves": [{ "path": "{install}/game/profile" }],
+    "logs": [{ "path": "{install}/game/logs" }]
+  },
+  "settings": [
+    {
+      "id": "window",
+      "label": "Window",
+      "help": "Fullscreen fills your screen. Windowed uses the window size.",
+      "choices": [
+        { "label": "Windowed", "set": { "display/fullscreen": "0" } },
+        { "label": "Fullscreen", "set": { "display/fullscreen": "1" } }
+      ],
+      "defaults": { "display/fullscreen": "0" }
+    },
+    {
+      "id": "frame_rate",
+      "label": "Frame rate",
+      "help": "The most frames per second the game draws. Above 60 is experimental.",
+      "choices": [
+        { "label": "30", "set": { "frame rate/fps_limit": "30" } },
+        { "label": "60", "set": { "frame rate/fps_limit": "60" } },
+        { "label": "120", "set": { "frame rate/fps_limit": "120" } },
+        { "label": "Your screen's rate", "set": { "frame rate/fps_limit": "display" } }
+      ],
+      "defaults": { "frame rate/fps_limit": "60" }
+    },
+    {
+      "id": "resolution",
+      "label": "Resolution",
+      "help": "The size the game draws its picture at. Higher is sharper and needs a faster graphics card.",
+      "choices": [
+        { "label": "1080p", "set": { "display/output_res": "1920x1080" } },
+        { "label": "1440p", "set": { "display/output_res": "2560x1440" } },
+        { "label": "4K", "set": { "display/output_res": "3840x2160" } }
+      ],
+      "defaults": { "display/output_res": "1920x1080" }
+    },
+    {
+      "id": "upscaler",
+      "label": "Upscaling",
+      "help": "FSR sharpens the picture on any card. DLSS needs an NVIDIA RTX card and takes effect after a restart.",
+      "choices": [
+        { "label": "Bilinear", "set": { "display/upscaler": "bilinear" } },
+        { "label": "FSR", "set": { "display/upscaler": "fsr" } },
+        { "label": "DLSS", "set": { "display/upscaler": "dlss" } }
+      ],
+      "defaults": { "display/upscaler": "fsr" }
+    },
+    {
+      "id": "vsync",
+      "label": "V-Sync",
+      "help": "Mailbox shows each frame as soon as it is ready without tearing. V-Sync waits for the screen. Immediate may tear.",
+      "choices": [
+        { "label": "Mailbox", "set": { "display/vk_present": "mailbox" } },
+        { "label": "V-Sync", "set": { "display/vk_present": "fifo" } },
+        { "label": "Immediate", "set": { "display/vk_present": "immediate" } }
+      ],
+      "defaults": { "display/vk_present": "mailbox" }
+    },
+    {
+      "id": "hdr",
+      "label": "HDR",
+      "help": "Sends the picture as HDR10. Needs HDR turned on in your system.",
+      "choices": [
+        { "label": "Off", "set": { "display/hdr": "0" } },
+        { "label": "On", "set": { "display/hdr": "1" } }
+      ],
+      "defaults": { "display/hdr": "0" }
+    },
+    {
+      "id": "language",
+      "label": "Game language",
+      "help": "The language of the game's text. Takes effect the next time the game starts.",
+      "choices": [
+        { "label": "English (US)", "set": { "language/lang": "en-US" } },
+        { "label": "English (UK)", "set": { "language/lang": "en-GB" } },
+        { "label": "Japanese", "set": { "language/lang": "ja" } },
+        { "label": "French", "set": { "language/lang": "fr" } },
+        { "label": "French (Canada)", "set": { "language/lang": "fr-CA" } },
+        { "label": "German", "set": { "language/lang": "de" } },
+        { "label": "Italian", "set": { "language/lang": "it" } },
+        { "label": "Spanish", "set": { "language/lang": "es" } },
+        { "label": "Spanish (Latin America)", "set": { "language/lang": "es-419" } },
+        { "label": "Dutch", "set": { "language/lang": "nl" } },
+        { "label": "Portuguese", "set": { "language/lang": "pt" } },
+        { "label": "Portuguese (Brazil)", "set": { "language/lang": "pt-BR" } },
+        { "label": "Russian", "set": { "language/lang": "ru" } }
+      ],
+      "defaults": { "language/lang": "en-US" }
+    }
+  ],
+  "actions": [
+    { "id": "saves", "label": "Saves", "help": "Your save files.", "open": "saves" },
+    { "id": "logs", "label": "Logs", "help": "The log of the last runs.", "open": "logs" }
+  ]
+}

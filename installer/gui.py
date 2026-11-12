@@ -22,13 +22,16 @@ except ImportError:
     ImageGrab = None
 
 from . import ini
+from . import theme
+from .events import GAME_EXE
+from .gui_mods import ModsWindow
 from . import layout as layouts
 from .guilogic import (DONE, FAILED, PENDING, RUNNING, SKIPPED, UI_LANGUAGES, Catalog, Form, Model, Process,
                        amount, default_game_language, describe_event, parse_line, windows_ui_language)
 
 POLL_MS = 100
 GLYPH = {PENDING: '\u25cb', RUNNING: '\u25b6', DONE: '\u2714', SKIPPED: '\u2013', FAILED: '\u2716'}
-COLOR = {PENDING: '#808080', RUNNING: '#1a5fb4', DONE: '#26a269', SKIPPED: '#808080', FAILED: '#c01c28'}
+COLOR = {PENDING: theme.DIM, RUNNING: theme.RUN, DONE: theme.OK, SKIPPED: theme.DIM, FAILED: theme.ERROR}
 PAD = 14
 
 
@@ -67,11 +70,12 @@ class App:
             root.iconphoto(True, self.icon)
         root.protocol('WM_DELETE_WINDOW', self.on_close)
         self.ui_font = 'Segoe UI' if os.name == 'nt' else 'DejaVu Sans'
-        style = ttk.Style(root)
-        style.configure('Title.TLabel', font=(self.ui_font, 15, 'bold'))
-        style.configure('Notice.TLabel', background='#fff3cd', foreground='#664d03', padding=8)
-        style.configure('Err.TLabel', foreground='#c01c28')
-        style.configure('Version.TLabel', foreground='#808080')
+        style = theme.apply(root, self.ui_font)
+        style.configure('Title.TLabel', font=(self.ui_font, 15, 'bold'), foreground=theme.CYAN)
+        style.configure('Notice.TLabel', background=theme.NOTICE_BG, foreground=theme.NOTICE_FG, padding=8)
+        style.configure('Err.TLabel', foreground=theme.ERROR)
+        style.configure('Version.TLabel', foreground=theme.DIM)
+        theme.dark_title_bar(root)
 
         top = ttk.Frame(root, padding=(PAD, PAD, PAD, 0))
         top.pack(fill='x')
@@ -179,6 +183,7 @@ class App:
         bar.pack(side='bottom', fill='x', pady=(12, 0))
         self.start_button = self.button(bar, 'ui.start', self.start)
         self.start_button.pack(side='right')
+        self.button(bar, 'ui.mods', self.open_mods).pack(side='left')
         self.form_intro = self.label(f, 'ui.intro', wraplength=620, justify='left')
         self.form_intro.pack(anchor='w', pady=(0, 8))
         self.notice(f).pack(fill='x', pady=(0, 10))
@@ -236,10 +241,11 @@ class App:
         self.bar.pack(fill='x', pady=(4, 6))
         self.space_label = ttk.Label(f, wraplength=620, justify='left')
         self.space_label.pack(anchor='w')
-        self.warn_label = ttk.Label(f, wraplength=620, justify='left', foreground='#9a6700')
+        self.warn_label = ttk.Label(f, wraplength=620, justify='left', foreground=theme.WARN)
         self.warn_label.pack(anchor='w')
         self.log_frame = ttk.Frame(f)
         self.log = tk.Text(self.log_frame, height=10, wrap='word', state='disabled', font=('Consolas' if os.name == 'nt' else 'DejaVu Sans Mono', 9))
+        theme.text_widget(self.log)
         scroll = ttk.Scrollbar(self.log_frame, command=self.log.yview)
         self.log.configure(yscrollcommand=scroll.set)
         scroll.pack(side='right', fill='y')
@@ -256,6 +262,8 @@ class App:
         self.open_button.pack(side='right', padx=(0, 8))
         self.back_button = self.button(bar, 'ui.back', lambda: self.show('form'))
         self.back_button.pack(side='left')
+        self.finish_mods = self.button(bar, 'ui.mods', self.open_mods)
+        self.finish_mods.pack(side='left', padx=(8, 0))
         self.finish_title = ttk.Label(f, style='Title.TLabel', wraplength=620, justify='left')
         self.finish_title.pack(anchor='w')
         self.finish_text = ttk.Label(f, wraplength=620, justify='left')
@@ -485,6 +493,14 @@ class App:
             self.open_button.state(['!disabled'])
         else:
             self.open_button.state(['disabled' if not Path(m.dest or '.').is_dir() else '!disabled'])
+
+    def open_mods(self):
+        """The Mods window (installer/gui_mods.py) for the install folder in the form, which must hold the game."""
+        dest = self.vars['dest'].get().strip()
+        if not dest or not (Path(dest) / GAME_EXE).is_file():
+            messagebox.showinfo(self.cat('ui.title'), self.cat('ui.mods_need_install'), parent=self.root)
+            return
+        ModsWindow(self.root, self.cat, dest, self.ui_font, index=self.run_args.get('mods_index'))
 
     def open_folder(self):
         dest = self.model.dest

@@ -623,12 +623,43 @@ EMITTED = re.compile(r'^emitted (\d+)/(\d+) chunks')
 DISCOVERED = re.compile(r'^(\w+): \d+ functions \(.*discovery')
 
 
+CHEAT_PLACES = ('cheats', 'atmosphere/contents/0100453019AA8000/cheats', 'contents/0100453019AA8000/cheats',
+                '0100453019AA8000/cheats')
+
+
+def cheat_files(ctx):
+    """The Atmosphere cheat files of the mods folder (<dest>/mods/<mod>/cheats/*.txt and the Atmosphere places, as
+    tools/cheats.py finds them), for the lift key. All of them: the build reads the ones named after the installed
+    main's build id, and the keys are computed before Extract runs, when a fresh install has no main yet."""
+    mods = ctx.dest / 'mods'
+    if not mods.is_dir():
+        return []
+    return sorted(f for mod in mods.iterdir() if mod.is_dir() for where in CHEAT_PLACES
+                  for f in ((mod / where).glob('*.txt') if (mod / where).is_dir() else ()))
+
+
+def builtin_cheats(ctx):
+    """The port's own cheat lists (tools/data/cheats, one per build of main), which every install builds in."""
+    folder = ctx.layout.tools / 'data' / 'cheats'
+    return sorted(folder.glob('*.txt')) if folder.is_dir() else []
+
+
+def cheats_status(ctx):
+    """The build's cheat status file (tools/cheats.py --status), which runtime/cheats.c reads: which cheats became
+    patch sets, which the cheat interpreter runs and which cannot work."""
+    return ctx.dest / 'build-cache' / 'cheats.status'
+
+
 class Lift(Step):
     id = 'lift'
     transient = True
 
     def key(self, ctx):
-        return fingerprint('lift-3', ctx.keys['extract'], ctx.layout.recomp)
+        # fingerprint takes a file's name and content only; the paths under mods/ go in too, because tools/cheats.py
+        # names each patch set after its mod folder, so a renamed folder needs a lift
+        files = cheat_files(ctx)
+        return fingerprint('lift-5', ctx.keys['extract'], ctx.layout.recomp, ctx.layout.tools / 'cheats.py', *files,
+                           *builtin_cheats(ctx), *(f.relative_to(ctx.dest / 'mods').as_posix() for f in files))
 
     def current(self, ctx, record):
         gen = ctx.temp / 'gen'
@@ -648,12 +679,34 @@ class Lift(Step):
         args = ['--exefs', ctx.dest / 'exefs', '--out', gen]
         if game_version(ctx) == '2.0.0':
             args += ['--mod-menu-hook']
-        table = layout.recomp / PATCHES
-        if table.is_file():   # the 60 fps sites (XCX_FPS60 switches them at run time)
-            args += ['--patches', table]
-        code, log = run_tool(ctx, 'lift', layout.recomp / 'gen.py', args, parse)
+        plain = layout.recomp / PATCHES   # the 60 fps sites and the other sets of 2.0.0
+        # The code cheats of the built-in cheat list and of the mods' cheat files become patch sets, off until switched
+        # on in the Cheats tab (tools/cheats.py); its status file tells the runtime what the build has. A failure costs
+        # the cheats, not the install: the game is built without them and the setup warns.
+        status = cheats_status(ctx)
+        status.unlink(missing_ok=True)   # no status: runtime/cheats.c treats every code cheat as not built
+        patches, skipped = plain, None
+        if plain.is_file() and (builtin_cheats(ctx) or cheat_files(ctx)):
+            code, log = run_tool(ctx, 'lift', layout.tools / 'cheats.py',
+                                 ['--exefs', ctx.dest / 'exefs', '--mods', ctx.dest / 'mods',
+                                  '--builtin', layout.tools / 'data' / 'cheats', '--patches', plain,
+                                  '--out', ctx.temp / 'patches-cheats.txt', '--status', status])
+            if code:
+                status.unlink(missing_ok=True)
+                skipped = log
+            else:
+                patches = ctx.temp / 'patches-cheats.txt'
+        tables = ['--patches', patches] if patches.is_file() else []
+        code, log = run_tool(ctx, 'lift', layout.recomp / 'gen.py', args + tables, parse)
+        if code and patches != plain:
+            status.unlink(missing_ok=True)
+            skipped = log
+            code, log = run_tool(ctx, 'lift', layout.recomp / 'gen.py',
+                                 args + (['--patches', plain] if plain.is_file() else []), parse)
         if code:
             raise InstallError('lift.failed', code=code, log=str(log))
+        if skipped:
+            rep.warning('warn.cheats_skipped', log=str(skipped))
         (gen / STAMP).write_text(ctx.keys['lift'] + '\n')
         return {}
 
@@ -670,8 +723,9 @@ class Compile(Step):
         layout = ctx.layout
         clang = subprocess.run([str(layout.clang), '--version'], capture_output=True, text=True).stdout
         tools = [layout.tools / n for n in ('build_game.py', 'build_shaders.py', 'romfs_index.py', 'check_content.py')]
-        return fingerprint('compile-1', ctx.keys['lift'], layout.runtime, self.runtime_lib(ctx), layout.deps or 'system',
-                           layout.sysroot or 'host', *tools, clang, *[d.name for d in layout.dlls])
+        pgo = layout.pgo(game_version(ctx))
+        return fingerprint('compile-2', ctx.keys['lift'], layout.runtime, self.runtime_lib(ctx), layout.deps or 'system',
+                           layout.sysroot or 'host', *tools, clang, *[d.name for d in layout.dlls], pgo or 'no profile')
 
     @staticmethod
     def v3(ctx):
@@ -712,7 +766,7 @@ class Compile(Step):
             '--cpu', 'x86-64-v3' if self.v3(ctx) else 'x86-64-v2',
             '--version', version_tag(game_version(ctx)), '--expected', layout.expected(game_version(ctx)),
             '--exefs', dest / 'exefs', '--romfs', dest / 'romfs',
-            '--profile', dest / 'profile'], parse)
+            '--profile', dest / 'profile', *(['--pgo', pgo] if (pgo := layout.pgo(game_version(ctx))) else [])], parse)
         exe = build / ('xcx' + EXE)
         if code or not exe.is_file():
             raise InstallError('compile.failed', code=code, log=str(log))
@@ -791,6 +845,9 @@ class Dlss(Step):
     id = 'dlss'
 
     def key(self, ctx):
+        given = getattr(ctx.options, 'dlss_file', None)
+        if given:
+            return fingerprint('dlss-1', 'file', file_sha256(given) if given.is_file() else 'missing')
         if not getattr(ctx.options, 'dlss', False):
             return fingerprint('dlss-1', 'off')
         return fingerprint('dlss-1', DLSS_VERSION, DLSS_SHA256)
@@ -801,6 +858,16 @@ class Dlss(Step):
         return not record.get('installed') or (ctx.dest / DLSS_DLL).is_file()
 
     def run(self, ctx):
+        given = getattr(ctx.options, 'dlss_file', None)
+        if given:
+            # A launcher fetched the file (--dlss-file): copy it over any library an older run left, but only when it
+            # is the same NVIDIA release the download takes, so the setup never installs an unchecked DLL
+            sha = file_sha256(given) if given.is_file() else 'missing'
+            if sha != DLSS_SHA256:
+                ctx.reporter.warning('warn.dlss_file_wrong', path=str(given), sha=sha[:16], version=DLSS_VERSION)
+                return {'failed': True}
+            replace_file(given, ctx.dest / DLSS_DLL)
+            return {'installed': DLSS_VERSION}
         if not getattr(ctx.options, 'dlss', False):
             return {}
         if os.name != 'nt':

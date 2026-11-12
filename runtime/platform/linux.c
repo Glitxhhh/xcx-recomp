@@ -5,8 +5,11 @@
 #include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <execinfo.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <locale.h>
+#include <pwd.h>
 #include <linux/fs.h>
 #include <linux/futex.h>
 #include <linux/userfaultfd.h>
@@ -29,6 +32,7 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include <wctype.h>
 
 #include <SDL3/SDL_clipboard.h>
 
@@ -402,6 +406,9 @@ uint64_t plat_thread_affinity(PlatThread *t, uint64_t mask) {
         if (CPU_ISSET(i, &old)) prev |= 1ull << i;
     return prev;
 }
+
+uint32_t plat_thread_prefer_fast_cores(void) { return 0; }
+void plat_power_full_speed(void) {}
 
 uint32_t plat_cpu_count(void) {
     cpu_set_t set;
@@ -913,10 +920,44 @@ uint64_t plat_mem_written(uint64_t addr, uint64_t n, uint64_t *pages, uint64_t m
 }
 
 // One handler for the synchronous faults. A SIGSEGV whose page-fault error code has the write bit set goes to the
-// write-fault hook first (memory.c thaws a frozen region); a fault in this executable's code then goes to the crash
-// hook (main.c); anything else gets the default action. Runs on the thread's signal stack.
+// write-fault hook first (memory.c thaws a frozen region); any other fault then goes to the crash hook (main.c), which
+// ends the process; without a hook it gets the default action. Runs on the thread's signal stack.
 static int (*fault_hook)(uint64_t addr);
 static void (*crash_fn)(const PlatCrash *c);
+
+// The report is static, not on the signal stack; a second thread that crashes meanwhile waits for the first to end
+// the process.
+static PlatCrash crash_report;
+static volatile int32_t crash_claimed;
+
+static PlatCrash *crash_claim(void) {
+    if (__atomic_exchange_n(&crash_claimed, 1, __ATOMIC_ACQ_REL))
+        for (;;) pause();
+    return &crash_report;
+}
+
+// The return addresses of this thread from glibc's backtrace, which unwinds through the signal frame, from the frame
+// at rip on (the handler's own frames dropped; all of them when rip is not among them), with their modules.
+static void crash_frames(PlatCrash *x, uintptr_t rip) {
+    void *f[64];
+    int n = backtrace(f, 64), from = 0;
+    for (int i = 0; i < n; i++)
+        if ((uintptr_t)f[i] == rip) { from = i; break; }
+    Dl_info self;
+    int have_self = dladdr((void *)plat_crash_hook, &self);
+    for (int i = from; i < n && x->nframes < (int)(sizeof x->frames / sizeof *x->frames); i++) {
+        Dl_info at;
+        int k = x->nframes++;
+        x->frames[k] = (uintptr_t)f[i];
+        if (!dladdr(f[i], &at) || !at.dli_fname) {
+            x->frame_module[k] = "", x->frame_offset[k] = (uintptr_t)f[i];
+        } else {
+            x->frame_offset[k] = (uintptr_t)f[i] - (uintptr_t)at.dli_fbase;
+            const char *nm = strrchr(at.dli_fname, '/');
+            x->frame_module[k] = have_self && at.dli_fbase == self.dli_fbase ? NULL : nm ? nm + 1 : at.dli_fname;
+        }
+    }
+}
 
 static void fault_handler(int sig, siginfo_t *si, void *uc) {
     ucontext_t *u = uc;
@@ -924,15 +965,38 @@ static void fault_handler(int sig, siginfo_t *si, void *uc) {
     if (sig == SIGSEGV && fault_hook && (err & 2) && fault_hook((uint64_t)(uintptr_t)si->si_addr)) return;
     uintptr_t rip = (uintptr_t)u->uc_mcontext.gregs[REG_RIP];
     Dl_info at, self;
-    if (crash_fn && dladdr((void *)rip, &at) && dladdr((void *)plat_crash_hook, &self) && at.dli_fbase == self.dli_fbase) {
-        PlatCrash c = {sig == SIGSEGV ? "access violation" : sig == SIGBUS ? "bus error"
-                       : sig == SIGILL ? "illegal instruction" : "arithmetic exception",
-                       (uint32_t)sig, rip, rip - (uintptr_t)self.dli_fbase, -1, 0};
+    if (crash_fn) {
+        int found = dladdr((void *)rip, &at) && at.dli_fname;
+        PlatCrash *c = crash_claim();
+        *c = (PlatCrash){sig == SIGSEGV ? "access violation" : sig == SIGBUS ? "bus error"
+                         : sig == SIGILL ? "illegal instruction" : "arithmetic exception",
+                         (uint32_t)sig, rip, found ? rip - (uintptr_t)at.dli_fbase : rip, -1, 0};
+        if (!found) {
+            c->module = "";
+        } else if (!dladdr((void *)plat_crash_hook, &self) || at.dli_fbase != self.dli_fbase) {
+            const char *n = strrchr(at.dli_fname, '/');
+            c->module = n ? n + 1 : at.dli_fname;
+        }
         if (sig == SIGSEGV || sig == SIGBUS)
-            c.access = (err & 16) ? 8 : (err & 2) ? 1 : 0, c.addr = (uint64_t)(uintptr_t)si->si_addr;
-        crash_fn(&c);
+            c->access = (err & 16) ? 8 : (err & 2) ? 1 : 0, c->addr = (uint64_t)(uintptr_t)si->si_addr;
+        crash_frames(c, rip);
+        crash_fn(c);
     }
     signal(sig, SIG_DFL);   // returns into the faulting instruction, which faults again with the default action
+}
+
+// abort() (a failed assert, std::terminate): the frames of its caller; rip is the innermost one in this executable.
+static void abort_handler(int sig) {
+    if (crash_fn) {
+        PlatCrash *c = crash_claim();
+        *c = (PlatCrash){"abort", (uint32_t)sig, 0, 0, -1, 0};
+        crash_frames(c, 0);
+        for (int i = 0; i < c->nframes; i++)
+            if (!c->frame_module[i]) { c->rip = c->frames[i], c->offset = c->frame_offset[i]; break; }
+        crash_fn(c);
+    }
+    signal(sig, SIG_DFL);
+    raise(sig);
 }
 
 static void fault_install(void) {
@@ -956,6 +1020,16 @@ void plat_mem_fault_hook(int (*fn)(uint64_t addr)) {
 void plat_crash_hook(void (*fn)(const PlatCrash *c)) {
     crash_fn = fn;
     fault_install();
+    void *warm[2];
+    backtrace(warm, 2);   // loads the unwinder (libgcc_s) now: a crash handler should not have to
+    signal(SIGABRT, abort_handler);
+}
+
+int plat_backtrace(uintptr_t *frames, int max, int skip) {
+    void *f[64];
+    int n = backtrace(f, 64), k = 0;
+    for (int i = skip + 1; i < n && k < max; i++) frames[k++] = (uintptr_t)f[i];
+    return k;
 }
 
 void plat_reexec(void) {
@@ -1191,6 +1265,35 @@ uint32_t plat_thread_id(void) {
     return tid;
 }
 
+void plat_identity(PlatIdentity *o) {
+    memset(o, 0, sizeof *o);
+    struct passwd pw, *got = NULL;
+    char buf[4096];
+    if (!getpwuid_r(getuid(), &pw, buf, sizeof buf, &got) && got) {
+        snprintf(o->user, sizeof o->user, "%s", pw.pw_name ? pw.pw_name : "");
+        if (pw.pw_gecos) snprintf(o->full_name, sizeof o->full_name, "%.*s", (int)strcspn(pw.pw_gecos, ","), pw.pw_gecos);
+        if (pw.pw_dir) snprintf(o->home, sizeof o->home, "%s", pw.pw_dir);
+    }
+    if (!o->user[0]) plat_getenv("USER", o->user, sizeof o->user);
+    const char *h = getenv("HOME");
+    if (h && *h) snprintf(o->home, sizeof o->home, "%s", h);
+    if (!gethostname(o->host, sizeof o->host)) o->host[sizeof o->host - 1] = 0;
+    else o->host[0] = 0;
+    snprintf(o->computer, sizeof o->computer, "%.*s", (int)strcspn(o->host, "."), o->host);
+}
+
+uint32_t plat_char_lower(uint32_t cp) {
+    if (cp < 0x80) return cp >= 'A' && cp <= 'Z' ? cp + 32 : cp;
+    static locale_t loc;   // the C locale's towlower knows ASCII only
+    if (!__atomic_load_n(&loc, __ATOMIC_ACQUIRE)) {
+        locale_t l = newlocale(LC_CTYPE_MASK, "C.UTF-8", (locale_t)0);
+        if (!l) return cp;
+        locale_t none = (locale_t)0;
+        if (!__atomic_compare_exchange_n(&loc, &none, l, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) freelocale(l);
+    }
+    return (uint32_t)towlower_l((wint_t)cp, loc);
+}
+
 // The first set variable of names ("ru_RU.UTF-8") as a BCP-47 tag ("ru-RU") into tag; "" for C and POSIX.
 static void locale_tag(const char *const *names, int n, char *tag, size_t cap) {
     const char *v = NULL;
@@ -1262,7 +1365,16 @@ int plat_stderr_path(char *out, size_t cap) {
 
 // ---- process
 
+#ifdef XCX_PGO_GEN
+// compiler-rt's profile runtime (an instrumented build, tools/build_game.py --pgo gen). It writes its counters from an
+// atexit handler, which _exit skips; __llvm_profile_dump writes them once and makes later writes no-ops.
+int __llvm_profile_dump(void);
+#endif
+
 void plat_exit(int code) {
+#ifdef XCX_PGO_GEN
+    __llvm_profile_dump();
+#endif
     if (!code) rt_mods_shutdown();
     fflush(stdout);
     fflush(stderr);
