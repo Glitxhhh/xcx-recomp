@@ -267,11 +267,14 @@ static void window_main(void *arg) {
     cfg_window_size(&cw, &ch);
     RECT r = {0, 0, cw, ch};
     AdjustWindowRect(&r, WND_STYLE, FALSE);
-    // The window opens behind the user's windows without taking focus: it shows the game's blank loading frames for a
-    // while, and must not cover what the player works on meanwhile. The game still counts itself in focus until the
-    // first WM_ACTIVATEAPP, so loading goes on, and keyboard input waits for the foreground (input_win.c). Its taskbar
-    // button flashes until it is brought up, and XCX_FULLSCREEN waits for that first activation.
-    // XCX_BACKGROUND_WINDOW=1 (test runs): no flashing, never fullscreen at start, and F11 keeps the window's place.
+    // The window opens on top and asks for the foreground. It used to open at the bottom of the Z order without
+    // activation, so the game's own console (xcx.exe is a console program: started from Explorer, its log window comes
+    // up in front) and every other window covered it, and players took it for minimized (issue #58). Windows grants the
+    // foreground to a process the user just started; when it refuses, the taskbar button flashes until the player
+    // brings the window up, and XCX_FULLSCREEN waits for that first activation. The mouse cursor is not captured by the
+    // activation: input_win.c waits for a click in the window.
+    // XCX_BACKGROUND_WINDOW=1 (test runs): the window stays behind the user's windows without focus, no flashing,
+    // never fullscreen at start, and F11 keeps the window's place.
     int background = g_background = cfg_get("XCX_BACKGROUND_WINDOW") && atoi(cfg_get("XCX_BACKGROUND_WINDOW"));
     g_hwnd = CreateWindowExW(0, wc.lpszClassName, L"XCX Recomp", WND_STYLE, CW_USEDEFAULT, CW_USEDEFAULT,
                              r.right - r.left, r.bottom - r.top, NULL, NULL, inst, NULL);
@@ -279,11 +282,17 @@ static void window_main(void *arg) {
         rt_log("gfx: CreateWindowEx failed (%lu)", GetLastError());
         g_wnd_failed = 1;
     } else {
-        SetWindowPos(g_hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        if (!background) {
-            FLASHWINFO fw = {.cbSize = sizeof fw, .hwnd = g_hwnd, .dwFlags = FLASHW_TRAY | FLASHW_TIMERNOFG};
-            FlashWindowEx(&fw);
-            g_fs_pending = cfg_fullscreen();
+        if (background) {
+            SetWindowPos(g_hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        } else {
+            g_fs_pending = cfg_fullscreen();   // before the activation below posts its first WM_ACTIVATEAPP
+            // SetWindowPos, not ShowWindow: the first ShowWindow of a process may take the show command of its
+            // STARTUPINFO instead, and a console program's is the console's (minimized for a shortcut set so).
+            SetWindowPos(g_hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+            if (!SetForegroundWindow(g_hwnd) || GetForegroundWindow() != g_hwnd) {
+                FLASHWINFO fw = {.cbSize = sizeof fw, .hwnd = g_hwnd, .dwFlags = FLASHW_TRAY | FLASHW_TIMERNOFG};
+                FlashWindowEx(&fw);
+            }
         }
         note_applied();
         refresh_rate_update(g_hwnd, 1);

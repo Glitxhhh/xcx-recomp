@@ -49,7 +49,7 @@ def auto_language(dest, state):
     path = dest / 'xcx.ini'
     chosen = ini.get_language(path.read_text(encoding='utf-8-sig')) if path.is_file() else None
     recorded = (state or {}).get('lang')   # a fresh folder has no state
-    return chosen or recorded or guilogic.default_game_language(guilogic.windows_ui_language())
+    return ini.playable(chosen or recorded or guilogic.default_game_language(guilogic.windows_ui_language()))
 
 
 def cancel(signum, frame):

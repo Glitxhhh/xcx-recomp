@@ -135,7 +135,7 @@ class App:
 
     def fill_languages(self):
         code = self.selected_lang()
-        self.lang_box.configure(values=[self.lang_label(c) for c in ini.LANGUAGES])
+        self.lang_box.configure(values=[self.lang_label(c) for c in ini.PLAYABLE])
         self.vars['lang'].set(self.lang_label(code))
 
     def selected_lang(self):
@@ -286,7 +286,7 @@ class App:
         state = form.installed_state()
         if state is not None:
             self.update_hint.configure(text=self.cat('ui.update_mode'))
-            if state.get('lang') in ini.LANGUAGES and not self.lang_touched:
+            if state.get('lang') in ini.PLAYABLE and not self.lang_touched:
                 self.vars['lang'].set(self.lang_label(state['lang']))
         else:
             self.update_hint.configure(text='')

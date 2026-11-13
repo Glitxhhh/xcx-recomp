@@ -7,7 +7,8 @@
 // Environment:
 //   XCX_LANG=<Switch language code>   the game's language as given ("ja", "en-GB", "zh-Hant", ...)
 //   XCX_LOCALE=<BCP 47 tag>           else the language for this locale ("pt-BR"), else the Windows user locale;
-//                                      a language the game does not ship becomes en-US
+//                                      a language the game does not ship becomes en-US. Russian becomes en-US from
+//                                      any of the three (ov_language)
 //   XCX_OPERATION_MODE=docked|handheld   operation and performance mode reported to the game (default docked)
 //   XCX_ASSUME_FOCUS=0|1              1: GetCurrentFocusState always reports in focus, whatever the window says.
 //                                      Default: 1 unless XCX_PAUSE_IN_BACKGROUND=1 (the game keeps running out of focus)
@@ -87,6 +88,17 @@ static const char *switch_language(const char *tag) {
     return "en-US";
 }
 
+// The game cannot start in Russian: given "ru", XCX 2.0.0 stops while loading, before the title screen, with a black
+// window (issue #58: a Russian Windows locale, or the setup's lang = ru for a Russian display language). Dutch and
+// Portuguese, which it does not ship either, reach the title. So "ru" is reported as en-US, wherever it came from.
+static const char *playable(const char *code, const char *from) {
+    if (strcmp(code, "ru")) return code;
+    static volatile int32_t logged;
+    if (!plat_xchg32(&logged, 1))
+        rt_log("oe: language ru (%s) is not in the game; it stops before the title in Russian, so en-US", from);
+    return "en-US";
+}
+
 // The game's language as a Switch language code (XCX_LANG, else XCX_LOCALE, else the Windows user locale).
 const char *ov_language(void) {
     static const char *const codes[] = {"ja", "en-US", "fr", "de", "it", "es", "zh-CN", "ko", "nl", "pt", "ru",
@@ -94,7 +106,7 @@ const char *ov_language(void) {
     const char *code = cfg_get("XCX_LANG");   // no fixed default: XCX_LOCALE or the Windows user locale decides when unset
     if (code && *code) {
         for (size_t i = 0; i < sizeof codes / sizeof *codes; i++)
-            if (!strcmp(code, codes[i])) return codes[i];
+            if (!strcmp(code, codes[i])) return playable(codes[i], "lang");
         rt_fatal("XCX_LANG '%s' is not a Switch language code", code);
     }
     const char *tag = cfg_get("XCX_LOCALE");
@@ -102,8 +114,9 @@ const char *ov_language(void) {
     if (!tag || !*tag) {
         if (*plat_user_locale()) snprintf(sys, sizeof sys, "%s", plat_user_locale());
         tag = sys;
+        return playable(switch_language(tag), "the Windows locale");
     }
-    return switch_language(tag);
+    return playable(switch_language(tag), "locale");
 }
 
 // LanguageCode GetDesiredLanguage(): char[8] in x0

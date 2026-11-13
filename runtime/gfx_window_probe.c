@@ -160,24 +160,35 @@ int probe_window(void) {
     if (held == 0) return fail("the screen saver is not held off while the window has the focus");
     printf("probe-window: screen saver held off in focus: %s\n", held > 0 ? "yes" : "unknown");
 
-    // Cursor release: Esc releases, a client click recaptures, a title bar activation releases (where the window system
-    // reports one). The probe window may not be the foreground window, so this checks the release flag, not the capture.
+    // Cursor release: released from the start (the focus round trip above changes nothing), a client click captures, Esc
+    // releases, a click recaptures, a title bar activation releases (where the window system reports one), a focus
+    // round trip keeps released or captured as it was. The probe window may not be the foreground window, so this
+    // checks the release flag, not the capture.
+    int start = input_cursor_released();
+    wsys_probe_click(0);
+    int first = input_cursor_released();
     wsys_probe_escape();
     int esc = input_cursor_released();
     wsys_probe_click(0);
     int click = input_cursor_released();
     wsys_probe_click(1);
     int client = input_cursor_released();
-    int caption = wsys_probe_click(2) ? input_cursor_released() : 1;
+    int has_caption = wsys_probe_click(2), caption = has_caption ? input_cursor_released() : 1;
     wsys_probe_focus(0);
     wsys_probe_focus(1);
-    int back = input_cursor_released();
+    int back_rel = has_caption ? input_cursor_released() : 1;   // without one the cursor is captured here
+    wsys_probe_click(0);
+    wsys_probe_focus(0);
+    wsys_probe_focus(1);
+    int back_cap = input_cursor_released();
     if (menu_is_open()) menu_toggle();   // Esc opened the menu: the presents below compare the bare game image
-    if (!esc || click || client || !caption || back) {
-        printf("probe-window: released esc=%d click=%d client=%d caption=%d reactivated=%d\n", esc, click, client, caption, back);
+    if (!start || first || !esc || click || client || !caption || !back_rel || back_cap) {
+        printf("probe-window: released start=%d first click=%d esc=%d click=%d client=%d caption=%d reactivated %d/%d\n",
+               start, first, esc, click, client, caption, back_rel, back_cap);
         return fail("cursor release");
     }
-    printf("probe-window: cursor released by Esc and title bar activation, recaptured by a click\n");
+    printf("probe-window: cursor released at the start, by Esc and by title bar activation, captured by a click, kept "
+           "across a focus round trip\n");
 
     // Resize: the client area changes, the swapchain follows, presenting still reads back exact.
     gfx_window_resize(1280, 720);
