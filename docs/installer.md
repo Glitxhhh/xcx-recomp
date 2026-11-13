@@ -9,7 +9,7 @@ holds only the game; the installer and its tools stay outside it.
 1. Downloads `XCX-Setup-<version>-windows.zip` from GitHub Releases (none is published yet), unpacks it anywhere and
    starts `XCX-Setup.exe`.
 2. Picks:
-   - the base game (XCI or NSP) and the 1.2.1 or 1.4.3 update (NSP);
+   - the base game (XCI or NSP) and the 1.2.1 or 1.4.3 update (NSP), or the same compressed (XCZ, NSZ);
    - their `prod.keys`;
    - the game language and the install folder.
 3. Waits for the setup, one time. The window shows each step and its progress.
@@ -97,8 +97,18 @@ python -m installer --base FILE --update FILE --keys FILE --lang CODE --dest DIR
 - For a launcher or a script (RecompLauncher passes them, `recomplauncher.json`): `--game PATH` takes the game file or
   a folder holding the base game, the update and the add-on content in place of `--base`, `--update` and `--dlc`,
   and sorts the files by content (`installer/game_files.py`); `--lang auto` keeps the language already in `xcx.ini`;
-  `--dlss-file PATH` copies a DLSS library instead of downloading one; `--progress-lines` prints `progress 0.4 Text`
-  lines instead of JSON events.
+  `--dlss-file PATH` copies a DLSS library, only NVIDIA's release the download takes (`DLSS_SHA256`), instead of
+  downloading one; `--progress-lines` prints `progress 0.4 Text` lines instead of JSON events. Empty values
+  (`--dlc=`, `--update=`, a launcher's optional input left empty) count as not given.
+- NSZ and XCZ (`installer/nsz.py`): the checks read their NCA headers in place; the extraction first rebuilds each as a
+  plain NSP in the temp folder (every NCA checked against its own name, a SHA-256), then goes on as with an NSP.
+- An extracted game (`installer/extracted.py`): `--game FOLDER`, or a folder as `--base`, holding `exefs/` of the 2.0.0
+  update and its RomFS as an image (`romfs.bin` or `romfs/romfs.bin`, hard-linked into the install when it can be) or as
+  loose files (`romfs/`, an emulator's "Dump RomFS" with the update installed). No update file or keys are needed. The
+  ExeFS and an image are checked by the same hashes as an extraction. Loose files are checked one by one against
+  `tools/data/romfs-files-xcx-<version>.json` (the SHA-256 of each path, size and SHA-256 of each file, written from a
+  verified extraction by `tools/romfs_files.py`) and packed into a new `romfs.bin`: `xcx.exe` reads the RomFS only at the
+  offsets of its index, so the image need not be the cartridge's byte for byte.
 - stdout: one JSON event per line, types `start`, `plan`, `step` (started, done, skipped), `progress` (step, phase,
   done/total/unit), `space` (bytes needed and free on the install disk and the temp disk), `warning`, `error`, `end` (`installer/events.py`). Messages are ids with parameters;
   `installer/text/en.json` holds their English text. The human-readable log goes to `<temp>/logs/`.
@@ -240,4 +250,3 @@ Without Actions, the same two scripts build the packages locally; on Windows run
 ## Later
 
 - Re-warm the driver cache on start after a move, GPU or driver change.
-- NSZ and XCZ input.

@@ -412,6 +412,15 @@ void plat_mem_info(float *used_mb, float *total_mb, float *proc_mb);
 // resident anonymous pages). 0 when unknown.
 void plat_process_memory(uint64_t *resident, uint64_t *private_bytes);
 
+// ---- a local channel to another program on this computer: a named pipe on Windows (\\.\pipe\<name>), a Unix
+// socket path elsewhere, as the other program names it. Byte stream, one connection, used from one thread: reads never
+// block (a Windows pipe handle without overlapped I/O cannot read and write at once, so nothing waits in a read).
+typedef struct PlatIpc PlatIpc;
+PlatIpc *plat_ipc_connect(const char *name);                 // NULL when nobody listens there (or it stays busy)
+int plat_ipc_write(PlatIpc *c, const void *buf, size_t n);   // 1 when all of it went, 0 when the channel closed
+int64_t plat_ipc_read(PlatIpc *c, void *buf, size_t cap);    // what is there now: bytes read, 0 none, -1 closed
+void plat_ipc_close(PlatIpc *c);
+
 // ---- child processes: a program with stdin and stdout piped to us (stderr discarded), no console window.
 typedef struct PlatChild PlatChild;
 // Starts "exe" followed by arg (arg may be NULL). NULL on failure; *err (may be NULL) gets the OS error code.

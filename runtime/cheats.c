@@ -525,3 +525,14 @@ void cheats_reload(void) {
 
 const char *cheats_build_id(void) { return build_id; }
 int cheats_other_builds(void) { return other_builds; }
+
+int cheats_active(void) {
+    if (!started) return 0;
+    plat_mutex_lock(&lock);
+    int on = 0;
+    for (int i = 0; i < nsources && allowed && !on; i++)
+        for (int k = 0; k < sources[i].cheats.count && !on; k++)
+            on = sources[i].cheats.cheats[k].enabled;
+    plat_mutex_unlock(&lock);
+    return on;
+}
