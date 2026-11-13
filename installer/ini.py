@@ -12,12 +12,20 @@ from pathlib import Path
 # runtime/ov_system.c: the codes XCX_LANG accepts.
 LANGUAGES = ('ja', 'en-US', 'en-GB', 'fr', 'fr-CA', 'de', 'it', 'es', 'es-419', 'nl', 'pt', 'pt-BR', 'ru', 'ko',
              'zh-CN', 'zh-TW', 'zh-Hans', 'zh-Hant')
+# The game stops before the title screen in Russian (runtime/ov_system.c playable, issue #58): the runtime plays a
+# lang = ru as en-US, and the setup offers and writes the languages it can start in.
+PLAYABLE = tuple(code for code in LANGUAGES if code != 'ru')
 # Their text falls back to the Switch shared fonts (runtime/ov_system.c), which the installer does not extract.
 NEED_SHARED_FONTS = ('ko', 'zh-CN', 'zh-TW', 'zh-Hans', 'zh-Hant')
 
 ACTIVE = re.compile(r'^(\s*)(?:xcx_)?lang(\s*=\s*)(.*?)(\s*)$', re.IGNORECASE)
 COMMENTED = re.compile(r'^\s*[#;]\s*(?:xcx_)?lang\s*=.*$', re.IGNORECASE)
 SECTION = re.compile(r'^\s*\[(.*)\]\s*$')
+
+
+def playable(lang):
+    """lang, or en-US for a language the game cannot start in (PLAYABLE)."""
+    return lang if lang in PLAYABLE or lang not in LANGUAGES else 'en-US'
 
 
 def set_language(text, lang):

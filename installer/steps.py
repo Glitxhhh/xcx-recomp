@@ -256,7 +256,7 @@ class Check(Step):
             raise InstallError('check.lang_unknown', lang=lang, known=', '.join(ini.LANGUAGES))
         if lang in ini.NEED_SHARED_FONTS:
             rep.warning('warn.lang_needs_fonts', lang=lang)
-        ctx.lang = lang
+        ctx.lang = ini.playable(lang)   # an older setup wrote lang = ru for a Russian Windows
         ctx.temp.mkdir(parents=True, exist_ok=True)
 
         rep.progress('check', 'host', force=True)
