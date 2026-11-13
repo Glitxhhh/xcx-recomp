@@ -288,6 +288,17 @@ class CliTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             self.assertEqual(auto_language(Path(d), {'lang': 'ja'}), 'ja')
 
+    def test_auto_language_never_keeps_russian(self):
+        # issue #58: the game stops before the title in Russian; an older setup wrote lang = ru
+        from installer import ini
+        from installer.cli import auto_language
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(auto_language(Path(d), {'lang': 'ru'}), 'en-US')
+            (Path(d) / 'xcx.ini').write_text('[language]\nlang = ru\n', encoding='utf-8')
+            self.assertEqual(auto_language(Path(d), None), 'en-US')
+        self.assertNotIn('ru', ini.PLAYABLE)
+        self.assertEqual(ini.playable('nl'), 'nl')
+
     def test_auto_language_on_a_fresh_folder_is_a_game_language(self):
         from installer import ini
         from installer.cli import auto_language

@@ -86,10 +86,13 @@ static volatile LONG intent_dx, intent_dy;
 static volatile LONG mouse_dx, mouse_dy;   // raw counts since the last frame sample
 static volatile LONG cur_captured;         // cursor hidden and confined to the client area
 static volatile LONG cur_active;           // WM_ACTIVATEAPP: the window's application is active
-// Bits: CUR_REL, Esc or activation by a click on the title bar or border: until a client click; CUR_ESC, set with CUR_REL
-// by Esc (not when it was already set): closing the menu gives the capture back. One word, changed by one CAS.
+// Bits: CUR_REL, released until a client click: from the start, by Esc, or by activation with a click on the title bar
+// or border; CUR_ESC, set with CUR_REL by Esc (not when it was already set): closing the menu gives the capture back.
+// One word, changed by one CAS. The start is released so that the first activation does not take the mouse away: a
+// player on a controller kept no cursor on the desktop and moved the camera when reaching for the window (issue #58).
+// Losing the focus keeps the state, so Alt+Tab back captures only when the cursor was captured before.
 enum { CUR_REL = 1, CUR_ESC = 2 };
-static volatile LONG cur_rel;
+static volatile LONG cur_rel = CUR_REL;
 static void cur_rel_update(LONG (*f)(LONG)) {
     LONG o, n;
     do { o = cur_rel; n = f(o); } while (n != o && InterlockedCompareExchange(&cur_rel, n, o) != o);
@@ -165,7 +168,6 @@ int input_window_msg(HWND h, UINT m, WPARAM w, LPARAM l, LRESULT *res) {
         if (LOWORD(l) != HTCLIENT) cur_rel_update(rel_title);
         break;
     case WM_ACTIVATEAPP:
-        if (!w) cur_rel_update(rel_clear);   // Alt+Tab back in captures again
         InterlockedExchange(&cur_active, w != 0);
         cursor_update(h);
         break;
