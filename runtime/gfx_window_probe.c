@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cfg.h"
 #include "gfx.h"
 #include "gfx_wsys.h"
 #include "input.h"
@@ -201,6 +202,39 @@ int probe_window(void) {
         return fail("swapchain size after resize");
     }
     printf("probe-window: resized to %dx%d, presents still exact\n", w, h);
+
+    // Fullscreen (issue #148): the swapchain takes the whole monitor and comes back to the window, also when the mode
+    // flips while presents rebuild the swapchain (a resize during a rebuild used to be lost: the swapchain kept the
+    // windowed size in fullscreen). The modes go through the settings, as from the menu, and are not saved.
+    if (!cfg_from_env("XCX_FULLSCREEN")) {
+        int mw = 0, mh = 0;
+        gfx_window_monitor_size(&mw, &mh);
+        const char *modes[] = {"1", "0"};
+        for (int round = 0; round < 2; round++) {
+            for (int m = 0; m < 2; m++) {
+                cfg_set("XCX_FULLSCREEN", modes[m]);
+                // Round 0 waits for each mode; round 1 flips 8 times with one present each, then settles.
+                for (int k = 0; k < (round ? 8 : 1); k++) {
+                    if (round && k) cfg_set("XCX_FULLSCREEN", modes[(m + k) & 1]);
+                    if (present_and_check(&s, 0, FRAMES + 20 + k, &w, &h)) return fail("presents during a mode change");
+                }
+                if (round) cfg_set("XCX_FULLSCREEN", modes[m]);
+                int ok = 0;
+                for (int i = 0; i < 120 && !ok; i++) {
+                    plat_sleep_ms(10);
+                    if (present_and_check(&s, 0, FRAMES + 40 + i, &w, &h)) return fail("presents after a mode change");
+                    wsys_client_size(&cw, &ch);
+                    ok = w == cw && h == ch && (m ? cw == 1280 && ch == 720 : cw == mw && ch == mh);
+                }
+                if (!ok) {
+                    printf("probe-window: %s: readback %dx%d, client area %dx%d, monitor %dx%d\n",
+                           m ? "window" : "fullscreen", w, h, cw, ch, mw, mh);
+                    return fail("swapchain size after a mode change");
+                }
+            }
+        }
+        printf("probe-window: fullscreen %dx%d and back to the window, also after 8 quick flips each way\n", mw, mh);
+    }
     vk_present_capture(0);
 
     // Vsync: count ticks between two tick edges about 5 s apart.
