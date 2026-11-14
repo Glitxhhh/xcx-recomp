@@ -294,12 +294,22 @@ class Emitter:
                 if r.kind != 'op' and not isinstance(r, Local) and not (last and r.kind in ('bl', 'b', 'bcond', 'ret')):
                     w = words[j]
                     raise patches.PatchError(f'{a:#x}: replacement word {w:08x} is a {r.kind}')
-            if any(isinstance(r, Local) for r in lifted):
-                r = lifted[-1]
-                if not isinstance(r, Local) and r.kind == 'bcond' and flags.effect(r.cond)[0]:
-                    raise patches.PatchError(f'{a:#x}: a self-contained replacement ends in a branch on its flags')
             out.append(lifted)
         return out
+
+    def packed(self, ins, a):
+        """Whether the site a carries its flags through c->nzcv: it has a self-contained alternative (a code cave with
+        its own branches, lifted on c->nzcv as the guest keeps flags) and the flags matter across it, as the original
+        instruction or the alternative's last word uses them. patch() then copies the function's flags into c->nzcv
+        before the alternatives and back into F.nz after them, and the site counts as reading and writing packed
+        flags (patched_effect)."""
+        alts = self.replacements(a)
+        if not any(isinstance(r, Local) for words in alts for r in words):
+            return False
+        own = flags.effect(ins.cond) if ins.kind == 'bcond' else flags.effect(ins.code or '')
+        last = [w[-1] for w in alts if any(isinstance(r, Local) for r in w)]
+        return bool(own[0] or own[1] or any(r.kind == 'bcond' and not isinstance(r, Local) and flags.effect(r.cond)[0]
+                                            for r in last))
 
     def flow(self, insns, entry, end, tables):
         """Successors of each instruction inside the function [entry, end). Index len(insns) stands for falling
@@ -360,13 +370,14 @@ class Emitter:
         """Flag effect of a patched site: every alternative (the original and each replacement) must write the same
         flags, in at most one word each; the site reads flags when any alternative does (a b.cond reads them)."""
         alts = []
+        if self.packed(ins, a):
+            # every alternative runs on c->nzcv, the flags copied in before and out after (patch()): one packed read
+            # and write. A call in the site would come between the cave's flags and the copy out.
+            if ins.kind == 'bl' or any(w[-1].kind == 'bl' for w in self.replacements(a)):
+                raise patches.PatchError(f'{a:#x}: a patched call whose site carries flags')
+            return True, 'nz'
+        # a self-contained alternative that is not packed keeps its flags in c->nzcv: the function's pass it untouched
         mine = [w for w in self.replacements(a) if not any(isinstance(r, Local) for r in w)]
-        if len(mine) < len(self.patched[a]):
-            # a self-contained alternative keeps its flags in c->nzcv (patch() lifts it so): the function's flags pass
-            # it untouched, which is right only where the original instruction leaves them alone too
-            own = flags.effect(ins.cond) if ins.kind == 'bcond' else flags.effect(ins.code or '')
-            if own[0] or own[1]:
-                raise patches.PatchError(f'{a:#x}: a self-contained replacement of an instruction that uses flags')
         for words in [[ins]] + mine:
             fx = [flags.effect(w.code or '') if w.kind == 'op' else flags.effect(w.cond) for w in words
                   if w.kind in ('op', 'bcond')]
@@ -467,14 +478,26 @@ class Emitter:
             """An op of a self-contained alternative: its flags in c->nzcv, as the guest keeps them."""
             return f'{spill}{code}{reload}' if regs.ESCAPE.search(code) else code
 
-        def one(i, r, a, local=None):
-            """C of one lifted word of a patched site. local: the label prefix of a self-contained alternative."""
+        def one(i, r, a, local=None, out=''):
+            """C of one lifted word of a patched site. local: the label prefix of a self-contained alternative. out: in
+            a packed site (Emitter.packed), the copy of c->nzcv into F before a branch out of it (' ' when the function
+            has no F); its words then all run on c->nzcv."""
             if local is not None:
                 if isinstance(r, Local):
                     to = f'goto {local}{r.to};'
                     return to if r.kind == 'b' else f'if ({r.cond}) {{ {to} }}'
                 if r.kind == 'op':
                     return raw(r.code)
+            if out:
+                if r.kind == 'op':
+                    return raw(r.code)
+                if r.kind == 'b':
+                    return f'{out} {jump(r.target, i)}'
+                if r.kind == 'bcond':
+                    return f'if ({r.cond}) {{ {out} {jump(r.target, i)} }}'
+                if r.kind == 'ret':
+                    return f'{spill}return;'
+                raise patches.PatchError(f'{a:#x}: packed site word is a {r.kind}')
             if r.kind == 'op':
                 return op(i, r.code)
             if r.kind == 'bl':
@@ -491,21 +514,32 @@ class Emitter:
             """if (switch) { replacement } else if ... else { original } for a patched site (recomp/patches.py)."""
             if ins.kind not in ('op', 'bl', 'b', 'bcond'):
                 raise patches.PatchError(f'{a:#x}: patched instruction is a {ins.kind}')
-            line = '   '
+            pack = self.packed(ins, a)
+            # a packed site: the function's flags into c->nzcv, every alternative on them, then back into F.nz (none of
+            # it when the function keeps its flags in c->nzcv anyway)
+            on_f = pack and fp and fp.used
+            out = 'F.nz = c->nzcv;' if on_f else ' ' if pack else ''
+            line = f'    c->nzcv = fnz_{fp.reader[i]}(&F);' if on_f and fp.reader[i] else '   '
             for (k, _), words in zip(self.patched[a], self.replacements(a)):
                 if any(isinstance(r, Local) for r in words):   # labels P_<site>_<set>_<word>
                     local = f'P_{a:x}_{k}_'
                     to = {r.to for r in words if isinstance(r, Local)}
-                    text = ' '.join((f'{local}{j}:; ' if j in to else '') + one(i, r, a, local)
+                    text = ' '.join((f'{local}{j}:; ' if j in to else '') +
+                                    one(i, r, a, local, out)
                                     for j, r in enumerate(words))
                     if len(words) in to:
                         text += f' {local}{len(words)}:;'
                 else:
-                    text = ' '.join(one(i, r, a) for r in words)
+                    text = ' '.join(one(i, r, a, None, out) for r in words)
+                if on_f and words[-1].kind not in ('b', 'ret'):
+                    text += f' {out}'
                 line += f' if (rt_patch_on[{k}]) {{ {text} }} else'
             self.uses_patches = True
             self.stats['patched_sites'] += 1
-            return f'{line} {{ {one(i, ins, a)} }}'
+            orig = one(i, ins, a, None, out)
+            if on_f and ins.kind != 'b':
+                orig += f' {out}'
+            return f'{line} {{ {orig} }}'
 
         body = []   # (instruction index or None for a label, line); a line belongs to the instruction it lifts
 

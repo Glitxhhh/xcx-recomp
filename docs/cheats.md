@@ -20,8 +20,6 @@ setup run. Values a cheat set stay where they are when it is switched off.
 Silver Chests Always and Gold Chests Always carry a warning: during a mission they can turn the chest that holds the
 mission's key item into another one, and the mission then cannot be finished on that save. Use them in free play only.
 
-A few of them cannot be built in yet and show as unavailable, with the reason: see "Code cheats" below.
-
 ## Cheat files
 
 Cheats come in the Atmosphere text format, in the mods folder (`mods` next to `xcx.exe`, or `XCX_MOD_DIR`):
@@ -59,14 +57,15 @@ instead: `tools/cheats.py` turns each one into a patch set that the Cheats tab s
 - Put the cheat file in `mods/<name>/cheats/`, then run the setup again (Install or Update). It rebuilds the game with
   the cheats in; that takes a few minutes. A cheat added or edited later shows "needs the setup again" until then.
 - Cheats that branch into a code cave (a "MUST BE ON" section that writes code past `main`) are supported: the cave's
-  code is built in at the cheat's site, with its own branches (if/else, loops, more than one way back) and a call or a
-  jump back out as its last instruction. Its compares keep their flags to themselves, so the instruction the cheat
-  replaces must not set or read flags.
+  code is built in at the cheat's site, with its own branches (if/else, loops, more than one way back), `adrp`, and a
+  call or a jump back out as its last instruction. A cave that ends by calling a function of the build it was written
+  for, in place of the call it replaced, calls this build's function instead (Max Arts and Skills).
 - Button cheats (`8` opcode around the code writes) act only while their buttons are held.
-- Some cheats can't be built in yet, and the tab greys them out with the reason: cheats that mix code changes with
-  data written by the interpreter or with button conditions around data, caves that replace an instruction whose flags
-  the game reads after it (Robot Appendages), caves that use `adrp` or a call in the middle, and caves that
-  call an address outside this version's code (Max Arts and Skills, whose call is to another build's function).
+- Cheats that mix code changes with other opcodes (button conditions, data the cave and the cheat share, such as
+  Hover or the item cheats on ZL + ZR) run in the interpreter, which keeps their code changes aside: each state of the
+  code they can write is a patch set, and the one that matches what the cheat last wrote is on.
+- A cheat the setup can't build in shows as unavailable, with the reason: a call in the middle of a cave, or code
+  changes with too many states.
 - Two cheats that change the same instruction (such as hp inf and tp inf) can't both act: the first one in the file
   wins.
 - The setup lists what it built in `build-cache/cheats.status` next to `xcx.exe`.
