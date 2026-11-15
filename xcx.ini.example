@@ -141,7 +141,8 @@
 # grass_distance = 1
 # How many metres further from the camera trees, bushes, rocks and other map objects switch to their detailed models:
 # 0 (the game's distances, under 5 to about 50 m depending on the object), 10, 20, 30, 50, 75, 100, 150, 200, 300,
-# 500, 750 or 1000. Higher values cost some CPU time per frame. Changes take effect at once.
+# 500, 750 or 1000. Those are the menu's steps; here any value from 0 to 1000 works. Higher values cost some CPU
+# time per frame. Changes take effect at once.
 # object_lod_range = 0
 
 # HDR output: hdr = 1 sends the picture as HDR10 (needs HDR on in Windows, "Use HDR", or a Wayland compositor with
