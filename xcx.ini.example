@@ -139,6 +139,10 @@
 # How far from the camera grass loads and is drawn: 1 (the game's ranges, 10 to 90 m per grass layer), 1.5, 2 or 3.
 # Changes take effect at once.
 # grass_distance = 1
+# How far from you the crowd people (the walkers in NLA) appear and fade out: 1 (the game's distances, about 25 m),
+# 1.5, 2, 3 or 4. Turn on replay_async = 1 before raising it: without it the extra people slow busy places a lot (in
+# the Commercial District at 4x, about 66 instead of 90 fps). Changes take effect at once.
+# crowd_distance = 1
 
 # HDR output: hdr = 1 sends the picture as HDR10 (needs HDR on in Windows, "Use HDR", or a Wayland compositor with
 # colour management; without it the picture stays SDR). The game's tonemap keeps highlights up to hdr_peak_nits (your
