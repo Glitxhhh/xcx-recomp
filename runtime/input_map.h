@@ -91,6 +91,18 @@ void input_map_stick(const uint8_t down[KEY_COUNT], int stick, int32_t out[2]);
 // Mouse motion in raw counts over dt_s seconds to right-stick deflection: full deflection at 3000 / sens counts/s.
 // Clamped to the unit circle, up (negative dy) is +y.
 void input_mouse_stick(int32_t dx, int32_t dy, double dt_s, float sens, int32_t out[2]);
+// A gamepad stick's raw SDL axes (x right, y down, -32768..32767) to the stick the game sees (up is +y). The resting
+// offset cx, cy (raw units, XCX_STICK_CENTER_*) is taken off and the deflection stretched so the edge still reads full,
+// then the deadzone dead (0..0.9 of full deflection, XCX_STICK_DEADZONE_*) applies in one of two shapes
+// (XCX_STICK_DEADZONE_SHAPE):
+// - round 0: each axis on its own reads 0 under dead * 32767 and passes unchanged above it, the runtime's original
+//   behaviour (at 0.0763, 2500 of 32767, with no offset the output is the original one exactly);
+// - round 1: the stick's distance from center reads 0 under dead, the rest is stretched from 0 to full deflection and
+//   clamped to the unit circle.
+// Pure.
+void input_stick_shape(int32_t x, int32_t y, int32_t cx, int32_t cy, float dead, int round, int32_t out[2]);
+// "x,y" (XCX_STICK_CENTER_*) to a resting offset, each clamped to +-16384; 0, 0 and returns 0 for NULL, "" or a bad value.
+int input_stick_center_parse(const char *s, int32_t *cx, int32_t *cy);
 
 // ---- the remapping rows' edits, on a copy of input_map. Pure.
 // action's keys (table order) / its gamepad buttons in layout, at most max; returns how many.

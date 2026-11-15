@@ -134,6 +134,12 @@ int probe_cfg(void) {
     CHECK(m && EQ(m->def, "1") && m->live, "meta: fps60 defaults to 1 and is live");
     m = cfg_meta("ASYNC_PREEMPT");
     CHECK(m && EQ(m->values, "0|1|2") && !m->live, "meta: async_preempt takes 0|1|2 and needs a restart");
+    m = cfg_meta("STICK_DEADZONE_L");
+    CHECK(m && EQ(m->def, "7.63") && EQ(m->values, "0..40") && m->live, "meta: stick deadzone is 7.63 by default, 0..40, live");
+    m = cfg_meta("STICK_DEADZONE_SHAPE");
+    CHECK(m && EQ(m->def, "axis") && EQ(m->values, "axis|round") && m->live, "meta: deadzone shape is per axis by default, live");
+    m = cfg_meta("STICK_CENTER_R");
+    CHECK(m && EQ(m->def, "") && m->live, "meta: stick center has no default and is live");
     m = cfg_meta("xcx_vk_present");
     CHECK(m && EQ(m->key, "VK_PRESENT") && EQ(m->values, "mailbox|fifo|immediate") && m->live,
           "meta: prefix and case are accepted");
@@ -261,6 +267,46 @@ int probe_cfg(void) {
     CHECK((int64_t)st[0] * st[0] + (int64_t)st[1] * st[1] <= 32768ll * 32768, "mouse: clamped to the unit circle");
     input_mouse_stick(30, 0, 1.0 / 60, 0, st);
     CHECK(st[0] == 0 && st[1] == 0, "mouse: sensitivity 0 is off");
+    // Gamepad sticks (input_map.c). Per axis at 7.63 % with no offset is the runtime's original cut, raw value for value.
+    {
+        static const int32_t raw[] = {-32768, -32767, -20000, -2501, -2500, -2499, -1, 0, 1, 2499, 2500, 2501, 20000, 32767};
+        int same = 1;
+        for (unsigned i = 0; i < sizeof raw / sizeof *raw; i++)
+            for (unsigned j = 0; j < sizeof raw / sizeof *raw; j++) {
+                int32_t ox = raw[i] < -32767 ? -32767 : raw[i], oy = raw[j] < -32767 ? -32767 : raw[j];
+                ox = ox > -2500 && ox < 2500 ? 0 : ox;
+                oy = oy > -2500 && oy < 2500 ? 0 : -oy;
+                input_stick_shape(raw[i], raw[j], 0, 0, 0.0763f, 0, st);
+                same &= st[0] == ox && st[1] == oy;
+            }
+        CHECK(same, "stick: per axis at the default is the original cut (|axis| < 2500 is 0, the rest unchanged)");
+    }
+    input_stick_shape(3000, 30000, 3000, 0, 0.0763f, 0, st);
+    CHECK(st[0] == 0 && st[1] == -30000, "stick: per axis, a calibrated center takes the offset off that axis only");
+    input_stick_shape(32767, 0, 3000, 0, 0.0763f, 0, st);
+    CHECK(st[0] == 32767, "stick: per axis, with a center offset the near edge still reaches full deflection");
+    input_stick_shape(2400, 0, 0, 0, 0.0763f, 1, st);
+    CHECK(st[0] == 0 && st[1] == 0, "stick: round, inside the deadzone is center");
+    input_stick_shape(2000, 2000, 0, 0, 0.0763f, 1, st);
+    CHECK(st[0] > 0 && st[1] < 0, "stick: round (each axis under the deadzone, the length past it, moves)");
+    input_stick_shape(2000, 2000, 0, 0, 0.0763f, 0, st);
+    CHECK(st[0] == 0 && st[1] == 0, "stick: per axis, the same diagonal is center");
+    input_stick_shape(32767, 0, 0, 0, 0.0763f, 1, st);
+    CHECK(st[0] == 32767 && st[1] == 0, "stick: round, the edge is still full deflection");
+    input_stick_shape(0, -32768, 0, 0, 0.0763f, 1, st);
+    CHECK(st[0] == 0 && st[1] == 32767, "stick: round, SDL up (negative y) is stick up");
+    input_stick_shape(2700, 0, 0, 0, 0.0763f, 1, st);
+    CHECK(st[0] > 0 && st[0] < 1000, "stick: round, just past the deadzone starts small, not at the deadzone's size");
+    input_stick_shape(3000, -1000, 3000, -1000, 0.0763f, 1, st);
+    CHECK(st[0] == 0 && st[1] == 0, "stick: round, resting at the calibrated center is center");
+    input_stick_shape(32767, 0, 3000, 0, 0.0763f, 1, st);
+    CHECK(st[0] == 32767, "stick: round, with a center offset the near edge still reaches full deflection");
+    input_stick_shape(100, 0, 0, 0, 0, 1, st);
+    CHECK(st[0] == 100, "stick: deadzone 0 passes the stick through");
+    int32_t cx, cy;
+    CHECK(input_stick_center_parse(" 1200 , -300 ", &cx, &cy) && cx == 1200 && cy == -300, "stick center: x,y parses");
+    CHECK(!input_stick_center_parse("1,2,3", &cx, &cy) && cx == 0 && cy == 0, "stick center: a bad value is no offset");
+    CHECK(input_stick_center_parse("99999,-99999", &cx, &cy) && cx == 16384 && cy == -16384, "stick center: clamped");
     // Gamepad layouts (input_map.c)
     CHECK(input_pad_layout_pick("auto", 1) == PAD_LAYOUT_NINTENDO && input_pad_layout_pick(NULL, 0) == PAD_LAYOUT_XBOX,
           "pad layout: automatic is Nintendo for an east button labelled A, Xbox otherwise");

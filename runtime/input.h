@@ -19,6 +19,10 @@ void input_menu(int open);
 int input_menu_gate(int *held, int menu_open, uint64_t *buttons, int32_t sticks[4]);
 int input_overlay_gate(int *held, uint64_t *buttons);   // L3+R3: 1 in the poll both go down
 int input_pad_read(uint64_t *buttons, int32_t *lx, int32_t *ly);
+// The Controls tab's stick view and calibration: the open gamepad's raw stick axes (lx, ly, rx, ry as SDL reports them,
+// y down) and the sticks the game sees after XCX_STICK_DEADZONE_* and XCX_STICK_CENTER_* (lx, ly, rx, ry, up +y).
+// 0 and zeros without a connected gamepad. Any thread.
+int input_pad_sticks(int16_t raw[4], int32_t shaped[4]);
 // The gamepad layout in effect (PAD_LAYOUT_*, input_map.h; XCX_PAD_LAYOUT, live); -1 without a gamepad. Any thread.
 int input_pad_layout(void);
 // The label on a face button of the open gamepad (input_map.h PAD_SOUTH..PAD_NORTH, as SDL reports it); PAD_LABEL_NONE for another

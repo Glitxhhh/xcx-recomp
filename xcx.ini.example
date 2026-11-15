@@ -196,6 +196,17 @@
 # glyph_appearance = colored
 # Mouse camera sensitivity (0 to 10; 0 = no mouse camera and no cursor capture).
 # mouse_sens = 1
+# Gamepad stick deadzones in percent of full deflection (Controls tab; 0 to 40; 7.63 = 2500 of 32767, the original).
+# Raise one if the character keeps walking or the camera keeps turning after you let go of a drifting stick.
+# stick_deadzone_l = 7.63
+# stick_deadzone_r = 7.63
+# The deadzone's shape for both sticks: axis (each axis cut on its own, unchanged past it; the original) or round (the
+# distance from center, and the stick starts from 0 past it).
+# stick_deadzone_shape = axis
+# Where each stick rests, "x,y" in raw SDL units (-16384 to 16384; y down), taken off before the deadzone. The Controls
+# tab's Calibrate stick centers writes these; unset = the controller's own center.
+# stick_center_l = 0,0
+# stick_center_r = 0,0
 # Write the input of this run to a file that replays as a script (docs/controls.md, "Scripted input"). Default: off.
 # input_record = input.txt
 # Remap buttons: the Controls tab of the settings menu (F1) writes these lines. One line per Switch button or stick

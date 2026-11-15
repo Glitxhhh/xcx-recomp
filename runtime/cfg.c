@@ -47,7 +47,7 @@ static const char *const known[] = {
     "RENDER_SCALE", "REPLAY_ASYNC", "RES_BUFFER",
     "REPLAY_CHECK", "RESOLVE_CHECK", "ROMFS", "ROMFS_INDEX", "ROMFS_MMAP", "ROMFS_MODS", "ROMFS_PATCHES",
     "ROMFS_PROOF_DIR", "ROMFS_VERIFY", "RUMBLE", "RUMBLE_CURVE", "RUMBLE_STRENGTH", "RUMBLE_TRIGGERS", "SHADER_CACHE",
-    "SHADER_MEMO", "SHARED_FONTS", "SHARPNESS", "SHOTS", "SHOTS_DIR", "SHOTS_FULL", "SPEED_PROBE", "SPIN", "SPIN_HANDOFF_US", "SPLIT_DRAWS", "SUBMIT_WAIT", "SPLIT_US", "SWKBD_ANSWER",
+    "SHADER_MEMO", "SHARED_FONTS", "SHARPNESS", "SHOTS", "SHOTS_DIR", "SHOTS_FULL", "SPEED_PROBE", "SPIN", "SPIN_HANDOFF_US", "SPLIT_DRAWS", "STICK_CENTER_L", "STICK_CENTER_R", "STICK_DEADZONE_L", "STICK_DEADZONE_R", "STICK_DEADZONE_SHAPE", "SUBMIT_WAIT", "SPLIT_US", "SWKBD_ANSWER",
     "SWKBD_TEST", "TEST_PREPARE_SHADERS", "TEX_ALIAS", "TEX_MEMO", "TIMER_1MS", "TRACE", "UBO_SNAPSHOT", "UI_FIT", "UPSCALER", "VK_DYN_A2C", "VK_DYN_VERTEX", "VK_NO_FLOAT64",
     "VK_PRESENT", "VK_RECORDER", "VK_SSBO_ALIGN", "VK_SUBGROUP", "VK_SUBGROUP_PIN", "VK_VALIDATION", "VOLUME", "VRAM_HEADROOM", "VRAM_LIMIT", "VS_OUTS",
     "WINDOW_SIZE", "XLATE", "XLATE_ID", "XLATE_KEEP", "XLATE_PROCS", "ZSTD_CHECK", "ZSTD_NATIVE",
@@ -67,6 +67,7 @@ static const struct { const char *key, *section; } sections[] = {
     {"VOLUME", "audio"}, {"PAUSE_IN_BACKGROUND", "audio"}, {"CHEATS", "cheats"},
     {"MOTION", "input"}, {"RUMBLE_STRENGTH", "input"}, {"RUMBLE_CURVE", "input"}, {"RUMBLE_TRIGGERS", "input"},
     {"GLYPH_STYLE", "input"}, {"GLYPH_APPEARANCE", "input"}, {"PAD_LAYOUT", "input"}, {"MOUSE_SENS", "input"}, {"INPUT_RECORD", "input"},
+    {"STICK_DEADZONE_L", "input"}, {"STICK_DEADZONE_R", "input"}, {"STICK_DEADZONE_SHAPE", "input"}, {"STICK_CENTER_L", "input"}, {"STICK_CENTER_R", "input"},
     {"BIND_A", "input"}, {"BIND_B", "input"}, {"BIND_X", "input"}, {"BIND_Y", "input"}, {"BIND_LCLICK", "input"},
     {"BIND_RCLICK", "input"}, {"BIND_L", "input"}, {"BIND_R", "input"}, {"BIND_ZL", "input"}, {"BIND_ZR", "input"},
     {"BIND_PLUS", "input"}, {"BIND_MINUS", "input"}, {"BIND_LEFT", "input"}, {"BIND_UP", "input"},
@@ -116,6 +117,11 @@ static const CfgMeta metas[] = {
     {"GLYPH_APPEARANCE", "colored", "standard|colored", LIVE},
     {"GLYPH_STYLE", "auto", "original|auto|playstation|xbox|steam|keyboard", LIVE},
     {"MOUSE_SENS", "1", "0..10", LIVE},
+    // gamepad sticks (input.c tune_refresh): deadzone in percent (7.63: 2500 of 32767, the runtime's original), its
+    // shape (axis: per axis, the original; round), resting offset "x,y" in raw units (unset: none)
+    {"STICK_DEADZONE_L", "7.63", "0..40", LIVE}, {"STICK_DEADZONE_R", "7.63", "0..40", LIVE},
+    {"STICK_DEADZONE_SHAPE", "axis", "axis|round", LIVE},
+    {"STICK_CENTER_L", "", NULL, LIVE}, {"STICK_CENTER_R", "", NULL, LIVE},
     {"CHEATS", "0", "0|1", LIVE},
     {"MENU_LANG", "", "en|ru", LIVE},
     // Advanced: scheduling
