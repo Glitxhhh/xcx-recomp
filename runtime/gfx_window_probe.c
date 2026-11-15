@@ -203,22 +203,22 @@ int probe_window(void) {
     }
     printf("probe-window: resized to %dx%d, presents still exact\n", w, h);
 
-    // Fullscreen (issue #148): the swapchain takes the whole monitor and comes back to the window, also when the mode
-    // flips while presents rebuild the swapchain (a resize during a rebuild used to be lost: the swapchain kept the
-    // windowed size in fullscreen). The modes go through the settings, as from the menu, and are not saved.
+    // Fullscreen (issue #148): the swapchain takes the whole monitor and comes back to the window, also when the window
+    // thread changes the mode while a present rebuilds the swapchain (a resize during a rebuild used to be lost: the
+    // swapchain kept the windowed size in fullscreen). The modes go through the settings, as from the menu, posted to
+    // the window thread at once instead of at the next present, and are not saved.
     if (!cfg_from_env("XCX_FULLSCREEN")) {
         int mw = 0, mh = 0;
         gfx_window_monitor_size(&mw, &mh);
         const char *modes[] = {"1", "0"};
         for (int round = 0; round < 2; round++) {
             for (int m = 0; m < 2; m++) {
-                cfg_set("XCX_FULLSCREEN", modes[m]);
-                // Round 0 waits for each mode; round 1 flips 8 times with one present each, then settles.
-                for (int k = 0; k < (round ? 8 : 1); k++) {
-                    if (round && k) cfg_set("XCX_FULLSCREEN", modes[(m + k) & 1]);
+                // Round 0 takes each mode once; round 1 flips 8 times, one present each, ending on the mode.
+                for (int k = round ? 7 : 0; k >= 0; k--) {
+                    cfg_set("XCX_FULLSCREEN", modes[(m + k) & 1]);
+                    gfx_window_apply_settings();
                     if (present_and_check(&s, 0, FRAMES + 20 + k, &w, &h)) return fail("presents during a mode change");
                 }
-                if (round) cfg_set("XCX_FULLSCREEN", modes[m]);
                 int ok = 0;
                 for (int i = 0; i < 120 && !ok; i++) {
                     plat_sleep_ms(10);
