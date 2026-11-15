@@ -53,6 +53,7 @@ extern const int rt_game_version;
 extern const char rt_game_name[];   // the game version shown, "2.0.0" (tools/build_game.py)
 extern const char rt_port_version[];
 int rt_grass_available(void);
+int rt_objlod_available(void);
 }
 
 // Roboto Medium (Apache-2.0, ui/fonts/LICENSE-Roboto.txt) with Latin and Cyrillic glyphs.
@@ -590,6 +591,21 @@ static void tab_screen(float scale) {
     opt_end();
 }
 
+// Object detail range (objlod.c): metres added to every map object's LOD distance. The game's own distances run from
+// under 5 m to about 50 m, so the steps are fine at the low end and coarse above.
+static void row_object_lod() {
+    static const char *const values[] = {"0", "10", "20", "30", "50", "75", "100", "150", "200", "300", "500", "750", "1000"};
+    enum { N = sizeof values / sizeof *values };
+    static char text[N][24];
+    static const char *names[N];
+    names[0] = menu_text(UI_MENU_OBJECT_LOD_ORIGINAL);
+    for (int i = 1; i < N; i++) {
+        snprintf(text[i], sizeof text[i], menu_text(UI_MENU_OBJECT_LOD_STEP), values[i]);
+        names[i] = text[i];
+    }
+    opt_choice_list("XCX_OBJECT_LOD_RANGE", UI_MENU_OBJECT_LOD, values, names, N, UI_MENU_OBJECT_LOD_DESC);
+}
+
 static void tab_game(float scale) {
     opt_begin("##game", scale);
     row_fps_limit();
@@ -599,11 +615,13 @@ static void tab_game(float scale) {
     static const UiTextId mode[] = {UI_MENU_MODE_DOCKED, UI_MENU_MODE_HANDHELD};
     opt_choice("XCX_OPERATION_MODE", UI_MENU_OPERATION_MODE, mode, 2, UI_MENU_OPERATION_MODE_DESC);
     opt_toggle("XCX_CHEATS", UI_MENU_CHEATS, UI_MENU_CHEATS_DESC);
-    if (rt_grass_available()) {   // the 2.0.0 update's grass patch set (grass.c)
-        opt_group(UI_MENU_WORLD_GROUP);
+    int grass_ok = rt_grass_available(), objlod_ok = rt_objlod_available();   // both the 2.0.0 update's (grass.c, objlod.c)
+    if (grass_ok || objlod_ok) opt_group(UI_MENU_WORLD_GROUP);
+    if (grass_ok) {
         static const UiTextId grass[] = {UI_MENU_GRASS_ORIGINAL, UI_MENU_GRASS_15, UI_MENU_GRASS_2, UI_MENU_GRASS_3};
         opt_choice("XCX_GRASS_DISTANCE", UI_MENU_GRASS, grass, 4, UI_MENU_GRASS_DESC);
     }
+    if (objlod_ok) row_object_lod();
     opt_end();
 }
 

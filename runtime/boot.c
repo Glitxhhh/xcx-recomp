@@ -360,6 +360,7 @@ void rt_frame_presented(const tex_t *t, uint64_t n) {
     crash_test(n);
     series_shot(t, n);
     rt_grass_update();
+    rt_objlod_update();
     int64_t w = cfg->seconds ? frame_step_world_us() : -1;
     if (w < 0 || (double)w < cfg->seconds * 1e6) return;
     if (cfg->shot) save_shot(t, cfg->shot);

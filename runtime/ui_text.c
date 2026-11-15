@@ -137,6 +137,12 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                            "per grass layer); higher values multiply them, so grass appears further away and its denser "
                            "layers fill in sooner. Applies at once.",
     [UI_MENU_GRASS_ORIGINAL] = "Original", [UI_MENU_GRASS_15] = "1.5x", [UI_MENU_GRASS_2] = "2x", [UI_MENU_GRASS_3] = "3x",
+    [UI_MENU_OBJECT_LOD] = "Object detail range",
+    [UI_MENU_OBJECT_LOD_DESC] = "How much further from the camera trees, bushes, rocks and other map objects switch to "
+                                "their detailed models. Original keeps the game's distances (under 5 to about 50 m, "
+                                "depending on the object); each step adds that many metres to all of them. Higher steps "
+                                "cost some CPU time per frame. Applies at once.",
+    [UI_MENU_OBJECT_LOD_ORIGINAL] = "Original", [UI_MENU_OBJECT_LOD_STEP] = "+%s m",
     [UI_MENU_SHARPNESS] = "FSR sharpness",
     [UI_MENU_SHARPNESS_DESC] = "Sharpening after FSR scaling; 0 turns it off.",
     [UI_MENU_BRIGHTNESS] = "Brightness",
@@ -473,6 +479,12 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
                            "дальше, а плотные слои заполняются раньше. Применяется сразу.",
     [UI_MENU_GRASS_ORIGINAL] = "Как в игре", [UI_MENU_GRASS_15] = "1.5x", [UI_MENU_GRASS_2] = "2x",
     [UI_MENU_GRASS_3] = "3x",
+    [UI_MENU_OBJECT_LOD] = "Дальность детализации объектов",
+    [UI_MENU_OBJECT_LOD_DESC] = "Насколько дальше от камеры деревья, кусты, камни и другие объекты карты переключаются "
+                                "на детальные модели. «Как в игре» оставляет расстояния игры (от нескольких метров до "
+                                "примерно 50 м, в зависимости от объекта); каждый шаг добавляет к ним столько метров. Высокие значения "
+                                "требуют больше времени процессора на кадр. Применяется сразу.",
+    [UI_MENU_OBJECT_LOD_ORIGINAL] = "Как в игре", [UI_MENU_OBJECT_LOD_STEP] = "+%s м",
     [UI_MENU_SHARPNESS] = "Резкость FSR",
     [UI_MENU_SHARPNESS_DESC] = "Повышение резкости после масштабирования FSR; 0 выключает его.",
     [UI_MENU_BRIGHTNESS] = "Яркость",
