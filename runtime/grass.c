@@ -8,16 +8,22 @@
 // three rings derived from a per-type distance R (1.7 R, 2.5 R and 3.3 R); their R loads are patched too, so the rings
 // grow with the cells. All of these multiply by the float at patch page +0x100.
 //
-// The scale alone leaves two pop-ins close to the camera. The fine-cell loader (main+0x996150) keeps a 30 m window of its finest cells around the camera and
-// rebuilds them as it moves; its sites read the window from page +0x104 (30 m x scale). And the shortest layer (10 m
-// in Primordia, the low fill-in grass) still ends 30 m out at 3x, so the range sites raise every scaled range to at
-// least page +0x108 (30 m x scale).
+// The scale alone leaves two pop-ins close to the camera. The fine-cell loader (main+0x996150) keeps a 30 m window of
+// its finest cells around the camera and rebuilds them as it moves; its sites read the window from page +0x104 (30 m x
+// scale). And the shortest layer (10 m in Primordia, the low fill-in grass) still ends 30 m out at 3x, so the range
+// sites raise every scaled range to at least page +0x108 (30 m x scale).
 //
 // Above 2x the cells no longer fit the grass memory, so set "grasspool" gives the grass system's cell heap 4 MiB more.
 // It is always on (the heap is made once, when the grass system starts, so it must already be large when the setting
 // is raised later); XCX_GRASS_POOL=0 is only for comparing with the game's size. 4x stops loading grass and then
-// crashes in the cell list code (main+0x993ad0) even with a much larger heap, so the setting is clamped to 0.5..3. The
-// builders read the scale every frame, so a change applies at once.
+// crashes in the cell list code (main+0x993ad0) even with a much larger heap, so the setting is clamped to 3. It is
+// not allowed below 1 either: the minimum range would then make the short fill-in layer longer than the game's while
+// every other layer got shorter. The builders read the scale every frame, so a change applies at once.
+//
+// The cell allocator (main+0x9bb130) stores a 16-bit capacity in entries at cell +0x1a, which wraps for any free block
+// over 1 MiB, the game's own 0x1c0000-byte heap included. It looks unused: the heap code keeps the real size at the
+// 32-bit +0x1c, the trim (main+0x9bb1c8) never updates +0x1a, and every 16-bit read of +0x1a in the grass code
+// (main+0x940000..0xa20000) is of another structure. So the larger heap's wrap is harmless and not the 4x crash.
 #include "cfg.h"
 #include "host.h"
 #include <stdint.h>
@@ -49,7 +55,7 @@ void rt_grass_update(void) {
 
     const char *v = cfg_get("XCX_GRASS_DISTANCE");
     float scale = v && *v ? strtof(v, NULL) : 1.0f;
-    if (!(scale >= 0.5f)) scale = 1.0f;   // also catches NaN and text that is not a number
+    if (!(scale >= 1.0f)) scale = 1.0f;   // also catches NaN and text that is not a number
     if (scale > 3.0f) scale = 3.0f;
     uint32_t word;
     memcpy(&word, &scale, sizeof word);
