@@ -230,3 +230,22 @@ site xcx60 main 5d9708 79005680 @page:x9 1e230000 bd404d21 1e211800 1e250000 790
 # 2.5 s at 120. The 300 is divided by the patch page's +0x4c (30 / frame rate) instead, so the box holds 10 s at any
 # frame rate. x9 is set here anyway and s0-s1 are free: calls come just before and the function returns after.
 site xcx60 main 7fc8d0 52802589 @page:x9 bd404d21 52802589 1e230120 1e211800 1e250009
+
+# Issues #59, #75 and #172: a crash reading address 0x4 in main+0xa31e20, in the first update of a UI layout pane soon
+# after the avatar's name entry. On its first update (bit 0x400 of +0xd4 clear) a pane builds its draw entries from a
+# table of its resource (+0xe0): main+0xa490a0 returns the table at the offset in the resource's +0x20, or null when
+# that offset is 0, and main+0xa48e30 then reads the table's count at +4 without a check. Some players hit a resource
+# whose offset is 0 there (AMD and NVIDIA GPUs, Windows and Linux; not reproduced here). With the guard on:
+# - a null table leaves the setup through its own epilogue with +0xd4 unchanged (w8 holds it for the store at
+#   main+0xa31f78), so bit 0x400 stays clear and the next update (main+0xa31890) tries again; the second site reloads
+#   x8 for the original path;
+# - the pane's draw (main+0xa30ff0), which walks those entries, returns through its early exit (main+0xa31070, the one
+#   its +0x78 virtual takes) while bit 0x400 is clear; the second site there redoes the load it replaced.
+# A pane whose setup went through updates before it draws, so it draws as before; a pane without its table stays
+# hidden until the table is there instead of crashing (with the table forced null, dialog frames, the creator's tabs
+# and the minimap are missing but the game plays on).
+set meshguard XCX_MESH_GUARD 1
+site meshguard main a31e54 f941a268 b940d668 b40008e0
+site meshguard main a31e58 f90007e0 f941a268 f90007e0
+site meshguard main a3108c f941de68 b940d668 3657ff28
+site meshguard main a31090 f9000288 f941de68 f9000288
