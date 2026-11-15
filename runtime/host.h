@@ -285,6 +285,9 @@ void rt_grass_update(void);                                // at every present: 
 int rt_grass_available(void);                              // the grass patch set exists (the 2.0.0 update)
 void rt_objlod_update(void);                               // at every present: XCX_OBJECT_LOD_RANGE (objlod.c)
 int rt_objlod_available(void);                             // the 2.0.0 update's map object settings were found
+// the automatic object detail range (objlod.c): its state for the menu; 0 when Auto is not in effect
+int rt_objlod_status(float *now_m, float *max_m, float *busy_ms, float *budget_ms);
+uint64_t perf_last_frame(uint64_t *interval_ns, uint64_t *pace_ns);   // perf.c: the last frame's interval and pacing wait
 void frame_step_init(void);                                // after rt_patches_init: the real-time step's first value
 int frame_step_realtime(void);                             // the real-time step is on: presents ignore the interval
 int frame_rate_paced(void);                                // XCX: the game runs at the frame limit (frame_rate.c)

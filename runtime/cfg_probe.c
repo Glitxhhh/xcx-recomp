@@ -139,6 +139,8 @@ int probe_cfg(void) {
     m = cfg_meta("OBJECT_LOD_RANGE");
     CHECK(m && EQ(m->def, "0") && !strncmp(m->values, "0|10|", 5) && strstr(m->values, "|1000") && m->live,
           "meta: object lod range is 0 by default, up to 1000, live");
+    m = cfg_meta("OBJECT_LOD_MODE");
+    CHECK(m && EQ(m->def, "auto") && EQ(m->values, "auto|fixed") && m->live, "meta: object lod mode is auto by default, live");
     m = cfg_meta("xcx_vk_present");
     CHECK(m && EQ(m->key, "VK_PRESENT") && EQ(m->values, "mailbox|fifo|immediate") && m->live,
           "meta: prefix and case are accepted");

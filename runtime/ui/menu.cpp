@@ -54,6 +54,7 @@ extern const char rt_game_name[];   // the game version shown, "2.0.0" (tools/bu
 extern const char rt_port_version[];
 int rt_grass_available(void);
 int rt_objlod_available(void);
+int rt_objlod_status(float *now_m, float *max_m, float *busy_ms, float *budget_ms);
 }
 
 // Roboto Medium (Apache-2.0, ui/fonts/LICENSE-Roboto.txt) with Latin and Cyrillic glyphs.
@@ -604,6 +605,20 @@ static void row_object_lod() {
         names[i] = text[i];
     }
     opt_choice_list("XCX_OBJECT_LOD_RANGE", UI_MENU_OBJECT_LOD, values, names, N, UI_MENU_OBJECT_LOD_DESC);
+    // Adjust range to frame rate (objlod.c): Auto or Fixed, a sub-row of the range shown only above Original; under
+    // Auto the value shows the range in effect
+    if (cfg_double("XCX_OBJECT_LOD_RANGE") > 0) {
+        static const UiTextId mode[] = {UI_MENU_OBJECT_LOD_AUTO, UI_MENU_OBJECT_LOD_FIXED};
+        float now = 0, max = 0, busy = 0, budget = 0;
+        static char note[32];
+        const char *shown = NULL;
+        if (rt_objlod_status(&now, &max, &busy, &budget) && now >= 0) {
+            snprintf(note, sizeof note, menu_text(UI_MENU_OBJECT_LOD_NOW), now);
+            shown = note;
+        }
+        opt_indent_next();
+        opt_choice("XCX_OBJECT_LOD_MODE", UI_MENU_OBJECT_LOD_MODE, mode, 2, UI_MENU_OBJECT_LOD_MODE_DESC, shown);
+    }
 }
 
 static void tab_game(float scale) {

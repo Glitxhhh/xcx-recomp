@@ -144,6 +144,10 @@
 # 500, 750 or 1000. Those are the menu's steps; here any value from 0 to 1000 works. Higher values cost some CPU
 # time per frame. Changes take effect at once.
 # object_lod_range = 0
+# With object_lod_range above 0: auto (the default) treats it as the most to use and lowers the range whenever frames
+# take longer than the frame limit allows (the display's refresh rate without a limit), raising it again when there is
+# time to spare; fixed always uses object_lod_range as set. Changes take effect at once.
+# object_lod_mode = auto
 
 # HDR output: hdr = 1 sends the picture as HDR10 (needs HDR on in Windows, "Use HDR", or a Wayland compositor with
 # colour management; without it the picture stays SDR). The game's tonemap keeps highlights up to hdr_peak_nits (your

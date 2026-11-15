@@ -141,8 +141,16 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_OBJECT_LOD_DESC] = "How much further from the camera trees, bushes, rocks and other map objects switch to "
                                 "their detailed models. Original keeps the game's distances (under 5 to about 50 m, "
                                 "depending on the object); each step adds that many metres to all of them. Higher steps "
-                                "cost some CPU time per frame. Applies at once.",
+                                "cost some CPU time per frame. Applies at once. With Adjust range to frame rate on "
+                                "Auto, this is the most it will use.",
     [UI_MENU_OBJECT_LOD_ORIGINAL] = "Original", [UI_MENU_OBJECT_LOD_STEP] = "+%s m",
+    [UI_MENU_OBJECT_LOD_MODE] = "Adjust range to frame rate",
+    [UI_MENU_OBJECT_LOD_MODE_DESC] = "Auto lowers the object detail range above when frames take longer than the frame "
+                                     "limit allows (the display's refresh rate when there is no limit), and raises it "
+                                     "again, up to the range set above, when there is time to spare. Fixed always uses "
+                                     "the range as set. Applies at once.",
+    [UI_MENU_OBJECT_LOD_AUTO] = "Auto", [UI_MENU_OBJECT_LOD_FIXED] = "Fixed",
+    [UI_MENU_OBJECT_LOD_NOW] = "now +%.0f m",
     [UI_MENU_SHARPNESS] = "FSR sharpness",
     [UI_MENU_SHARPNESS_DESC] = "Sharpening after FSR scaling; 0 turns it off.",
     [UI_MENU_BRIGHTNESS] = "Brightness",
@@ -483,8 +491,16 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_OBJECT_LOD_DESC] = "Насколько дальше от камеры деревья, кусты, камни и другие объекты карты переключаются "
                                 "на детальные модели. «Как в игре» оставляет расстояния игры (от нескольких метров до "
                                 "примерно 50 м, в зависимости от объекта); каждый шаг добавляет к ним столько метров. Высокие значения "
-                                "требуют больше времени процессора на кадр. Применяется сразу.",
+                                "требуют больше времени процессора на кадр. Применяется сразу. Если «Подстройка под "
+                                "частоту кадров» в режиме «Авто», это наибольшее значение, которое она использует.",
     [UI_MENU_OBJECT_LOD_ORIGINAL] = "Как в игре", [UI_MENU_OBJECT_LOD_STEP] = "+%s м",
+    [UI_MENU_OBJECT_LOD_MODE] = "Подстройка под частоту кадров",
+    [UI_MENU_OBJECT_LOD_MODE_DESC] = "«Авто» уменьшает дальность детализации объектов, когда кадр занимает больше "
+                                     "времени, чем позволяет ограничение частоты кадров (без ограничения — частота "
+                                     "обновления экрана), и снова увеличивает её до заданного выше значения, когда "
+                                     "время есть. «Фиксированная» всегда использует заданное значение. Применяется сразу.",
+    [UI_MENU_OBJECT_LOD_AUTO] = "Авто", [UI_MENU_OBJECT_LOD_FIXED] = "Фиксированная",
+    [UI_MENU_OBJECT_LOD_NOW] = "сейчас +%.0f м",
     [UI_MENU_SHARPNESS] = "Резкость FSR",
     [UI_MENU_SHARPNESS_DESC] = "Повышение резкости после масштабирования FSR; 0 выключает его.",
     [UI_MENU_BRIGHTNESS] = "Яркость",
