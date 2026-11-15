@@ -231,6 +231,15 @@ site xcx60 main 3f4a8c 71400508 @page:x9 bd404d20 52a8b009 1e270121 1e210800 1e2
 # follows it, held each 30 fps key for several frames and then jumped (Doug's Skell flight). The blend takes
 # t - floor(t) (s9 - s8), as the plain path does; s1 is written there and only read by the fmadd after it.
 site xcx60 main 3f4fd4 1e283821 1e283921
+# The eye blink (#106: faces blinked four times as often at 120 fps, and each blink was shorter). A blink controller is a
+# state machine of per-update callbacks: main+0x2b95ec sets the open-eye wait at +0x28 to rand(60) + 60, main+0x2b9658
+# takes 1 off it per update and at 0 closes the eyes (main+0x2b91c0) and sets +0x28 to the closed hold +0x2c + 1 (4 /
+# the blink speed, set by main+0x2b9548), and main+0x2b96b8 takes 1 off that and opens them. Both counts are 30 fps
+# frames. Each is divided by the patch page's +0x4c (30 / frame rate), rounded, where it is stored, so a wait lasts 2 to
+# 4 s and a blink its console length at any frame rate. x8 is written by the original at the first site, x10 is unused
+# in the rest of main+0x2b9658's function, and s0-s1 are free at both: the functions return without reading them.
+site xcx60 main 2b9608 1100f008 @page:x8 bd404d01 1100f008 1e220100 1e211800 1e200008
+site xcx60 main 2b969c 11000508 @page:x10 bd404d41 11000508 1e220100 1e211800 1e200008
 
 # The HUD's text windows (#116: the yellow tips at the lower left, among others): opening one (main+0x5d870c,
 # main+0x5d8ebc, main+0x5d966c) stores its data row's DispTime column, a count of 30 fps frames, at +0x2a of the window,
