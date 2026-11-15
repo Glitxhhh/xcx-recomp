@@ -827,6 +827,10 @@ static void tab_advanced(float scale) {
     static const UiTextId preempt[] = {UI_MENU_PREEMPT_OFF, UI_MENU_PREEMPT_ON, UI_MENU_PREEMPT_INHERIT};   // 0|1|2
     opt_choice("XCX_ASYNC_PREEMPT", UI_MENU_ASYNC_PREEMPT, preempt, 3, UI_MENU_ASYNC_PREEMPT_DESC);
     opt_toggle("XCX_REPLAY_ASYNC", UI_MENU_REPLAY_ASYNC, UI_MENU_REPLAY_ASYNC_DESC);
+    if (cfg_bool("XCX_REPLAY_ASYNC")) {   // a sub-row: the snapshot exists only with the replay on its own thread
+        opt_indent_next();
+        opt_toggle("XCX_MIRROR_COW", UI_MENU_MIRROR_COW, UI_MENU_MIRROR_COW_DESC);
+    }
     opt_toggle("XCX_FREE_CORES", UI_MENU_FREE_CORES, UI_MENU_FREE_CORES_DESC);
     opt_toggle("XCX_TIMER_1MS", UI_MENU_TIMER_1MS, UI_MENU_TIMER_1MS_DESC);
     opt_toggle("XCX_FAST_CORES", UI_MENU_FAST_CORES, UI_MENU_FAST_CORES_DESC);

@@ -25,6 +25,8 @@ void opt_focus_first(void);
 void opt_focus_key(const char *key);
 // The next row is greyed out like one the environment fixes, with note under its label and in its description.
 void opt_disable_next(UiTextId note);
+// The next row is a sub-row of the one above: indented, with a connector from the row above to its left edge.
+void opt_indent_next(void);
 
 // Page text that is not a row: a group heading in the accent colour, a wrapped paragraph (warn: the warning colour).
 void opt_group(UiTextId title);

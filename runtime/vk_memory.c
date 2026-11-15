@@ -494,6 +494,8 @@ static void flag_names(uint32_t f, char *buf, size_t n) {
 static void dirty_frame(uint64_t frame);
 
 static void mirror_log(uint64_t frame);
+static void cow_log(uint64_t frame);
+static int cow_on;
 static void shadow_log(uint64_t frame);
 static int dead_pending(void);
 
@@ -505,6 +507,7 @@ void vk_mem_census(uint64_t frame) {
     if ((rt_trace & RT_TRACE_PERF) && !vk_mirror_on) dirty_frame(frame);
     if ((rt_trace & RT_TRACE_PERF) ? frame % 60 == 0 : frame == 600 || frame == 1800)
         mirror_log(frame), shadow_log(frame);   // mirror_log also logs the write-watch line
+    if (cow_on && frame % 600 == 0) cow_log(frame);
     if (frame == 1200) {   // loading is over: the first window starts here
         for (int c = 0; c < VK_MCLS_N; c++)
             for (int u = 0; u < VK_MUSE_N; u++) plat_xchg64(&traffic[c][u], 0);
@@ -1272,6 +1275,16 @@ static void mirror_mode(int discrete) {
 #endif
     if (shadow_on) rt_log("mem: shadow storage: CPU-visible pools are host-visible copies of guest memory, not imports%s",
                           sh && *sh ? " (XCX_SHADOW)" : "");
+    if (vk_mirror_on && vk_replay_async() && cfg_bool("XCX_MIRROR_COW")) {
+        const char *bk = cfg_get("XCX_MIRROR_COW_BLOCK"), *mb = cfg_get("XCX_MIRROR_COW_MIB");
+        int kib = bk && *bk ? atoi(bk) : 64, shift = 12;
+        while (shift < 21 && (1 << (shift - 10)) < kib) shift++;
+        uint64_t mib = mb && *mb ? strtoull(mb, NULL, 0) : 256;
+        mem_cow_init(shift, mib << 20);
+        cow_on = mem_cow_on();
+        rt_log("mem: copy-on-write snapshot %s: %d KiB blocks, %llu MiB for saved copies", cow_on ? "on" : "off (no arena)",
+               1 << (shift - 10), (unsigned long long)mib);
+    }
     rt_log("mem: mode %s (%s): %s", mode == 2 ? "verify" : mode ? "mirror" : "import", why,
            mode ? "pools used as buffers get a device-local mirror" : "every CPU-visible pool is imported host memory");
 }
@@ -1455,6 +1468,224 @@ static void mirror_retire(void *arg) {
     destroy_rec(vk_ctx(), arg);
 }
 
+// ---- copy-on-write snapshot (XCX_REPLAY_ASYNC)
+// The replay records a submission up to a frame after the game submitted it, and the game rewrites vertex and storage
+// data for the next frame meanwhile (from about 14 ms after the submit), so a sync that copies those pages late puts
+// next-frame bytes into this frame's mirror: vertices explode for a frame at the start of camera pans in busy places.
+// At each submit vk_mem_cow_submit makes the whole blocks of the recently synced mirrored pools in recently written
+// regions read-only (memory.c mem_cow_protect); a write before the replay recorded that submission saves the block
+// first. mirror_sync then reads the pages it copies through mem_cow_read into staging buffers, as of its submission,
+// and the prologue copies them after the live copies (first uses, flushed ranges: those stay live and late, as the
+// bytes write-watch never reports arrive there). A page that came from a saved copy is stamped again, so the next
+// submission's sync copies its newer bytes. XCX_MIRROR_COW=1 (Advanced tab, a sub-row of the replay thread toggle,
+// off by default like the replay thread) turns it on; XCX_MIRROR_COW_BLOCK (KiB, 4..2048, default 64) and
+// XCX_MIRROR_COW_MIB (the saved-copy arena, default 256) size it.
+#define COW_RECENT 4     // a pool synced by one of the last this many replayed submissions is protected
+#define COW_WRITTEN 8    // in its regions stamped within this many submissions
+#define STG_CHUNK (8ull << 20)
+typedef struct CowStg { struct CowStg *next; VkBuffer buf; VmaAllocation alloc; uint8_t *map; uint64_t used; } CowStg;
+typedef struct { PoolRec *r; CowStg *st; uint64_t src, off, size; } CowRange;
+static uint32_t cow_cur;                 // replay: the copy-on-write number of the submission being recorded, 0 none
+static CowStg *stg_free, *stg_cur, *stg_used;   // stg_lock; replay: the current chunk; chunks used this submission
+static PlatMutex stg_lock = PLAT_MUTEX_INIT;
+static CowRange *cow_sp;                    // replay: staged copies for the next prologue
+static int ncow_sp, ccow_sp;
+static MRange *cowq, *cows;              // replay: mirror_sync's pages to read; those read from saved copies
+static int ncowq, ccowq, ncows, ccows;
+// The GPU write-backs (vk_mem_mirror_end) of the last WB_KEEP recorded submissions, a ring. A staged copy read on the
+// CPU (saved or protected bytes) may predate one landing in guest memory, while the mirror already holds the GPU's own
+// result, so cow_stage leaves those byte ranges out and stamps their pages for the next sync.
+#define WB_KEEP 2
+static struct { MRange *r; int n, cap; } wb_hist[WB_KEEP];
+static int wb_hist_i;
+static volatile int64_t cow_wb_skips, cow_stage_ns;   // write-back cuts; replay time in cow_stage
+static volatile int64_t cow_pool_wait, cow_sub_n, cow_sub_ns, cow_rd[3], cow_rd_bytes, cow_nostg, stg_chunks;
+
+static CowStg *stg_get(void) {
+    plat_mutex_lock(&stg_lock);
+    CowStg *s = stg_free;
+    if (s) stg_free = s->next;
+    plat_mutex_unlock(&stg_lock);
+    if (s) return s->used = 0, s->next = NULL, s;
+    s = calloc(1, sizeof *s);
+    if (!s) rt_fatal("vk: out of memory (mirror staging)");
+    VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = STG_CHUNK,
+                             .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT};
+    VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
+                                  .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                                           VMA_ALLOCATION_CREATE_MAPPED_BIT};
+    VmaAllocationInfo info;
+    if (vmaCreateBuffer(vk_ctx()->vma, &bi, &ai, &s->buf, &s->alloc, &info) != VK_SUCCESS) { free(s); return NULL; }
+    s->map = info.pMappedData;
+    plat_inc64(&stg_chunks);
+    return s;
+}
+
+static void stg_put(void *arg) {   // completion thread: a submission's chunks, linked
+    CowStg *s = arg;
+    plat_mutex_lock(&stg_lock);
+    while (s) {
+        CowStg *n = s->next;
+        s->next = stg_free, stg_free = s;
+        s = n;
+    }
+    plat_mutex_unlock(&stg_lock);
+}
+
+// Replay: n bytes (n <= the block size) of staging space, NULL when none can be had.
+static uint8_t *stg_take(uint64_t n, CowStg **st, uint64_t *off) {
+    if (!stg_cur || stg_cur->used + n > STG_CHUNK) {
+        if (stg_cur) stg_cur->next = stg_used, stg_used = stg_cur;
+        stg_cur = stg_get();
+        if (!stg_cur) return NULL;
+    }
+    *st = stg_cur, *off = stg_cur->used;
+    stg_cur->used += (n + 15) & ~15ull;
+    return stg_cur->map + *off;
+}
+
+uint32_t vk_mem_cow_submit(void) {
+    if (!cow_on) return 0;
+    uint64_t t0 = qpc();
+    plat_mutex_lock_shared(&pool_lock);
+    plat_add64(&cow_pool_wait, (int64_t)(qpc() - t0));
+    uint32_t s = mem_cow_begin();
+    uint32_t ms = __atomic_load_n(&msub, __ATOMIC_RELAXED), ep = __atomic_load_n(&ww_ep, __ATOMIC_RELAXED);
+    for (int i = 0; i < nm; i++) {
+        const PoolRec *r = mlist[i];
+        if (ms - __atomic_load_n(&r->acc_sub, __ATOMIC_RELAXED) >= COW_RECENT) continue;
+        uint64_t lo = r->import_lo, hi = r->import_hi;
+        for (uint64_t k = lo >> SNAP_SHIFT; k <= (hi - 1) >> SNAP_SHIFT; k++) {
+            if (ep - __atomic_load_n(&reg_last[k], __ATOMIC_RELAXED) >= COW_WRITTEN) continue;
+            uint64_t a = k << SNAP_SHIFT, b = a + (1ull << SNAP_SHIFT);
+            mem_cow_protect(a > lo ? a : lo, b < hi ? b : hi);
+        }
+    }
+    mem_cow_end();
+    plat_mutex_unlock_shared(&pool_lock);
+    plat_inc64(&cow_sub_n);
+    plat_add64(&cow_sub_ns, (int64_t)(qpc() - t0));
+    return s;
+}
+
+void vk_mem_cow_use(uint32_t s) { cow_cur = cow_on ? s : 0; }
+
+void vk_mem_cow_done(uint32_t s) {
+    if (!cow_on || !s) return;
+    cow_cur = 0;
+    mem_cow_done(s);
+}
+
+// Replay, after mirror_sync collected r's pages into cowq: reads them as of submission cow_cur into staging.
+static void cow_stage_body(void);
+static void cow_stage(void) {
+    uint64_t t0 = qpc();
+    cow_stage_body();
+    plat_add64(&cow_stage_ns, (int64_t)(qpc() - t0));
+}
+
+static void cow_stage_body(void) {
+    uint64_t bsz = 1ull << mem_cow_blk_shift();
+    ncows = 0;
+    for (int i = 0; i < ncowq; i++) {
+        PoolRec *r = cowq[i].r;
+        for (uint64_t a = r->import_lo + cowq[i].off, e = a + cowq[i].size; a < e;) {
+            uint64_t b = (a & ~(bsz - 1)) + bsz;
+            if (b > e) b = e;
+            CowStg *st;
+            uint64_t so;
+            uint8_t *dst = stg_take(b - a, &st, &so);
+            if (!dst) {   // no staging: live and late, as without the snapshot
+                plat_inc64(&cow_nostg);
+                range_add(&pend, &npend, &cpend, r, a - r->import_lo, b - a);
+            } else {
+                int k = mem_cow_read(a, b - a, cow_cur, dst);
+                plat_inc64(&cow_rd[k]);
+                plat_add64(&cow_rd_bytes, (int64_t)(b - a));
+                // [a, b) minus the recent write-backs into r: the pieces left go to the mirror
+                uint64_t o0 = a - r->import_lo, o1 = b - r->import_lo, x = o0;
+                int cut = 0;
+                while (x < o1) {
+                    uint64_t y = o1, skip = 0;   // the next write-back start in [x, o1), and how far it reaches
+                    for (int h = 0; h < WB_KEEP; h++)
+                        for (int j = 0; j < wb_hist[h].n; j++) {
+                            const MRange *w = &wb_hist[h].r[j];
+                            if (w->r != r || w->off + w->size <= x || w->off >= o1) continue;
+                            uint64_t ws = w->off > x ? w->off : x, we = w->off + w->size < o1 ? w->off + w->size : o1;
+                            if (ws < y || (ws == y && we > skip)) y = ws, skip = we;
+                        }
+                    if (y > x) {
+                        if (ncow_sp == ccow_sp) grow((void **)&cow_sp, &ccow_sp, sizeof *cow_sp);
+                        cow_sp[ncow_sp++] = (CowRange){r, st, so + (x - o0), x, y - x};
+                    }
+                    if (y >= o1) break;
+                    cut = 1;
+                    x = skip > y ? skip : y + 1;
+                }
+                if (cut) plat_inc64(&cow_wb_skips);
+                if (k == 2 || cut) range_add(&cows, &ncows, &ccows, r, a, b - a);   // absolute addresses
+            }
+            a = b;
+        }
+    }
+    ncowq = 0;
+    if (!ncows) return;
+    // The live bytes of those pages are newer than the mirror now holds: the next sync copies them again.
+    plat_mutex_lock(&gen_lock);
+    uint32_t g = ++gen_now;
+    for (int i = 0; i < ncows; i++) {
+        uint64_t lo = cows[i].off & ~0xfffull, hi = (cows[i].off + cows[i].size + 0xfff) & ~0xfffull;
+        stamp_range(lo, hi, g);
+    }
+    plat_mutex_unlock(&gen_lock);
+}
+
+// Replay, in the prologue after the live copies: the staged ones, one vkCmdCopyBuffer per run of chunk and pool.
+static void cow_record(VkCommandBuffer cb) {
+    for (int i = 0; i < ncow_sp;) {
+        PoolRec *r = cow_sp[i].r;
+        CowStg *st = cow_sp[i].st;
+        int k = 0;
+        for (; i < ncow_sp && cow_sp[i].r == r && cow_sp[i].st == st; i++) {
+            if (cow_sp[i].off + cow_sp[i].size > r->import_hi - r->import_lo) continue;
+            if (k == cregions) grow((void **)&mregions, &cregions, sizeof *mregions);
+            mregions[k++] = (VkBufferCopy){cow_sp[i].src, cow_sp[i].off, cow_sp[i].size};
+            mrep.upload_bytes += cow_sp[i].size;
+        }
+        if (!k) continue;
+        vkCmdCopyBuffer(cb, st->buf, r->mbuf, (uint32_t)k, mregions);
+        mrep.upload_copies += (uint64_t)k;
+    }
+    ncow_sp = 0;
+}
+
+// Replay, at the end of a submission: its staging chunks go back once its fence signalled.
+static void cow_retire(uint64_t fence) {
+    if (stg_cur && stg_cur->used) stg_cur->next = stg_used, stg_used = stg_cur, stg_cur = NULL;
+    if (stg_used) vk_completion_add(fence, stg_put, stg_used), stg_used = NULL;
+}
+
+static void cow_log(uint64_t frame) {
+    static uint64_t last;
+    double f = frame > last ? (double)(frame - last) : 1.0;
+    last = frame;
+    uint64_t st[14];
+    mem_cow_stats(st);
+    int64_t sn = plat_xchg64(&cow_sub_n, 0), sns = plat_xchg64(&cow_sub_ns, 0);
+    int64_t r0 = plat_xchg64(&cow_rd[0], 0), r1 = plat_xchg64(&cow_rd[1], 0), r2 = plat_xchg64(&cow_rd[2], 0);
+    rt_log("mem: copy-on-write frame %llu, per frame: submits %.1f taking %.3f ms; blocks protected %.1f, faults %.1f "
+           "taking %.3f ms, saved %.1f, arena full %.2f, released %.1f; sync reads %.1f MiB: saved %.1f, protected %.1f, "
+           "live %.1f, no staging %.2f, write-back cuts %.2f; now %llu blocks protected, %llu copies held, %lld staging chunks; protect pass: "
+           "pool lock %.3f ms, cow lock %.3f ms, state %.3f ms in %.1f calls, protect %.3f ms in %.1f calls, longest pass "
+           "%.1f ms; replay staging %.3f ms",
+           (unsigned long long)frame, sn / f, sns / 1e6 / f, st[0] / f, st[1] / f, st[7] / 1e6 / f, st[2] / f,
+           st[3] / f, st[4] / f, plat_xchg64(&cow_rd_bytes, 0) / f / 1048576.0, r2 / f, r1 / f, r0 / f,
+           plat_xchg64(&cow_nostg, 0) / f, plat_xchg64(&cow_wb_skips, 0) / f, (unsigned long long)st[5], (unsigned long long)st[6],
+           (long long)__atomic_load_n(&stg_chunks, __ATOMIC_RELAXED), plat_xchg64(&cow_pool_wait, 0) / 1e6 / f,
+           st[8] / 1e6 / f, st[9] / 1e6 / f, st[12] / f, st[10] / 1e6 / f, st[11] / f, st[13] / 1e6,
+           plat_xchg64(&cow_stage_ns, 0) / 1e6 / f);
+}
+
 // Replay thread, the first access of this submission: queues the copies of the pages written since the last sync.
 static void mirror_sync(PoolRec *r) {
     uint64_t t0 = qpc();
@@ -1479,12 +1710,15 @@ static void mirror_sync(PoolRec *r) {
         const uint32_t *ch = gen_chunk[a >> GEN_CHUNK_SHIFT];   // a 2 MiB region lies in one chunk
         if (!ch) continue;
         for (uint64_t x = a; x < b; x += 1ull << GEN_PAGE_SHIFT)
-            if (ch[(x >> GEN_PAGE_SHIFT) & (GEN_PER_CHUNK - 1)] > since)
-                range_add(&pend, &npend, &cpend, r, x - lo, 1ull << GEN_PAGE_SHIFT);
+            if (ch[(x >> GEN_PAGE_SHIFT) & (GEN_PER_CHUNK - 1)] > since) {
+                if (cow_cur) range_add(&cowq, &ncowq, &ccowq, r, x - lo, 1ull << GEN_PAGE_SHIFT);
+                else range_add(&pend, &npend, &cpend, r, x - lo, 1ull << GEN_PAGE_SHIFT);
+            }
     }
     r->mgen = gen_now;
     if (excl) plat_mutex_unlock(&gen_lock);
     else plat_mutex_unlock_shared(&gen_lock);
+    if (ncowq) cow_stage();
     if (__atomic_load_n(&r->fl_hi, __ATOMIC_ACQUIRE)) {
         plat_mutex_lock(&flush_lock);
         uint64_t a = r->fl_lo, b = r->fl_hi;
@@ -1600,13 +1834,17 @@ void vk_mem_mirror_begin(void) {
     mrep.presnap_t += qpc() - t0;
 }
 
-int vk_mem_mirror_pending(void) { return npend; }
+int vk_mem_mirror_pending(void) { return npend + ncow_sp; }
 
 void vk_mem_mirror_prologue(VkCommandBuffer cb) {
-    if (!npend) return;
+    if (!npend && !ncow_sp) return;
     mbarrier(cb, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT, VK_PIPELINE_STAGE_2_COPY_BIT,
              VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT);
-    copy_ranges(cb, pend, npend, 1, &mrep.upload_bytes, &mrep.upload_copies);
+    if (npend) copy_ranges(cb, pend, npend, 1, &mrep.upload_bytes, &mrep.upload_copies);
+    if (npend && ncow_sp)   // the staged bytes win where a live copy overlaps them
+        mbarrier(cb, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_COPY_BIT,
+                 VK_ACCESS_2_TRANSFER_WRITE_BIT);
+    if (ncow_sp) cow_record(cb);
     mbarrier(cb, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
              VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT);
     npend = 0;
@@ -1704,11 +1942,21 @@ static int verify_record(VkCommandBuffer cb, uint64_t fence) {
 
 int vk_mem_mirror_end(VkCommandBuffer cb, uint64_t fence) {
     if (!vk_mirror_on) return 0;
-    int rec = 0;
+    int rec = 0, wb_rec = nwbl > 0;
     if (nwbl) {
         mbarrier(cb, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT, VK_PIPELINE_STAGE_2_COPY_BIT,
                  VK_ACCESS_2_TRANSFER_READ_BIT);
         for (int i = 0; i < nwbl; i++) wbl[i].r->wb_sub = msub;
+        if (cow_on) {
+            wb_hist_i = (wb_hist_i + 1) % WB_KEEP;
+            if (wb_hist[wb_hist_i].cap < nwbl) {
+                wb_hist[wb_hist_i].cap = nwbl;
+                wb_hist[wb_hist_i].r = realloc(wb_hist[wb_hist_i].r, (size_t)nwbl * sizeof(MRange));
+                if (!wb_hist[wb_hist_i].r) rt_fatal("vk: out of memory (mirror write-backs)");
+            }
+            memcpy(wb_hist[wb_hist_i].r, wbl, (size_t)nwbl * sizeof(MRange));
+            wb_hist[wb_hist_i].n = nwbl;
+        }
         mrep.wb_ranges += (uint64_t)nwbl;
         rec += copy_ranges(cb, wbl, nwbl, 0, &mrep.wb_bytes, &mrep.wb_copies) + 2;
         mbarrier(cb, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
@@ -1717,6 +1965,8 @@ int vk_mem_mirror_end(VkCommandBuffer cb, uint64_t fence) {
         nwbl = 0;
     }
     if (mirror_verify) rec += verify_record(cb, fence);
+    if (cow_on) cow_retire(fence);
+    if (cow_on && !wb_rec) wb_hist_i = (wb_hist_i + 1) % WB_KEEP, wb_hist[wb_hist_i].n = 0;
     plat_mutex_lock(&mirror_stat_lock);
     uint64_t *d = (uint64_t *)&macc, *s = (uint64_t *)&mrep;
     for (size_t i = 0; i < sizeof macc / sizeof(uint64_t); i++) d[i] += s[i];
@@ -2115,7 +2365,7 @@ void vk_mem_shutdown(void) {
     plat_mutex_lock(&pool_lock);
     for (int i = 0; i < pool_index.n; i++) destroy_rec(c, pool_index.e[i].buf);
     pool_index.n = 0;
-    nm = npend = nwbl = 0;   // mirrors went with their pools
+    nm = npend = nwbl = ncow_sp = 0;   // mirrors went with their pools
     plat_mutex_lock(&shadow_lock);
     for (int i = 0; i < nspend; i++) free(spend[i].base);
     nstouch = nspend = 0;   // shadows too

@@ -26,6 +26,9 @@
 # async_preempt = 1
 # Replay NVN submissions on their own thread, at most one frame behind the game (1 = on). Adds up to a frame of latency.
 # replay_async = 0
+# With replay_async = 1: the mirrored vertex and storage data of each frame is read as of the game's submit
+# (copy-on-write), so models do not stretch into spikes at the start of camera pans with large crowds (1 = on).
+# mirror_cow = 0
 # 1 lifts the virtual core gate: guest threads run without the console's limit of one thread per core.
 # free_cores = 0
 # Windows timer resolution of 1 ms for steadier frame pacing (0 = the Windows default).
