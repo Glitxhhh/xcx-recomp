@@ -28,7 +28,10 @@ HAND_PLACED = ('Unburger Patch/romfs/bdat/a.bdat',
                'Loader Mod/Loader Mod/romfs/mod/f.bin',
                'good/romfs/g.bin')
 NOT_MODS = ('Readme Only/readme.txt', 'Two/a/romfs/x', 'Two/b/romfs/y', 'Other/0100000000010000/romfs/z',
-            'Lua Mod/mod.ini', 'mod.zip', '.install-x/romfs/q')
+            'Lua Mod/mod.ini', 'mod.zip', '.install-x/romfs/q',
+            # folders of cheats only (runtime/cheats.c reads them for the Cheats tab): no note in either mods manager
+            '2Auto Pickup (x250)/cheats/EC4ED46BBC4A9EBB.txt',
+            'Atmo Cheat/atmosphere/contents/0100453019AA8000/cheats/EC4ED46BBC4A9EBB.txt')
 
 
 def clang():
