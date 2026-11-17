@@ -117,7 +117,7 @@ static uint16_t cow_reg_n[RT_ADDRESS_LIMIT >> FRZ_SHIFT];        // protected bl
 static uint32_t cow_reg_last[RT_ADDRESS_LIMIT >> FRZ_SHIFT];     // cow_sub at its last protect or fault
 static uint32_t *cow_regs;          // regions with protected blocks (possibly some with none left)
 static int ncow_regs, ccow_regs;
-typedef struct { uint64_t blk; uint32_t p, q; int next; } CowSave;   // valid for submissions p..q
+typedef struct { uint64_t blk, t; uint32_t p, q; int next; } CowSave;   // valid for submissions p..q, taken at t ns
 static CowSave *cow_sv;
 static uint8_t *cow_arena;
 static int cow_free = -1, cow_hash[COW_HASH], *cow_live, ncow_live;
@@ -125,6 +125,8 @@ static uint64_t cow_st[8];          // see mem_cow_stats
 static uint64_t cow_t[6];           // protect pass: lock wait, plat_mem_state, plat_mem_protect ns; protect calls;
                                     // state calls; the longest pass ns
 static uint64_t cow_nprot;          // protected blocks now
+static uint64_t cow_arena_n;        // the arena's size in bytes
+static uint64_t cow_held;           // blocks left writable because their region is inside its thaw hold
 
 void mem_cow_init(int blk_shift, uint64_t arena_bytes) {
     if (blk_shift < 12) blk_shift = 12;
@@ -138,9 +140,11 @@ void mem_cow_init(int blk_shift, uint64_t arena_bytes) {
     for (int i = 0; i < COW_HASH; i++) cow_hash[i] = -1;
     for (int i = n - 1; i >= 0; i--) cow_sv[i].next = cow_free, cow_free = i;
     cow_shift = blk_shift;
+    cow_arena_n = (uint64_t)n << blk_shift;
 }
 
 int mem_cow_on(void) { return cow_shift != 0; }
+uint64_t mem_cow_arena_bytes(void) { return cow_arena_n; }
 int mem_cow_blk_shift(void) { return cow_shift; }
 
 static uint32_t *cow_slot(uint64_t a, int create) {
@@ -165,7 +169,7 @@ static void cow_save_locked(uint64_t blk, uint32_t p) {
     cow_free = cow_sv[i].next;
     memcpy(cow_arena + ((uint64_t)i << cow_shift), (const void *)(uintptr_t)blk, 1ull << cow_shift);
     int h = cow_hidx(blk);
-    cow_sv[i] = (CowSave){blk, p > cow_done ? p : cow_done + 1, cow_sub, cow_hash[h]};
+    cow_sv[i] = (CowSave){blk, plat_now_ns(), p > cow_done ? p : cow_done + 1, cow_sub, cow_hash[h]};
     cow_hash[h] = i;
     cow_live[ncow_live++] = i;
     cow_st[2]++;
@@ -250,7 +254,15 @@ static void cow_kind_reset(uint64_t a, uint64_t n) {   // frz_lock: a mapping ch
 // every block of the run it reports: VirtualQuery on write-watched memory walks the whole run of pages that share its
 // attributes, often hundreds of MiB, so asking per block cost seconds while loading (mapping changes reset the cache).
 static int cow_can(uint64_t b) {
-    if (*cow_slot(b, 1) || frz[b >> FRZ_SHIFT]) return 0;
+    uint64_t r = b >> FRZ_SHIFT;
+    if (*cow_slot(b, 1) || frz[r]) return 0;
+    // A region inside its thaw hold (mem_thaw, FRZ_HOLD_MS) may be the target of a file read in progress
+    // (fs_host.c host_read_at, romfs.c read_at): the kernel's write into a read-only page fails with ERROR_NOACCESS
+    // instead of faulting into thaw_fault, so the block is left writable, as mem_freeze leaves the region.
+    if (thaw_ms[r] && (int32_t)((uint32_t)plat_now_ms() - thaw_ms[r]) < (int32_t)FRZ_HOLD_MS) {
+        cow_held++;
+        return 0;
+    }
     uint8_t *k = cow_kind(b);
     if (!*k) {
         uint64_t bsz = 1ull << cow_shift, lim = ((b >> COW_CHUNK_SHIFT) + 1) << COW_CHUNK_SHIFT, end, t0 = plat_now_ns();
@@ -331,14 +343,15 @@ void mem_cow_done(uint32_t s) {
     plat_mutex_unlock(&frz_lock);
 }
 
-int mem_cow_read(uint64_t a, uint64_t n, uint32_t s, void *dst) {
+int mem_cow_read(uint64_t a, uint64_t n, uint32_t s, void *dst, uint64_t *when) {
     uint64_t blk = a & ~((1ull << cow_shift) - 1);
     int ret = 0;
     const void *src = (const void *)(uintptr_t)a;
     plat_mutex_lock(&frz_lock);
+    *when = plat_now_ns();
     for (int i = cow_hash[cow_hidx(blk)]; i >= 0; i = cow_sv[i].next)
         if (cow_sv[i].blk == blk && s - cow_sv[i].p < 0x80000000u && cow_sv[i].q - s < 0x80000000u) {
-            src = cow_arena + ((uint64_t)i << cow_shift) + (a - blk), ret = 2;
+            src = cow_arena + ((uint64_t)i << cow_shift) + (a - blk), ret = 2, *when = cow_sv[i].t;
             break;
         }
     if (!ret) {
@@ -350,11 +363,21 @@ int mem_cow_read(uint64_t a, uint64_t n, uint32_t s, void *dst) {
     return ret;
 }
 
-void mem_cow_stats(uint64_t out[14]) {
+uint64_t mem_cow_oldest(void) {
+    plat_mutex_lock(&frz_lock);
+    uint64_t t = plat_now_ns();
+    for (int k = 0; k < ncow_live; k++)
+        if (cow_sv[cow_live[k]].t < t) t = cow_sv[cow_live[k]].t;
+    plat_mutex_unlock(&frz_lock);
+    return t;
+}
+
+void mem_cow_stats(uint64_t out[15]) {
     plat_mutex_lock(&frz_lock);
     for (int i = 0; i < 8; i++) out[i] = cow_st[i], cow_st[i] = 0;
     for (int i = 0; i < 6; i++) out[8 + i] = cow_t[i], cow_t[i] = 0;
     out[5] = cow_nprot, out[6] = (uint64_t)ncow_live;
+    out[14] = cow_held, cow_held = 0;
     plat_mutex_unlock(&frz_lock);
 }
 
