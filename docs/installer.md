@@ -11,6 +11,8 @@ holds only the game; the installer and its tools stay outside it.
 2. Picks:
    - the base game (XCI or NSP) and the 1.2.1 or 1.4.3 update (NSP), or the same compressed (XCZ, NSZ);
    - their `prod.keys`;
+   - or, in place of those files, a game they already extracted (Folder... next to the base game): `exefs/` and the
+     RomFS of the updated game. It needs no update file, and `prod.keys` only for add-on content (issue #175);
    - the game language and the install folder.
 3. Waits for the setup, one time. The window shows each step and its progress.
 4. Plays `xcx.exe` from the install folder. The installer and the source NSP or XCI can be deleted.
@@ -122,7 +124,8 @@ python -m installer --base FILE --update FILE --keys FILE --lang CODE --dest DIR
   progress, space line, collapsible log, Cancel (Ctrl+Break to the CLI's process group, then it waits for the exit),
   finish screen with Open folder. English or Russian, chosen from the Windows display language, switchable in the
   window; every sentence is an id in `installer/text/<en|ru>.json`. A folder with `xcx-install.json` needs only the
-  folder. `--selftest [--shots DIR]` builds every screen in both languages and closes itself.
+  folder. An extracted game folder as the base game (`Form.extracted_game`, `installer/extracted.py` find) goes to the
+  CLI as `--base FOLDER` without `--update`; a folder that is no extracted game is refused in the form. `--selftest [--shots DIR]` builds every screen in both languages and closes itself.
 - `tests/installer_gui_test.py`: event model, form, catalogs, cancel, the self-closing window and one end-to-end run
   of the CLI in `--verify` mode (needs `build/install-test` and `build/extracted/v121`; see its docstring).
 - `tests/installer_test.py`: bookkeeping with fake steps. `tests/installer_e2e.py`: a dev-mode run with the files of

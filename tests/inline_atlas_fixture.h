@@ -37,3 +37,15 @@ static void inline_sticks_records(uint8_t *out) {   // STICKS_RECORDS * INLINE_R
         memcpy(out + i * INLINE_RECORD_BYTES + sizeof w, sz, sizeof sz);
     }
 }
+
+// icon_button03's 24 records, closed form: 8 columns x 3 rows of 46x50 cells in a 368x150 image (the text atlas's standard grid).
+static void inline_mask_records(uint8_t *out) {   // MASK_RECORDS * INLINE_RECORD_BYTES
+    for (int i = 0; i < MASK_RECORDS; i++) {
+        int col = i % INLINE_COLUMNS, row = i / INLINE_COLUMNS;
+        float w[6] = {1.0f, 1.0f, (float)(45.0 / 368.0), (float)(149.0 / 450.0),
+                      (float)((col * 46 + 0.5) / 368.0), (float)((row * 50 + 0.5) / 150.0)};
+        uint16_t sz[2] = {46, 50};
+        memcpy(out + i * INLINE_RECORD_BYTES, w, sizeof w);
+        memcpy(out + i * INLINE_RECORD_BYTES + sizeof w, sz, sizeof sz);
+    }
+}
