@@ -198,13 +198,18 @@ site viewsize main 972f8c 910692aa 910692aa b940014b 5110e16b 5ac0116b 53057d6b 
 # the event manager's update and late update hand 1.0 to every actor and to the camera system (main+0x2d0010,
 # main+0x2cfc40); the camera system forces 1.0 while an event runs (main+0x2aadc8); the event clock adds its rate,
 # 1.0 frame, per update (main+0x2dca18, read at +0x3c); a message's remaining time and a voice's start delay count
-# down by 1.0 (main+0x2e5d20, main+0x304dd0). x9 is free at each; at main+0x2dcb14 s4 is too.
+# down by 1.0 (main+0x2e5d20, main+0x304dd0). An event's move interpolator (a virtual update, main+0x2b2b54, whose
+# result goes to the moved object's vtable +0x140) steps its time by the step it is handed, or by 1.0 when a global
+# flag byte has any of its low 3 bits set, as it has in events: the NLA elevator's lift finished its run within a second
+# above 30 fps while the camera kept riding it (#106); its 1.0 is the step as well (main+0x2b2b84). x9 is free at each;
+# at main+0x2dcb14 s4 is too.
 site xcx60 main 2d00b4 1e2e1008 @page:x9 bd404d28
 site xcx60 main 2d00f0 1e2e1000 @page:x9 bd404d20
 site xcx60 main 2cfcac 1e2e1008 @page:x9 bd404d28
 site xcx60 main 2cfcf0 1e2e1000 @page:x9 bd404d20
 site xcx60 main 2cfd60 1e2e1008 @page:x9 bd404d28
 site xcx60 main 2aae10 1e2e1000 @page:x9 bd404d20
+site xcx60 main 2b2b84 1e2e1000 @page:x9 bd404d20
 site xcx60 main 2dcb14 2d478e62 @page:x9 2d478e62 bd404d24 1e240842
 site xcx60 main 2e5d58 1e3e1001 @page:x9 bd404d21 1e214021
 site xcx60 main 304dd0 1e3e1001 @page:x9 bd404d21 1e214021
