@@ -34,6 +34,10 @@ static bool g_held;                      // the last row's left / right has been
 static float g_bottom;                   // opt_reserve_bottom: kept free under the panes
 static bool g_disable_next;              // opt_disable_next: the next row is greyed out with g_disable_note
 static UiTextId g_disable_note;
+// The rows of this frame's page: how many, which one has the controller / keyboard cursor (-1 none) and its id, and the
+// row that had it last frame (opt_end scrolls to the page's ends when the cursor arrives on its first or last row).
+static int g_rows, g_cursor_row;
+static ImGuiID g_cursor_id, g_cursor_last;
 
 // The description pane: this frame's hovered and selected rows, the page's first row, and the last one shown.
 struct Desc { char text[512]; };
@@ -70,6 +74,7 @@ void opt_begin(const char *id, float scale) {
     g_focus_req = false;
     if (g_take_first) ImGui::NavMoveRequestCancel();   // this frame's move goes to the first row instead
     g_hover.text[0] = g_focus.text[0] = g_first.text[0] = 0;
+    g_rows = 0, g_cursor_row = -1, g_cursor_id = 0;
     ImVec2 avail = ImGui::GetContentRegionAvail();
     avail.y -= g_bottom;
     ImGui::PushID(id);
@@ -79,6 +84,14 @@ void opt_begin(const char *id, float scale) {
 
 void opt_end(void) {
     ImGui::PopStyleVar();
+    // Moving the cursor scrolls just far enough to show the row, which leaves the text above the first row (a page's
+    // note, a heading) or under the last one (the Cheats tab's build id) out of view at the ends of the list: arriving on
+    // the first or last row scrolls the whole way. Only on arrival, so the mouse wheel still scrolls freely after it.
+    if (g_cursor_id && g_cursor_id != g_cursor_last) {
+        if (g_cursor_row == 0) ImGui::SetScrollY(0);
+        else if (g_cursor_row == g_rows - 1) ImGui::SetScrollY(ImGui::GetScrollMaxY());
+    }
+    g_cursor_last = g_cursor_id;
     ImGui::EndChild();
     // the hovered row (mouse) wins, else the selected one (controller), else the last shown, else the first row
     if (g_hover.text[0]) g_shown = g_hover;
@@ -148,7 +161,11 @@ static int row(const char *key, UiTextId label, UiTextId desc, const RowView &v)
             ImGui::SetKeyOwner(k, ImGui::GetItemID());
         }
     }
-    if (foc) desc_set(g_focus, desc, key, m, disabled);
+    if (foc) {
+        desc_set(g_focus, desc, key, m, disabled);
+        g_cursor_row = g_rows, g_cursor_id = ImGui::GetItemID();
+    }
+    g_rows++;
     if (hov) desc_set(g_hover, desc, key, m, disabled);
     if (!g_first.text[0]) desc_set(g_first, desc, key, m, disabled);
 

@@ -51,6 +51,15 @@ from lifter import hx  # noqa: E402
 from module import Module  # noqa: E402
 
 TERMINATORS = ('b', 'br', 'ret', 'trap')
+
+
+class Local:
+    """A lifted b / b.cond / cbz / tbz of a patch replacement that goes to word `to` of the same replacement
+    (recomp/patches.py, <word>@<index>); its own target is meaningless there."""
+    __slots__ = ('kind', 'code', 'target', 'cond', 'to')
+
+    def __init__(self, ins, to):
+        self.kind, self.code, self.target, self.cond, self.to = ins.kind, ins.code, None, ins.cond, to
 MUSTTAIL = '__attribute__((musttail)) return'
 
 # Estimated bytes of C per instruction, by class, for chunking (estimate_sizes()).
@@ -79,8 +88,9 @@ def _sext(v, n):
     return np.where(v & (1 << (n - 1)), v - (1 << n), v)
 
 
-def discover(mod):
-    """Function starts of mod as a sorted int64 array of word indices into mod.words, plus discovery statistics."""
+def discover(mod, extra=()):
+    """Function starts of mod as a sorted int64 array of word indices into mod.words, plus discovery statistics.
+    extra: more function starts (absolute addresses), the targets of the calls in patch replacements."""
     w = mod.words
     n = len(w)
 
@@ -146,7 +156,8 @@ def discover(mod):
     mat = (mat - pc0) >> 2
 
     bl_tgt = bl_tgt[(bl_tgt >= 0) & (bl_tgt < n)]
-    starts = np.unique(np.concatenate([seeds, bl_tgt, mat]))
+    more = np.array([(a - pc0) >> 2 for a in extra if mod.lo <= a < mod.hi and a % 4 == 0], dtype=np.int64)
+    starts = np.unique(np.concatenate([seeds, bl_tgt, mat, more]))
     stats = {'seeds': int(len(seeds)), 'bl_targets': int(len(np.unique(bl_tgt))),
              'materialised_targets': int(len(np.unique(mat))), 'initial_starts': int(len(starts))}
 
@@ -259,22 +270,46 @@ class Emitter:
             if entry <= a < end:
                 for words in self.replacements(a):
                     r = words[-1]
-                    if r.kind in ('b', 'bcond') and entry <= r.target < end:
+                    if r.kind in ('b', 'bcond') and not isinstance(r, Local) and entry <= r.target < end:
                         labels.add(r.target)
         return labels, tables
 
     def replacements(self, a):
         """The lifted words of each alternative of the patched site a, in set order. Only the last word of an
-        alternative may branch (bl, b, b.cond / cbz / tbz, ret)."""
+        alternative may branch out of it (bl, b, b.cond / cbz / tbz, ret); a word with @<index> (recomp/patches.py)
+        branches inside it and lifts as a Local."""
         out = []
         for _, words in self.patched[a]:
-            lifted = [self.mod.lifter.lift(w, a) for w in words]
+            lifted = []
+            for w in words:
+                if isinstance(w, tuple):   # ('to', word, index)
+                    r = self.mod.lifter.lift(w[1], a)
+                    if r.kind not in ('b', 'bcond'):
+                        raise patches.PatchError(f'{a:#x}: replacement word {w[1]:08x}@{w[2]} is a {r.kind}')
+                    lifted.append(Local(r, w[2]))
+                else:
+                    lifted.append(self.mod.lifter.lift(w, a))
             for j, r in enumerate(lifted):
                 last = j == len(lifted) - 1
-                if r.kind != 'op' and not (last and r.kind in ('bl', 'b', 'bcond', 'ret')):
-                    raise patches.PatchError(f'{a:#x}: replacement word {words[j]:08x} is a {r.kind}')
+                if r.kind != 'op' and not isinstance(r, Local) and not (last and r.kind in ('bl', 'b', 'bcond', 'ret')):
+                    w = words[j]
+                    raise patches.PatchError(f'{a:#x}: replacement word {w:08x} is a {r.kind}')
             out.append(lifted)
         return out
+
+    def packed(self, ins, a):
+        """Whether the site a carries its flags through c->nzcv: it has a self-contained alternative (a code cave with
+        its own branches, lifted on c->nzcv as the guest keeps flags) and the flags matter across it, as the original
+        instruction or the alternative's last word uses them. patch() then copies the function's flags into c->nzcv
+        before the alternatives and back into F.nz after them, and the site counts as reading and writing packed
+        flags (patched_effect)."""
+        alts = self.replacements(a)
+        if not any(isinstance(r, Local) for words in alts for r in words):
+            return False
+        own = flags.effect(ins.cond) if ins.kind == 'bcond' else flags.effect(ins.code or '')
+        last = [w[-1] for w in alts if any(isinstance(r, Local) for r in w)]
+        return bool(own[0] or own[1] or any(r.kind == 'bcond' and not isinstance(r, Local) and flags.effect(r.cond)[0]
+                                            for r in last))
 
     def flow(self, insns, entry, end, tables):
         """Successors of each instruction inside the function [entry, end). Index len(insns) stands for falling
@@ -284,7 +319,7 @@ class Emitter:
 
         def of(ins, i):
             k = ins.kind
-            if k in ('op', 'bl', 'blr'):
+            if k in ('op', 'bl', 'blr') or isinstance(ins, Local):   # a Local leaves its site only to the next word
                 return [i + 1]
             if k == 'b':
                 return idx(ins.target)
@@ -324,7 +359,7 @@ class Emitter:
                     r = words[-1]
                     if r.kind == 'bl':
                         calls.add(i)
-                    elif r.kind in ('b', 'bcond') and not entry <= r.target < end:
+                    elif r.kind in ('b', 'bcond') and not isinstance(r, Local) and not entry <= r.target < end:
                         exits.add(i)
             else:
                 effects.append(flags.effect(ins.cond if k == 'bcond' else ins.code or ''))
@@ -335,7 +370,15 @@ class Emitter:
         """Flag effect of a patched site: every alternative (the original and each replacement) must write the same
         flags, in at most one word each; the site reads flags when any alternative does (a b.cond reads them)."""
         alts = []
-        for words in [[ins]] + self.replacements(a):
+        if self.packed(ins, a):
+            # every alternative runs on c->nzcv, the flags copied in before and out after (patch()): one packed read
+            # and write. A call in the site would come between the cave's flags and the copy out.
+            if ins.kind == 'bl' or any(w[-1].kind == 'bl' for w in self.replacements(a)):
+                raise patches.PatchError(f'{a:#x}: a patched call whose site carries flags')
+            return True, 'nz'
+        # a self-contained alternative that is not packed keeps its flags in c->nzcv: the function's pass it untouched
+        mine = [w for w in self.replacements(a) if not any(isinstance(r, Local) for r in w)]
+        for words in [[ins]] + mine:
             fx = [flags.effect(w.code or '') if w.kind == 'op' else flags.effect(w.cond) for w in words
                   if w.kind in ('op', 'bcond')]
             fx = [e for e in fx if e[0] or e[1]]
@@ -345,7 +388,7 @@ class Emitter:
         if any(e[1] != alts[0][1] for e in alts):
             raise patches.PatchError(f'{a:#x}: the alternatives write different flags ({[e[1] for e in alts]})')
         reads = any(e[0] for e in alts)
-        if (alts[0][1] or reads) and (ins.kind == 'bl' or any(w[-1].kind == 'bl' for w in self.replacements(a))):
+        if (alts[0][1] or reads) and (ins.kind == 'bl' or any(w[-1].kind == 'bl' for w in mine)):
             raise patches.PatchError(f'{a:#x}: a patched call that uses flags')
         return reads, alts[0][1]
 
@@ -431,8 +474,30 @@ class Emitter:
             code = fx(i, code)
             return f'{spill}{code}{reload}' if regs.ESCAPE.search(code) else code
 
-        def one(i, r, a):
-            """C of one lifted word of a patched site."""
+        def raw(code):
+            """An op of a self-contained alternative: its flags in c->nzcv, as the guest keeps them."""
+            return f'{spill}{code}{reload}' if regs.ESCAPE.search(code) else code
+
+        def one(i, r, a, local=None, out=''):
+            """C of one lifted word of a patched site. local: the label prefix of a self-contained alternative. out: in
+            a packed site (Emitter.packed), the copy of c->nzcv into F before a branch out of it (' ' when the function
+            has no F); its words then all run on c->nzcv."""
+            if local is not None:
+                if isinstance(r, Local):
+                    to = f'goto {local}{r.to};'
+                    return to if r.kind == 'b' else f'if ({r.cond}) {{ {to} }}'
+                if r.kind == 'op':
+                    return raw(r.code)
+            if out:
+                if r.kind == 'op':
+                    return raw(r.code)
+                if r.kind == 'b':
+                    return f'{out} {jump(r.target, i)}'
+                if r.kind == 'bcond':
+                    return f'if ({r.cond}) {{ {out} {jump(r.target, i)} }}'
+                if r.kind == 'ret':
+                    return f'{spill}return;'
+                raise patches.PatchError(f'{a:#x}: packed site word is a {r.kind}')
             if r.kind == 'op':
                 return op(i, r.code)
             if r.kind == 'bl':
@@ -449,12 +514,32 @@ class Emitter:
             """if (switch) { replacement } else if ... else { original } for a patched site (recomp/patches.py)."""
             if ins.kind not in ('op', 'bl', 'b', 'bcond'):
                 raise patches.PatchError(f'{a:#x}: patched instruction is a {ins.kind}')
-            line = '   '
+            pack = self.packed(ins, a)
+            # a packed site: the function's flags into c->nzcv, every alternative on them, then back into F.nz (none of
+            # it when the function keeps its flags in c->nzcv anyway)
+            on_f = pack and fp and fp.used
+            out = 'F.nz = c->nzcv;' if on_f else ' ' if pack else ''
+            line = f'    c->nzcv = fnz_{fp.reader[i]}(&F);' if on_f and fp.reader[i] else '   '
             for (k, _), words in zip(self.patched[a], self.replacements(a)):
-                line += f' if (rt_patch_on[{k}]) {{ {" ".join(one(i, r, a) for r in words)} }} else'
+                if any(isinstance(r, Local) for r in words):   # labels P_<site>_<set>_<word>
+                    local = f'P_{a:x}_{k}_'
+                    to = {r.to for r in words if isinstance(r, Local)}
+                    text = ' '.join((f'{local}{j}:; ' if j in to else '') +
+                                    one(i, r, a, local, out)
+                                    for j, r in enumerate(words))
+                    if len(words) in to:
+                        text += f' {local}{len(words)}:;'
+                else:
+                    text = ' '.join(one(i, r, a, None, out) for r in words)
+                if on_f and words[-1].kind not in ('b', 'ret'):
+                    text += f' {out}'
+                line += f' if (rt_patch_on[{k}]) {{ {text} }} else'
             self.uses_patches = True
             self.stats['patched_sites'] += 1
-            return f'{line} {{ {one(i, ins, a)} }}'
+            orig = one(i, ins, a, None, out)
+            if on_f and ins.kind != 'b':
+                orig += f' {out}'
+            return f'{line} {{ {orig} }}'
 
         body = []   # (instruction index or None for a label, line); a line belongs to the instruction it lifts
 
@@ -703,7 +788,7 @@ def main():
         path = args.exefs / name
         mod = Module(name, path, base, 'c')
         patches.check(table, mod, name)
-        starts, dstats = discover(mod)
+        starts, dstats = discover(mod, patches.call_targets(table, name, base))
         est = estimate_sizes(mod, starts)
         abs_starts = mod.lo + starts * 4
         n = len(starts) if not args.limit else min(args.limit, len(starts))

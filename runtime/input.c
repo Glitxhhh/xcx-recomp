@@ -551,7 +551,8 @@ void input_glyph_snapshot(int *source, int *family, int *layout, InputMap *map) 
     *source = glyph_intent.source;
     int connected = pad && SDL_GamepadConnected(pad);
     *family = connected ? glyph_family : GLYPH_PAD_UNKNOWN;
-    *layout = connected ? pad_layout_get() : -1;
+    // A forced controller style still needs the bindings of a layout when no controller is connected.
+    *layout = connected ? pad_layout_get() : input_pad_layout_pick(cfg_value("XCX_PAD_LAYOUT"), pad_east_a);
     *map = input_map;
     // Translate only this display copy; emitted inputs and the rebinding editor retain their canonical key IDs.
     for (int i = 0; i < map->nkeys; i++) map->keys[i].key = (uint8_t)ikb_glyph_key(map->keys[i].key);
