@@ -1228,6 +1228,7 @@ static const InlineGeom inline_geoms[INLINE_LAYOUTS] = {
     {INLINE_ATLAS_W, INLINE_ATLAS_H, INLINE_CELL_W, INLINE_CELL_H, INLINE_COLUMNS, INLINE_RECORDS, "text atlas", INLINE_NVN_FORMAT},
     {SHEET_W, SHEET_H, SHEET_CELL, SHEET_CELL, SHEET_COLUMNS, SHEET_RECORDS, "button sheet", INLINE_NVN_FORMAT},
     {STICKS_W, STICKS_H, STICKS_CELL, STICKS_CELL, STICKS_COLUMNS, STICKS_RECORDS, "stick-direction image", INLINE_NVN_FORMAT},
+    {MASK_W, MASK_H, INLINE_CELL_W, INLINE_CELL_H, INLINE_COLUMNS, MASK_RECORDS, "white-mask button sheet", INLINE_NVN_FORMAT},
     {HINT_W, HINT_H, HINT_CELL_W, HINT_CELL_H, 1, HINT_CELLS, "mini-map hint image", HINT_NVN_FORMAT},   // cell slots; the cells are placed by hint_origins
     {SOUL_W, SOUL_H, SOUL_W, SOUL_H, 1, 1, "soul challenge button image", HINT_NVN_FORMAT},   // one cell: the whole image
     {HOLD_W, HOLD_H, HOLD_W, HOLD_H, 1, 1, "field action hold button image", INLINE_NVN_FORMAT},   // one cell: the whole image

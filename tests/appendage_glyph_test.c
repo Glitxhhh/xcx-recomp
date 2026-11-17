@@ -40,6 +40,9 @@ void vk_glyph_resource_observe(uint64_t h, unsigned event) {
 const RtFileHash rt_exefs_sha256[] = {{"main","0a9dbf1f3816dd0fab0a08883d538c74d9b9fd7d939cb29aaf0947d71a201026"}};
 const int rt_exefs_sha256_count = 1;
 const char *cfg_value(const char *name) { return !strcmp(name,"XCX_GLYPH_APPEARANCE") ? appearance_preference : preference; }
+// The tests change the preference between calls without a settings write: a new version every call, so the cached
+// settings (glyph_style_setting) are read again each time.
+unsigned cfg_version(void) { static unsigned v; return ++v; }
 const char *cfg_get(const char *name) { (void)name; return NULL; }
 static char last_log[2048];   // Same capacity as rt_log, so long probe lines are not cut.
 void rt_log(const char *fmt, ...) {
@@ -66,10 +69,11 @@ void sha256(const void *p, size_t n, uint8_t h[32]) {
         if (!memcmp(p, want, n)) memcpy(h, good, 32); else memset(h, 0x5a, 32);
         return;
     }
-    if (n == SHEET_RECORDS * INLINE_RECORD_BYTES) {   // The closed-form sheet table: the constant; anything else: not it.
-        uint8_t want[SHEET_RECORDS * INLINE_RECORD_BYTES]; inline_sheet_records(want);
-        static const uint8_t good[32] = SHEET_RECORDS_SHA256;
-        if (!memcmp(p, want, n)) memcpy(h, good, 32); else memset(h, 0x5a, 32);
+    if (n == SHEET_RECORDS * INLINE_RECORD_BYTES) {   // The closed-form sheet or white-mask table: its constant; anything else: not it.
+        uint8_t want[SHEET_RECORDS * INLINE_RECORD_BYTES], mask[MASK_RECORDS * INLINE_RECORD_BYTES];
+        inline_sheet_records(want); inline_mask_records(mask);
+        static const uint8_t good[32] = SHEET_RECORDS_SHA256, good_mask[32] = MASK_RECORDS_SHA256;
+        if (!memcmp(p, want, n)) memcpy(h, good, 32); else if (!memcmp(p, mask, n)) memcpy(h, good_mask, 32); else memset(h, 0x5a, 32);
         return;
     }
     if (n == STICKS_RECORDS * INLINE_RECORD_BYTES) {   // The closed-form stick-direction table: the constant; anything else: not it.
@@ -617,6 +621,42 @@ int main(int argc, char **argv) {
           BIND2(); assert(appendage_inline_tagged(inline_handle_result));
           probe_kind=-1;
           #undef BIND2
+        }
+
+        // ---- the white-mask sheet (icon_button03, the field HUD's `R + X` guide, issue #102): the sheet's symbols and tiles, its own layout
+        { static _Alignas(16) uint8_t res3[0x1000], tbl3[8], obj3[0x38], pane3[0x400];
+          uint32_t b0=0x80, rel=0x100; memcpy(res3+0x2c,&b0,4); memcpy(res3+0x80+0x18,&rel,4); inline_mask_records(res3+0x80+0x100);
+          put64(pane3,MOD_MAIN_BASE+0x1c94318); pane3[0x18]=1; put16(pane3+0x34e,MASK_RECORDS); put16(pane3+0x34c,SYM_R);
+          put64(pane3+0xe0,(uintptr_t)res3); put64(pane3+0x330,(uintptr_t)tbl3); put64(tbl3,(uintptr_t)obj3);
+          Cpu sc={0};
+          preference="playstation"; family=GLYPH_PAD_PS; source=GLYPH_SOURCE_PAD; pad_layout=PAD_LAYOUT_XBOX; input_map_reset(); mapping=input_map;
+          inline_enabled=1; inline_capture_ok=1; hash_ok=1; probe_kind=3;   // the guard hash of this image's resource object
+          inline_sig_count=0; memset(inline_sigs,0,sizeof inline_sigs); sheet_seen_count=0;
+          #define BIND3() do { inline_handle_result=0; original_calls=0; appendage_glyph_bind(&sc,(uintptr_t)pane3,bind_returning_handle); \
+              assert(original_calls==1&&!inline_scope.cpu&&!inline_scope.id); } while (0)
+          last_log[0]=0; BIND3();
+          assert(appendage_inline_tagged(inline_handle_result)&&appendage_inline_id(inline_handle_result)==1&&strstr(last_log,"white-mask button sheet (selector 14 of 24 frames)"));
+          { int16_t got[GLYPH_SYMBOLS]; int lay=-1; assert(appendage_inline_signature(1,got,&lay)&&lay==INLINE_LAYOUT_MASK);
+            assert(!strcmp(glyph_art_name((unsigned)got[SYM_R]),"audune_playstation_r.png")&&!strcmp(glyph_art_name((unsigned)got[SYM_X]),"audune_playstation_west.png"));   // R1 + Square
+            for (int i=SYM_SLV;i<=SYM_SRH;i++) assert(got[i]==-1); }                      // not the stick image's symbols
+          put16(pane3+0x34c,SYM_X); BIND3(); assert(appendage_inline_id(inline_handle_result)==1);   // the X pane shares the composite
+          // Colored appearance: the cells take the colored faces like every other PlayStation prompt, in their own signature.
+          appearance_preference="colored"; BIND3(); assert(appendage_inline_id(inline_handle_result)==2);
+          { int16_t got[GLYPH_SYMBOLS]; int lay=-1; assert(appendage_inline_signature(2,got,&lay)&&lay==INLINE_LAYOUT_MASK);
+            assert(!strcmp(glyph_art_name((unsigned)got[SYM_X]),"audune_playstation_west_colored.png")); }
+          appearance_preference="standard";
+          preference="xbox"; BIND3(); assert(appendage_inline_id(inline_handle_result)==3);
+          preference="keyboard"; source=GLYPH_SOURCE_KEYBOARD; BIND3(); assert(appendage_inline_id(inline_handle_result)==4);
+          { int16_t got[GLYPH_SYMBOLS]; int lay=-1; assert(appendage_inline_signature(4,got,&lay)&&lay==INLINE_LAYOUT_MASK);
+            assert(!strcmp(glyph_art_name((unsigned)got[SYM_R]),"keyboard_r.png")&&!strcmp(glyph_art_name((unsigned)got[SYM_X]),"keyboard_space.png")); }
+          preference="original"; BIND3(); assert(inline_handle_result==0x10400338u);
+          preference="playstation"; source=GLYPH_SOURCE_PAD;
+          // The sheet's table under this image's guard, and this table under the sheet's guard, are native.
+          inline_sheet_records(res3+0x80+0x100); res3[3]^=1; BIND3(); assert(inline_handle_result==0x10400338u); res3[3]^=1;
+          inline_mask_records(res3+0x80+0x100); probe_kind=-1; res3[3]^=1; BIND3(); assert(inline_handle_result==0x10400338u); res3[3]^=1;
+          probe_kind=3; BIND3(); assert(appendage_inline_tagged(inline_handle_result));
+          probe_kind=-1;
+          #undef BIND3
         }
         puts("Inline atlas: policy by layout/binding/appearance, tile fitting, source identity, arming, handle scope, signatures and fallbacks passed");
         return 0;
