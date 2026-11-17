@@ -30,9 +30,16 @@ hash: the same over the cheat's words, so the runtime sees an edited cheat that 
   cave       writes only past main's image, a code cave other cheats branch into: its words go into theirs
   heading    no opcodes (a title or a group label)
   data       no instruction writes: the runtime's cheat VM
+  mixed      instruction writes among other opcodes (button conditions, data): the runtime's cheat VM runs it and keeps
+             its instruction writes in a shadow of the words it writes, and each state of those words that changes the
+             code is a patch set (`cheat_<hash>_<n>`), on while the shadow holds that state. <note>: the words, as
+             `<offset>:<initial>` (offsets in main, hex), then per set `#<n>:<value>,<value>...` in the words' order, `*`
+             for a word whose value does not decide the set
   unsupported <note> says why
 A code cheat that calls or jumps into a code cave it writes (words where main has zeros) gets the cave's body inlined
-at the call site; a conditional skip of one store in the body (cbz wN, +8; str wN, ...) is dropped.
+at the call site (an adrp in it encoded again for the site); a conditional skip of one store in the body (cbz wN, +8; str wN, ...) is dropped. Branches inside
+the cave stay branches inside the inlined body (`<word>@<index>` words, recomp/patches.py), and a b or bl out of the
+cave as its last word is encoded again for the site.
 
 Standard library and recomp/ only.
 """
@@ -73,6 +80,7 @@ class Cheat:
         self.key = self.kind = self.note = ''
         self.buttons = 0
         self.sites = {}   # {offset: [words]}
+        self.states = []   # a mixed cheat's patch sets: [{offset: [words]}], its note says when each is on
 
 
 def parse(text, mod):
@@ -137,9 +145,17 @@ def ops(words):
             n = 1 + ((2 if width == 8 else 1) if (w >> 8) & 0xF else 0)
         elif t == 0xA:
             n = 2 if (w >> 8) & 0xF in (2, 4, 5) else 1
+        elif t == 0xC:   # the lengths of runtime/cheat_vm.c, op_len
+            sub, n = (w >> 24) & 0xF, 1
+            if sub == 0:   # C0: compare a register; the operand form decides the words
+                x = (w >> 8) & 0xF
+                n = 2 if x in (0, 2) else (3 if (w >> 20) & 0xF == 8 else 2) if x == 4 else 1
+            elif sub == 4:   # C4: begin a keypress conditional with a 64-bit mask
+                n = 3
+            t = (w >> 24) & 0xFF
         else:
-            t = (w >> 24) & 0xFF if t == 0xC else (w >> 20) & 0xFFF
-            n = 1
+            t = (w >> 20) & 0xFFF
+            n = 2 if t == 0xFFF and (w >> 8) & 0xF in (0, 2) else 1   # FFF: log; forms 0 and 2 take an address
         if i + n > len(words):
             raise ValueError(f'opcode {w:08X} is cut short')
         out.append((t, words[i:i + n]))
@@ -147,7 +163,7 @@ def ops(words):
     return out
 
 
-VM_TYPES = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xA}
+VM_TYPES = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xA, 0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xFF0, 0xFF1, 0xFFF}
 
 
 def vm_ok(o):
@@ -226,6 +242,17 @@ def branch(w, off):
     return None
 
 
+def local_target(w, off):
+    """Target of a b, b.cond, cbz / cbnz or tbz / tbnz at off, else None (bl: None)."""
+    if w & 0xFC000000 == 0x14000000:
+        return off + ((((w & 0x3FFFFFF) ^ 0x2000000) - 0x2000000) << 2)
+    if w & 0xFF000010 == 0x54000000 or w & 0x7E000000 == 0x34000000:
+        return off + ((((w >> 5) & 0x7FFFF) ^ 0x40000) - 0x40000 << 2)
+    if w & 0x7E000000 == 0x36000000:
+        return off + ((((w >> 5) & 0x3FFF) ^ 0x2000) - 0x2000 << 2)
+    return None
+
+
 def pc_relative(w):
     """adr / adrp, a literal load, or any branch: wrong once moved to another address."""
     return (w & 0x1F000000 == 0x10000000 or w & 0x3B000000 == 0x18000000 or w & 0x7C000000 == 0x14000000
@@ -285,21 +312,32 @@ def literal(x, a, writes):
 
 
 def cave_body(writes, caves, start, back, call):
-    """[(address, word)] of the cave from start up to its ret (call) or its b to back."""
-    body, a = [], start
-    while True:
-        if a not in caves:
-            raise ValueError(f'the cheat branches to main+{a:X}, which it does not write')
-        w = writes[a]
-        if call and w == RET:
-            return body
-        b = branch(w, a)
-        if not call and b and b[0] == 'b' and b[1] == back:
-            return body
-        body.append((a, w))
-        a += 4
-        if len(body) > 64:
-            raise ValueError('a code cave of more than 64 instructions')
+    """([(address, word)], exits) of the cave entered at start: the words that run, followed through its branches
+    inside the cave, in address order (so a word that falls through is followed by the next one); exits: the addresses
+    of the words that leave it, its ret (call) or a b to back."""
+    seen, exits, work = set(), set(), [start]
+    while work:
+        a = work.pop()
+        while a not in seen:
+            if a not in caves:
+                raise ValueError(f'the cheat branches to main+{a:X}, which it does not write')
+            seen.add(a)
+            if len(seen) > 64:
+                raise ValueError('a code cave of more than 64 instructions')
+            w = writes[a]
+            b = branch(w, a)
+            if (call and w == RET) or (not call and b and b[0] == 'b' and b[1] == back):
+                exits.add(a)
+                break
+            t = local_target(w, a)
+            if t is not None and t in caves:
+                work.append(t)
+                if w & 0xFC000000 == 0x14000000:   # b: no fall through
+                    break
+            elif b and b[0] == 'b' or w == RET:   # leaves the cave elsewhere: convert() decides
+                break
+            a += 4
+    return sorted((a, writes[a]) for a in seen), exits
 
 
 def convert(main, writes, shared=None):
@@ -316,20 +354,58 @@ def convert(main, writes, shared=None):
         if not main.in_text(a):
             raise ValueError(f'main+{a:X} is past the end of the code')
         b = branch(w, a)
+        local = False
         if b and b[1] in caves:
-            body = cave_body(writes, caves, b[1], a + 4, b[0] == 'bl')
-            out = []
+            # the cave's body in place of the site; its branches inside it become <word>@<index> (recomp/patches.py),
+            # one to its end (the ret of a bl cave, the b back of a b cave) goes on past the site
+            body, exits = cave_body(writes, caves, b[1], a + 4, b[0] == 'bl')
+            if body and body[-1][0] in exits:
+                body = body[:-1]   # the last exit: falling off the end does the same
+            inside = {at for at, _ in body}
+            out, index, END = [], {}, -1
             words = [x for _, x in body]
             for i, (at, x) in enumerate(body):
+                index[at] = len(out)
                 if skip_store(words, i):
+                    continue
+                if at in exits:   # on past the site
+                    out.append(('to', 0x14000000, END))
                     continue
                 lit = literal(x, at, writes)
                 if lit is not None:
                     out += lit
                     continue
+                t = local_target(x, at)
+                if t is not None and (t in inside or t in exits):
+                    out.append(('to', x, t if t in inside else END))
+                    continue
+                if i == len(body) - 1 and branch(x, at):
+                    # a b / bl out of the cave as its last word: encoded again for the site's address
+                    to = branch(x, at)[1]
+                    if not main.in_text(to):
+                        # A target past main's code is an address of the build the cheat was written for. A cave
+                        # that ends by calling it in place of the bl it replaced runs that bl: the original's target
+                        # is this build's address of the function (a cheat for 1.0.2 calls main+1741E60, which
+                        # 2.0.0 has at main+1732120).
+                        orig = branch(main.word(a), a)
+                        if not (orig and orig[0] == 'bl' == branch(x, at)[0]):
+                            raise ValueError(f'the code cave at main+{b[1]:X} branches to main+{to:X}, outside the '
+                                             'code of this version of the game')
+                        to = orig[1]
+                    out.append(x & 0xFC000000 | ((to - a) >> 2) & 0x3FFFFFF)
+                    continue
+                if x & 0x9F000000 == 0x90000000:   # adrp: the same page, from the site
+                    imm = ((x >> 3 & 0x1FFFFC | x >> 29 & 3) ^ 0x100000) - 0x100000
+                    page = (at >> 12) + imm - (a >> 12)
+                    out.append(x & 0x9F00001F | (page & 3) << 29 | (page >> 2 & 0x7FFFF) << 5)
+                    continue
                 if pc_relative(x):
-                    raise ValueError(f'the code cave at main+{b[1]:X} has a branch or pc-relative instruction')
+                    raise ValueError(f'the code cave at main+{b[1]:X} has a pc-relative instruction ({x:08X}) or '
+                                     'a branch out of it')
                 out.append(x)
+            index[END] = len(out)
+            out = [('to', x[1], index[x[2]]) if isinstance(x, tuple) else x for x in out]
+            local = any(isinstance(x, tuple) for x in out)
             repl = out or [NOP]
         else:
             repl = [w]
@@ -337,9 +413,18 @@ def convert(main, writes, shared=None):
         kind = main.lift(orig, a).kind
         if kind not in ('op', 'bl', 'b', 'bcond'):
             raise ValueError(f'main+{a:X} is a {kind}, which a patch cannot replace')
-        last = main.lift(repl[-1], a).kind
+        tail = repl[-1]
+        last = main.lift(tail[1] if isinstance(tail, tuple) else tail, a).kind
         if last not in ('op', 'bl', 'b', 'bcond', 'ret'):
             raise ValueError(f'main+{a:X} gets a {last}')
+        if local:
+            # recomp/gen.py lifts the cave on c->nzcv, as the guest keeps flags, and carries the function's flags
+            # through it where the original instruction or the cave's last branch uses them (Emitter.packed)
+            if last == 'bl' and main.effect(orig, a) != (False, None):
+                raise ValueError(f'main+{a:X}: the code cave ends in a call in place of an instruction that uses '
+                                 'the CPU flags')
+            sites[a] = repl
+            continue
         want = main.effect(orig, a)[1]
         got = [e[1] for e in (main.effect(x, a) for x in repl) if e[1]]
         if (got[0] if got else None) != want or len(got) > 1:
@@ -424,9 +509,61 @@ def classify(main, c, shared=None):
             if set(off) == {a for a in on if not main.beyond(a)} and all(main.word(a) == w for a, w in off.items()):
                 c.sites, c.kind, c.buttons = convert(main, on, shared), 'key', os_[k8][1][0] & 0x0FFFFFFF
                 return
-        raise ValueError('it mixes instruction writes with other cheat opcodes')
+        mixed(main, c, os_, cw, shared)
     except ValueError as e:
         c.kind, c.note, c.sites = 'unsupported', str(e), {}
+
+
+MAX_STATES = 256
+
+
+def mixed(main, c, os_, cw, shared):
+    """A cheat whose instruction writes sit among other opcodes: the runtime's VM runs it, its instruction writes
+    going to a shadow (runtime/cheats.c), and every state of the written words that changes the code gets a patch set.
+    A word written with one value only in a code cave counts as written: a cave is filled with the branch into it, in
+    one pass of the VM, so it holds that value whenever the code reaches it."""
+    bad = next((r for o, x in zip(os_, cw) if x is None for r in [vm_ok(o)] if r), None)
+    if bad:
+        raise ValueError(bad)
+    values = {}
+    for x in cw:
+        for a, w in (x or {}).items():
+            values.setdefault(a, [])
+            if w not in values[a]:
+                values[a].append(w)
+    words = sorted(values)
+    init = {a: shared.get(a, main.word(a)) for a in words}
+    fixed = {a for a in words if main.beyond(a) and len(values[a]) == 1}
+    vary = [a for a in words if a not in fixed]
+    cands = [[init[a]] + [w for w in values[a] if w != init[a]] for a in vary]
+    n = 1
+    for x in cands:
+        n *= len(x)
+    if n > MAX_STATES:
+        raise ValueError(f'its instruction writes have {n} states, more than {MAX_STATES}')
+    sets, table, err = [], [], None
+    for k in range(n):
+        state, q = {}, k
+        for a, x in zip(vary, cands):
+            state[a] = x[q % len(x)]
+            q //= len(x)
+        writes = {a: values[a][0] for a in fixed}
+        writes.update({a: w for a, w in state.items() if not (main.beyond(a) and w == 0)})
+        if all(w == main.word(a) for a, w in writes.items() if not main.beyond(a)):
+            continue   # the game's own code: no set
+        try:
+            sites = convert(main, writes, shared)
+        except ValueError as e:
+            err = err or e   # a state the cheat does not reach (a branch into a cave word not written yet)
+            continue
+        if sites not in sets:
+            sets.append(sites)
+        table.append((sets.index(sites), state))
+    if not sets:
+        raise err or ValueError('it writes no instruction that changes the code')
+    c.kind, c.states = 'mixed', sets
+    c.note = ' '.join(f'{a:X}:{init[a]:X}' for a in words) + ' ' + ' '.join(
+        f'#{k + 1}:' + ','.join(f'{st[a]:X}' if a in st else '*' for a in words) for k, st in table)
 
 
 def main():
@@ -449,12 +586,14 @@ def main():
     sets, sites, status = [], [], []
     for c in cheats:
         classify(m, c, shared)
-        if c.sites:
-            name = f'cheat_{c.key.lower()}'
-            label = c.name.encode('ascii', 'replace').decode()   # recomp/patches.py reads the file as ASCII
-            sets.append(f'set {name} XCX_CHEAT_{c.key} {1 if c.kind == "master" else 0}   # {label}')
-            for a, repl in sorted(c.sites.items()):
-                sites.append(f'site {name} main {a:x} {m.word(a):08x} {" ".join(f"{w:08x}" for w in repl)}')
+        label = c.name.encode('ascii', 'replace').decode()   # recomp/patches.py reads the file as ASCII
+        groups = [('', c.sites)] if c.sites else [(f'_{k + 1}', st) for k, st in enumerate(c.states)]
+        for suffix, group in groups:
+            name = f'cheat_{c.key.lower()}{suffix}'
+            sets.append(f'set {name} XCX_CHEAT_{c.key}{suffix.upper()} {1 if c.kind == "master" else 0}   # {label}')
+            for a, repl in sorted(group.items()):
+                words = ' '.join(f'{w[1]:08x}@{w[2]}' if isinstance(w, tuple) else f'{w:08x}' for w in repl)
+                sites.append(f'site {name} main {a:x} {m.word(a):08x} {words}')
         content = fnv(' '.join(f'{w:08X}' for w in c.words).encode())
         note = c.note.replace('\t', ' ')
         status.append(f'{c.key}\t{content}\t{c.kind}\t{c.buttons:X}\t{note}')

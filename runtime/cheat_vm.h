@@ -13,6 +13,9 @@ typedef struct {
     int (*read)(void *ctx, uint64_t addr, void *out, int n);          // 0: the address cannot be read
     int (*write)(void *ctx, uint64_t addr, const void *in, int n);    // 0: the address cannot be written
     void (*log)(void *ctx, int id, uint64_t value);                   // an FFF opcode's value changed
+    // A store of the cheat at index `cheat` of its file that the setup built into the game instead (an instruction
+    // write of a mixed cheat, runtime/cheats.c): 1 when it took the store, which then does not reach memory. May be NULL.
+    int (*code)(void *ctx, int cheat, uint64_t addr, uint64_t value, int n);
     void *ctx;
 } CheatEnv;
 
