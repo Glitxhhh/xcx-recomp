@@ -235,7 +235,17 @@ site xcx60 main 3f4a8c 71400508 @page:x9 bd404d20 52a8b009 1e270121 1e210800 1e2
 # floor key. At 30 fps the event clock only holds whole frames and nothing shows; above it the event camera, and what
 # follows it, held each 30 fps key for several frames and then jumped (Doug's Skell flight). The blend takes
 # t - floor(t) (s9 - s8), as the plain path does; s1 is written there and only read by the fmadd after it.
-site xcx60 main 3f4fd4 1e283821 1e283921
+# Keys more than 90 apart are not blended (#106: one-frame flashes in cutscenes above 30 fps): the camera's rotation
+# channels are Euler angles in degrees (main+0x3f5144 scales them by pi/180), and the data steps across +-180 (roll
+# -179.97 then 180.03 in the transport ship scene) or between equivalent triples, or cuts within a track. Blended, the
+# frame between two such keys showed the camera turned up to 180 degrees (upside down for one frame, then the motion
+# blur smear of turning back). Holding the earlier key there is what 30 fps shows; no real motion turns 90 degrees or
+# moves 90 units in one 30 fps frame. The blend fraction is cleared (bic with the compare mask) when |v1 - v0| > 90.0;
+# s0 holds v1 - v0 here. x9, s2 and s3 are free: x9 is set again before its next read, s2 and s3 are not read again.
+site xcx60 main 3f4fd4 1e283821 1e283921 52a85689 1e270123 1e20c002 7ea3e442 0e621c21
+# The same for the plain path (main+0x3f4f80), which already blended by t - floor(t): after s1 = v1 - v0 the fraction
+# in s2 is cleared when |s1| > 90.0. x9 is set again at main+0x3f4fe0 before any read; s3 and s4 are not read again.
+site xcx60 main 3f4f88 1e203821 1e203821 52a85689 1e270123 1e20c024 7ea3e484 0e641c42
 # The eye blink (#106: faces blinked four times as often at 120 fps, and each blink was shorter). A blink controller is a
 # state machine of per-update callbacks: main+0x2b95ec sets the open-eye wait at +0x28 to rand(60) + 60, main+0x2b9658
 # takes 1 off it per update and at 0 closes the eyes (main+0x2b91c0) and sets +0x28 to the closed hold +0x2c + 1 (4 /
