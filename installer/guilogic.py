@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import extracted
 from . import ini
 from . import state as statefile
 from .events import render
@@ -129,34 +130,52 @@ class Form:
     def update_mode(self):
         return self.installed_state() is not None
 
+    def base_folder(self):
+        """True when the base entry names a folder (an extracted game, issue #175) rather than a game file."""
+        value = self.base.strip()
+        return bool(value) and Path(value).is_dir()
+
+    def extracted_game(self):
+        """installer/extracted.py find() of the base entry: an extracted game folder (exefs/ and the RomFS), or None.
+        Such a folder needs neither the update nor the keys; the keys only for add-on content."""
+        return extracted.find(self.base.strip()) if self.base_folder() else None
+
     def problems(self):
         """Ids of the entries that are missing or wrong, in screen order. A folder with xcx-install.json needs only
-        itself; the CLI asks for the game files when it must extract again."""
+        itself; the CLI asks for the game files when it must extract again. An extracted game as the base game needs
+        no update and the keys only with add-on content."""
         found = []
         update = self.update_mode()
+        game = self.extracted_game()
         if not self.dest.strip():
             found.append('ui.need_dest')
-        if not update:
-            for name in ('base', 'update', 'keys'):
-                value = getattr(self, name).strip()
-                if not value:
+        needed = () if update else ('base',) if game else ('base', 'update', 'keys')
+        if game and self.dlc.strip() and not update:
+            needed += ('keys',)
+        for name in ('base', 'update', 'keys'):
+            value = getattr(self, name).strip()
+            if name == 'update' and game:
+                continue   # not passed with an extracted game (command)
+            if not value:
+                if name in needed:
                     found.append(f'ui.need_{name}')
-                elif not Path(value).is_file():
-                    found.append(f'ui.missing_{name}')
-            if self.lang not in ini.LANGUAGES:
-                found.append('ui.need_lang')
-        else:
-            for name in ('base', 'update', 'keys'):
-                value = getattr(self, name).strip()
-                if value and not Path(value).is_file():
-                    found.append(f'ui.missing_{name}')
+            elif name == 'base' and self.base_folder():
+                if not game:
+                    found.append('ui.base_not_extracted')
+            elif not Path(value).is_file():
+                found.append(f'ui.missing_{name}')
+        if not update and self.lang not in ini.LANGUAGES:
+            found.append('ui.need_lang')
         if self.dlc.strip() and not Path(self.dlc.strip()).is_file():
             found.append('ui.missing_dlc')
         return found
 
     def command(self, python, root=None, temp=None, verify=False):
         cmd = [str(python), '-m', 'installer']
-        for flag, value in (('--base', self.base), ('--update', self.update), ('--dlc', self.dlc),
+        # an extracted game goes as --base FOLDER (the CLI reads it as --game); an update file next to it would make
+        # the CLI look for game files in that folder instead
+        update = '' if self.extracted_game() else self.update
+        for flag, value in (('--base', self.base), ('--update', update), ('--dlc', self.dlc),
                             ('--keys', self.keys), ('--lang', self.lang), ('--dest', self.dest)):
             if value.strip():
                 cmd += [flag, value.strip()]
