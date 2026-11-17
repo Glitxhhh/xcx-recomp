@@ -253,7 +253,7 @@ static unsigned inline_signature_id(int layout, const int16_t art[GLYPH_SYMBOLS]
             size_t n = strlen(list);
             snprintf(list + n, sizeof list - n, "%s=%s ", symbol_names[i], glyph_art_name((unsigned)art[i]));
         }
-        rt_log("inline glyph: %s signature %u: %s", layout == INLINE_LAYOUT_SHEET ? "sheet" : layout == INLINE_LAYOUT_STICKS ? "stick" :
+        rt_log("inline glyph: %s signature %u: %s", layout == INLINE_LAYOUT_SHEET ? "sheet" : layout == INLINE_LAYOUT_MASK ? "white-mask sheet" : layout == INLINE_LAYOUT_STICKS ? "stick" :
                layout == INLINE_LAYOUT_HINT ? "mini-map hint" : layout == INLINE_LAYOUT_SOUL ? "soul challenge button" : layout == INLINE_LAYOUT_HOLD ? "field action hold button" : "text", id, list);
     }
     if (full) rt_log("inline glyph: %u signatures in use; further style or binding combinations keep the native icons", INLINE_SIGNATURES);
@@ -305,16 +305,17 @@ static void inline_arm(Cpu *c) {
     unsigned id = inline_signature_id(INLINE_LAYOUT_FONT, art);
     if (id) inline_scope = (InlineScope){c, id, rd64(entry + 0x20), 0};
 }
-// The icon_button sheet and the stick-direction image: every image pane drawn from them goes through the type-1 bind (the loop at
+// The icon_button sheet, the stick-direction image and the white-mask copy of the sheet (icon_button03): every image pane drawn from them goes through the type-1 bind (the loop at
 // 0xa275c0 binds table[frame] once per layer). A pane is one of them when its resource object matches that image's guard hash and
 // its record table matches the closed form's SHA-256. A pane shows one cell of them (its selector, +0x34c, is the record index).
 // A resource is verified once per distinct address and content, then trusted only while its first 128 bytes stay equal.
 typedef struct { int layout; unsigned records; uint8_t guard[32], table[32]; uint64_t checked; uint8_t copy[128]; } SheetKind;
-enum { SHEET_KINDS = 2 };
+enum { SHEET_KINDS = 3 };
 static SheetKind sheet_kinds[SHEET_KINDS] = {
     {INLINE_LAYOUT_SHEET, SHEET_RECORDS, {0xed,0x91,0x64,0xc1,0x3b,0xf5,0x5b,0x99,0x9b,0xf7,0x8b,0xe9,0xd5,0x2d,0x3b,0x65,
         0x71,0x70,0x62,0xc6,0x22,0xdb,0xc8,0xb1,0x31,0x5a,0x30,0xe7,0xd9,0x7d,0x32,0xf7}, SHEET_RECORDS_SHA256},
     {INLINE_LAYOUT_STICKS, STICKS_RECORDS, STICKS_GUARD_SHA256, STICKS_RECORDS_SHA256},
+    {INLINE_LAYOUT_MASK, MASK_RECORDS, MASK_GUARD_SHA256, MASK_RECORDS_SHA256},
 };
 static SheetKind *sheet_resource(uint64_t resource) {
     if (!resource || !plat_mem_readable(resource, 0x1000)) return NULL;
@@ -368,7 +369,7 @@ static void sheet_arm(Cpu *c, uint64_t node) {
     if (first) sheet_seen[sheet_seen_count++] = pair;
     plat_mutex_unlock(&glyph_lock);
     if (first) rt_log("inline glyph: a layout pane draws the %s (selector %u of %u frames); using the signature's composite",
-                      kind->layout == INLINE_LAYOUT_STICKS ? "stick-direction image" : "button sheet",
+                      kind->layout == INLINE_LAYOUT_STICKS ? "stick-direction image" : kind->layout == INLINE_LAYOUT_MASK ? "white-mask button sheet" : "button sheet",
                       rd16(node + 0x34c), rd16(node + 0x34e));
     inline_scope = (InlineScope){c, id, 0, tid};
 }

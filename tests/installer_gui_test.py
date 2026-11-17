@@ -221,6 +221,43 @@ class FormTest(unittest.TestCase):
         statefile.save(self._mkdir(out), statefile.empty('r0'))
         self.assertEqual(Form(dest=str(out), base=str(self.dir / 'no.nsp')).problems(), ['ui.missing_base'])
 
+    def dump(self):
+        """An extracted game folder as installer/extracted.py find() takes it: exefs/main and romfs.bin."""
+        game = self._mkdir(self.dir / 'dump' / 'exefs').parent
+        (game / 'exefs' / 'main').write_bytes(b'x')
+        (game / 'romfs.bin').write_bytes(b'x')
+        return game
+
+    def test_extracted_game_needs_no_update_or_keys(self):
+        form = self.form(base=str(self.dump()), update='', keys='')
+        self.assertIsNotNone(form.extracted_game())
+        self.assertEqual(form.problems(), [])
+        cmd = form.command('py.exe')
+        self.assertEqual(cmd[cmd.index('--base') + 1], str(self.dir / 'dump'))
+        self.assertNotIn('--update', cmd)
+        self.assertNotIn('--keys', cmd)
+
+    def test_extracted_game_drops_a_given_update(self):
+        # the CLI would look for game files in the folder if --update came with it
+        form = self.form(base=str(self.dump()), update=str(self.dir / 'no.nsp'))
+        self.assertEqual(form.problems(), [])
+        self.assertNotIn('--update', form.command('py.exe'))
+
+    def test_extracted_game_with_dlc_needs_keys(self):
+        (self.dir / 'aoc.nsp').write_bytes(b'x')
+        form = self.form(base=str(self.dump()), update='', keys='', dlc=str(self.dir / 'aoc.nsp'))
+        self.assertEqual(form.problems(), ['ui.need_keys'])
+
+    def test_folder_that_is_no_extracted_game(self):
+        empty = self._mkdir(self.dir / 'empty')
+        self.assertEqual(self.form(base=str(empty)).problems(), ['ui.base_not_extracted'])
+
+    def test_extracted_game_texts_in_both_languages(self):
+        for lang in ('en', 'ru'):
+            cat = Catalog(lang)
+            for id in ('ui.browse_folder', 'ui.pick_game_folder', 'ui.base_not_extracted', 'ui.extracted_game'):
+                self.assertIn(id, cat.texts, (lang, id))
+
     def test_broken_state_is_a_new_install(self):
         out = self._mkdir(self.dir / 'out')
         (out / statefile.NAME).write_text('{nope', encoding='utf-8')

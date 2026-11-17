@@ -8,6 +8,9 @@ const RtFileHash rt_exefs_sha256[]={{"main","0a9dbf1f3816dd0fab0a08883d538c74d9b
 const int rt_exefs_sha256_count=1;
 static const char *pref="auto", *variant="standard";
 const char *cfg_value(const char *name){return !strcmp(name,"XCX_GLYPH_APPEARANCE") ? variant : pref;}
+// The tests change the preference between calls without a settings write: a new version every call, so the cached
+// settings (glyph_style_setting) are read again each time.
+unsigned cfg_version(void) { static unsigned v; return ++v; }
 const char *cfg_get(const char *name){(void)name;return NULL;}
 void rt_log(const char *fmt,...){(void)fmt;}
 static unsigned runtime_note_calls;
