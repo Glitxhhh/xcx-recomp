@@ -638,7 +638,16 @@ static void tab_menu(float scale) {
     opt_end();
 }
 
-// ---- Cheats: the built-in cheats, then each mod folder's (cheats.c). Nothing here is a setting: the rows are built from
+// Built-in cheats whose description carries a warning (and their row a mark): they can break a save's progress.
+static UiTextId cheat_warning(const CheatRow &c) {
+    if (strcmp(c.source, CHEATS_BUILTIN)) return UI_TEXT_COUNT;
+    // A chest of another colour can take the place of one that holds a mission's key item.
+    if (!strcmp(c.name, "Silver Chests Always") || !strcmp(c.name, "Gold Chests Always")) return UI_CHEATS_CHEST_WARN;
+    return UI_TEXT_COUNT;
+}
+
+// ---- Cheats: the built-in cheats or each mod folder's (cheats.c), one list at a time when there are both, so a
+// player's own cheats are not at the end of the long built-in list. Nothing here is a setting: the rows are built from
 // the cheat files and cheats-enabled.txt keeps them.
 static void tab_cheats(float scale) {
     opt_begin("##cheats", scale);
@@ -646,9 +655,24 @@ static void tab_cheats(float scale) {
     int n = cheats_count();
     if (n) opt_text(UI_CHEATS_WARN, true);
     else opt_text(UI_CHEATS_NONE);
+    int counts[2] = {0, 0};   // rows a player can see: built-in, from cheat files
+    for (int i = 0; i < n; i++) {
+        CheatRow c = cheats_row(i);
+        size_t len_name = strlen(c.name);
+        bool label = len_name > 8 && !strncmp(c.name, "--- ", 4) && !strcmp(c.name + len_name - 4, " ---");
+        if (!label && c.state != CHEAT_HIDDEN) counts[strcmp(c.source, CHEATS_BUILTIN) != 0]++;
+    }
+    static int shown = -1;   // 0 built-in, 1 cheat files; first the player's own when there are any
+    if (shown < 0 || !counts[shown]) shown = counts[1] ? 1 : 0;
+    if (counts[0] && counts[1]) {
+        char value[96];
+        snprintf(value, sizeof value, menu_text(shown ? UI_CHEATS_LIST_FILES : UI_CHEATS_LIST_BUILTIN), counts[shown]);
+        if (opt_button("##cheats_list", UI_CHEATS_LIST, UI_CHEATS_LIST_DESC, value)) shown ^= 1;
+    }
     const char *group = NULL;
     for (int i = 0; i < n; i++) {
         CheatRow c = cheats_row(i);
+        if ((strcmp(c.source, CHEATS_BUILTIN) != 0) != (shown == 1)) continue;
         if (!group || strcmp(group, c.source)) {   // a heading per source, as the rows come in source order
             group = c.source;
             ImGui::Dummy(ImVec2(0, 6 * scale));
@@ -679,12 +703,19 @@ static void tab_cheats(float scale) {
         if (len > 0 && len < (int)sizeof desc && c.state == CHEAT_UNSUPPORTED && *c.note)
             len += snprintf(desc + len, sizeof desc - len, "\n\n%s", c.note);
         if (len > 0 && len < (int)sizeof desc && c.buttons)
-            snprintf(desc + len, sizeof desc - len, menu_text(UI_CHEATS_BUTTONS), (unsigned)c.buttons);
+            len += snprintf(desc + len, sizeof desc - len, menu_text(UI_CHEATS_BUTTONS), (unsigned)c.buttons);
+        UiTextId warning = cheat_warning(c);
+        char label[600];
+        snprintf(label, sizeof label, "%s", c.name);
+        if (warning != UI_TEXT_COUNT) {
+            if (len > 0 && len < (int)sizeof desc) snprintf(desc + len, sizeof desc - len, "%s", menu_text(warning));
+            snprintf(label, sizeof label, "%s %s", c.name, menu_text(UI_CHEATS_WARNING_MARK));
+        }
         if (c.state == CHEAT_WRITES_CODE || c.state == CHEAT_UNSUPPORTED) opt_disable_next(UI_CHEATS_NOTE_CODE);
         else if (c.state == CHEAT_NOT_BUILT) opt_disable_next(UI_CHEATS_NOTE_SETUP);
         else if (c.state == CHEAT_MALFORMED) opt_disable_next(UI_CHEATS_NOTE_BAD);
         else if (c.master) opt_disable_next(UI_CHEATS_NOTE_MASTER);
-        if (opt_row_text(id, c.name, desc, (c.enabled || c.master) && runs) && runs && !c.master)
+        if (opt_row_text(id, label, desc, (c.enabled || c.master) && runs) && runs && !c.master)
             cheats_set(i, !c.enabled);
     }
     opt_group(UI_CHEATS_WHERE);

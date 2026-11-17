@@ -33,6 +33,15 @@ static void fake_log(void *ctx, int id, uint64_t v) {
     log_value = v;
 }
 
+// Takes the stores of the first cheat to 0x310, as a mixed cheat's instruction writes go to its shadow.
+static uint64_t hooked;
+static int fake_code(void *ctx, int cheat, uint64_t a, uint64_t v, int n) {
+    (void)ctx, (void)n;
+    if (cheat != 0 || a != 0x310) return 0;
+    hooked = v;
+    return 1;
+}
+
 static uint32_t u32_at(uint64_t a) {
     uint32_t v;
     memcpy(&v, mem + a, 4);
@@ -84,6 +93,15 @@ int probe_cheats(void) {
     CheatEnv env = {.base = {0, HEAP, 0, 0, 0}, .read = fake_read, .write = fake_write, .log = fake_log};
     cheat_run(&f, &env);
     CHECK(u32_at(0x300) == 1 && u32_at(0x304) == 0, "the master runs, a cheat that is off does not");
+    cheat_free(&f);
+
+    // the code hook takes the stores it wants (a mixed cheat's instruction writes, cheats.c code_store), not memory
+    CHECK(parse("[A]\n04000000 00000310 0000000A\n[B]\n04000000 00000314 0000000B\n", &f), "parse");
+    for (int i = 0; i < f.count; i++) f.cheats[i].enabled = 1;
+    env.code = fake_code;
+    cheat_run(&f, &env);
+    env.code = NULL;
+    CHECK(u32_at(0x310) == 0 && hooked == 0xA && u32_at(0x314) == 0xB, "the hook takes cheat 1's store at its address");
     cheat_free(&f);
 
     // 0: store, the widths and a region; a 64-bit value is two words, high first

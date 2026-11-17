@@ -80,6 +80,15 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_CHEATS_UNSUPPORTED] = "Changes the game's code in a way the setup cannot build into the recompiled game yet.",
     [UI_CHEATS_NOTE_SETUP] = "needs the setup again",
     [UI_CHEATS_BUTTONS] = "\n\nActs only while its buttons are held (button mask %X).",
+    [UI_CHEATS_LIST] = "Show",
+    [UI_CHEATS_LIST_DESC] = "Switches between the cheats that come with the recomp and the ones from cheat files in the "
+                            "mods folder. Cheats of both lists can be on at the same time.",
+    [UI_CHEATS_LIST_BUILTIN] = "Built-in cheats (%d)", [UI_CHEATS_LIST_FILES] = "Cheat files (%d)",
+    [UI_CHEATS_WARNING_MARK] = "(warning)",
+    [UI_CHEATS_CHEST_WARN] = "\n\nWarning: use it only in free play, against enemies whose chest holds nothing a story "
+                             "or side mission needs. During a mission it can turn the chest that holds the mission's "
+                             "key item (a door key, say) into another one, and the mission then cannot be finished on "
+                             "that save.",
     [UI_SWKBD_GRID_HINT] = "Controller: %s selects a key, %s confirms, %s cancels. D-pad or left stick moves. %s: Backspace. %s: Delete. Hold %s: Shift. %s: Caps Lock. %s / %s: text cursor.",
     [UI_SWKBD_SHIFT] = "Caps Lock", [UI_SWKBD_MOMENTARY_SHIFT] = "Shift",
     [UI_SWKBD_PALETTE] = "Controller keyboard: Latin letters, digits and space. You can also type with your keyboard.",
@@ -408,6 +417,15 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_CHEATS_UNSUPPORTED] = "Меняет код игры так, что установщик пока не может встроить это в рекомпилированную игру.",
     [UI_CHEATS_NOTE_SETUP] = "нужен повторный запуск установщика",
     [UI_CHEATS_BUTTONS] = "\n\nДействует, только пока зажаты его кнопки (маска кнопок %X).",
+    [UI_CHEATS_LIST] = "Показать",
+    [UI_CHEATS_LIST_DESC] = "Переключает между читами, которые идут с рекомпом, и читами из файлов в папке модов. Читы "
+                            "из обоих списков можно включать одновременно.",
+    [UI_CHEATS_LIST_BUILTIN] = "Встроенные читы (%d)", [UI_CHEATS_LIST_FILES] = "Файлы читов (%d)",
+    [UI_CHEATS_WARNING_MARK] = "(осторожно)",
+    [UI_CHEATS_CHEST_WARN] = "\n\nОсторожно: включайте его только в свободной игре и только против врагов, в сундуке "
+                             "которых нет ничего нужного для сюжетной или побочной миссии. Во время миссии он может "
+                             "заменить сундук с ключевым предметом миссии (например, ключом от двери) другим, и тогда "
+                             "миссию на этом сохранении уже не пройти.",
     [UI_SWKBD_GRID_HINT] = "Контроллер: %s — выбрать клавишу, %s — подтвердить, %s — отменить. Крестовина или левый стик — перемещение. %s — назад удалить. %s — удалить вперёд. Удерживать %s — Shift. %s — Caps Lock. %s / %s — курсор.",
     [UI_SWKBD_SHIFT] = "Caps Lock", [UI_SWKBD_MOMENTARY_SHIFT] = "Shift",
     [UI_SWKBD_PALETTE] = "Клавиатура контроллера: латинские буквы, цифры и пробел. Можно вводить текст и с обычной клавиатуры.",
