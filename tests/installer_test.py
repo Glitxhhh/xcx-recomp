@@ -299,6 +299,19 @@ class CliTest(unittest.TestCase):
         self.assertNotIn('ru', ini.PLAYABLE)
         self.assertEqual(ini.playable('nl'), 'nl')
 
+    def test_old_chinese_codes_become_the_ones_the_game_knows(self):
+        # issue #172: the game stops before the title with zh-CN or zh-TW
+        from installer import ini
+        from installer.cli import auto_language
+        self.assertEqual(ini.playable('zh-CN'), 'zh-Hans')
+        self.assertEqual(ini.playable('zh-TW'), 'zh-Hant')
+        self.assertEqual(ini.playable('zh-Hans'), 'zh-Hans')
+        self.assertNotIn('zh-CN', ini.PLAYABLE)
+        self.assertNotIn('zh-TW', ini.PLAYABLE)
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'xcx.ini').write_text('[language]\nlang = zh-CN\n', encoding='utf-8')
+            self.assertEqual(auto_language(Path(d), None), 'zh-Hans')
+
     def test_auto_language_on_a_fresh_folder_is_a_game_language(self):
         from installer import ini
         from installer.cli import auto_language

@@ -151,6 +151,7 @@
 [language]
 # Language: a Windows locale such as de-DE, or a Switch code (en-US, ja, zh-Hant, ...). Default: the Windows locale.
 # The game cannot start in Russian: ru, from either key or the Windows locale, plays in English (en-US).
+# Chinese is zh-Hans or zh-Hant; the older zh-CN and zh-TW, in which the game cannot start either, play as those.
 # locale = en-US
 # lang = en-US
 # System mode reported to the game: docked or handheld.
