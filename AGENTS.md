@@ -7,7 +7,8 @@ Static recompilation of *Xenoblade Chronicles X: Definitive Edition* (Switch, AR
 This repository is public. Game data lives outside it and every derived file stays in ignored folders.
 
 - The user's game and key paths are in `config.local.toml` (ignored). Pass the keys file path to tools; the tools read it themselves. Key values stay out of your output, logs, commands and files.
-- Everything extracted or generated goes under `build/` or `generated/`.
+- Everything extracted or generated goes under `build/` or `generated/`. The one exception is the execution profile of
+  the profile-guided build, `tools/data/pgo/` ([docs/building.md](docs/building.md), "Profile-guided build").
 - Every file the code generator emits carries the marker defined as `GENERATED_MARKER` in `tools/check_content.py`.
 - Run `python tools/check_content.py --staged` before proposing a commit. It is the same check CI runs.
 

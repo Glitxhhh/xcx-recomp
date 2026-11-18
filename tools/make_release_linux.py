@@ -419,6 +419,12 @@ HERE="$(dirname "$(readlink -f "$0")")"
 export PYTHONDONTWRITEBYTECODE=1
 export TCL_LIBRARY="$HERE/python/lib/tcl9.0"
 export TK_LIBRARY="$HERE/python/lib/tk9.0"
+# `-m installer ...` runs the command line without a window, for a launcher that sets the game up (the same arguments
+# as the Windows release's python.exe)
+if [ "$1" = "-m" ] && [ "$2" = "installer" ]; then
+    shift 2
+    exec "$HERE/python/bin/python3" -m installer "$@"
+fi
 exec "$HERE/python/bin/python3" -m installer.gui "$@"
 '''
 

@@ -101,6 +101,18 @@ site xcx60 main a1116c bd489501 bd489501 @page:x11 bd404d65 1e250821
 site xcx60 main a11180 bd489501 bd489501 @page:x11 bd404d65 1e250821
 site xcx60 main a1126c bd489500 bd489500 @page:x8 bd404d02 1e220800
 
+# The EXP gauges after a battle (issue #123): the party HUD's gauge update (main+0x8a2960) fills each gauge (level,
+# class) in its state 2 by adding a rate of 100% of the bar per second times the frame time to its progress at +0x8b4
+# of the gauge entry (main+0x8a2b14), turns progress * the EXP of the current rank into whole EXP, rounded to nearest,
+# carries a rank-up (main+0x25d2f0 for the class), and while short of the target stores progress = EXP / the rank's EXP
+# (main+0x8a2dbc). That rounds each frame's gain away when it is under half an EXP: with the 15 Class EXP of Drifter
+# rank 1 a frame adds 0.5 EXP at 30 fps, 0.25 at 60 and 0.17 at 90, so above 30 fps the Class EXP bar stopped short of
+# its target and stayed on screen. The stored progress keeps its unrounded value when that value still rounds to the
+# new EXP (|progress * EXP of the rank - EXP| <= 0.5, which fails after a rank-up, where EXP / the rank's EXP is kept),
+# so the bar fills at its rate at any frame rate. Branchless (fabd, fcmge, bit): no flags are written. s0 is the stored
+# value, s1 the rank's EXP, w8 the new EXP; s2..s4 are free until the call at main+0x8a2dc4.
+site xcx60 main 8a2dbc 1e211800 1e211800 bd48b6a2 1e210843 1e220104 7ea4d463 1e2c1004 7e23e483 2ea31c40
+
 # The mod's getter that returns false on Switch (1.0.1 +0x13eb280): true. Off: in 2.0.0 it crashes the title screen's
 # rendering (main+0x9530b0 reads through a bad pointer).
 site xcx60g main 13db618 2a1f03e0 52800020
@@ -198,22 +210,63 @@ site viewsize main 972f8c 910692aa 910692aa b940014b 5110e16b 5ac0116b 53057d6b 
 # the event manager's update and late update hand 1.0 to every actor and to the camera system (main+0x2d0010,
 # main+0x2cfc40); the camera system forces 1.0 while an event runs (main+0x2aadc8); the event clock adds its rate,
 # 1.0 frame, per update (main+0x2dca18, read at +0x3c); a message's remaining time and a voice's start delay count
-# down by 1.0 (main+0x2e5d20, main+0x304dd0). x9 is free at each; at main+0x2dcb14 s4 is too.
+# down by 1.0 (main+0x2e5d20, main+0x304dd0). An event's move interpolator (a virtual update, main+0x2b2b54, whose
+# result goes to the moved object's vtable +0x140) steps its time by the step it is handed, or by 1.0 when a global
+# flag byte has any of its low 3 bits set, as it has in events: the NLA elevator's lift finished its run within a second
+# above 30 fps while the camera kept riding it (#106); its 1.0 is the step as well (main+0x2b2b84). x9 is free at each;
+# at main+0x2dcb14 s4 is too.
 site xcx60 main 2d00b4 1e2e1008 @page:x9 bd404d28
 site xcx60 main 2d00f0 1e2e1000 @page:x9 bd404d20
 site xcx60 main 2cfcac 1e2e1008 @page:x9 bd404d28
 site xcx60 main 2cfcf0 1e2e1000 @page:x9 bd404d20
 site xcx60 main 2cfd60 1e2e1008 @page:x9 bd404d28
 site xcx60 main 2aae10 1e2e1000 @page:x9 bd404d20
+site xcx60 main 2b2b84 1e2e1000 @page:x9 bd404d20
 site xcx60 main 2dcb14 2d478e62 @page:x9 2d478e62 bd404d24 1e240842
 site xcx60 main 2e5d58 1e3e1001 @page:x9 bd404d21 1e214021
 site xcx60 main 304dd0 1e3e1001 @page:x9 bd404d21 1e214021
 # Event actors also use the step they are handed as their animations' play speed: main+0x2e9d0 sets each animation
 # slot's rate to its base rate times that value (through main+0x3f620). The animations already advance by the real
 # frame time, so with the step above at 30 / frame rate they played at half speed at 60 and a quarter at 120; in the
-# first NLA scene the camera then lost the Skell it rides with in the close-up (#106). main+0x2e9d0 now divides
-# the speed by the patch page's +0x4c, so only a speed the event sets itself remains. x9 is free at its entry.
-site xcx60 main 2e9ec 1e204008 @page:x9 bd404d28 1e281808
+# first NLA scene the camera then lost the Skell it rides with in the close-up (#106). The same function also adds the
+# step to each slot's crossfade time (+0x1c of the slot, compared with the fade length at +0x18 in 30 fps frames), and
+# that sum needs the step as it is. So only the speed handed to the rate setter (main+0x2ea58) is divided by the patch
+# page's +0x4c, which leaves a speed the event sets itself. x9 is free there: the next read of x9 follows its reload at
+# main+0x2eaf0.
+site xcx60 main 2ea58 1e204100 @page:x9 bd404d20 1e201900
+# The event scripts' frame wait (#106): the script builtin frame(n) (main+0x3f4a40) keeps n 30 fps frames as n * 4096
+# in its slot and takes 4096 off per update (main+0x3f4a8c), resuming the script when the count runs out. Scripts time
+# overlays and steps of a scene with it (openChapterTitle, frame(n), closeChapterTitle), so above 30 fps the Chapter
+# title closed after a fraction of its time. Each update takes 4096 times the patch page's +0x4c (30 / frame rate),
+# rounded, instead; the last instruction still sets the flags the branch after it reads. x9, s0 and s1 are free: a
+# call or a return follows.
+site xcx60 main 3f4a8c 71400508 @page:x9 bd404d20 52a8b009 1e270121 1e210800 1e240009 6b090108
+# The event curves' sampler (#106: the camera and actors judder above 30 fps): main+0x3f4d90 reads a track at time t
+# (event frames) between its keys at floor(t) and ceil(t). The plain path blends by t - floor(t); the packed path
+# (main+0x3f4fc8) takes trunc(t) - floor(t) instead, which is 0 for any t >= 0 (t is clamped there), so it returns the
+# floor key. At 30 fps the event clock only holds whole frames and nothing shows; above it the event camera, and what
+# follows it, held each 30 fps key for several frames and then jumped (Doug's Skell flight). The blend takes
+# t - floor(t) (s9 - s8), as the plain path does; s1 is written there and only read by the fmadd after it.
+# Keys more than 90 apart are not blended (#106: one-frame flashes in cutscenes above 30 fps): the camera's rotation
+# channels are Euler angles in degrees (main+0x3f5144 scales them by pi/180), and the data steps across +-180 (roll
+# -179.97 then 180.03 in the transport ship scene) or between equivalent triples, or cuts within a track. Blended, the
+# frame between two such keys showed the camera turned up to 180 degrees (upside down for one frame, then the motion
+# blur smear of turning back). Holding the earlier key there is what 30 fps shows; no real motion turns 90 degrees or
+# moves 90 units in one 30 fps frame. The blend fraction is cleared (bic with the compare mask) when |v1 - v0| > 90.0;
+# s0 holds v1 - v0 here. x9, s2 and s3 are free: x9 is set again before its next read, s2 and s3 are not read again.
+site xcx60 main 3f4fd4 1e283821 1e283921 52a85689 1e270123 1e20c002 7ea3e442 0e621c21
+# The same for the plain path (main+0x3f4f80), which already blended by t - floor(t): after s1 = v1 - v0 the fraction
+# in s2 is cleared when |s1| > 90.0. x9 is set again at main+0x3f4fe0 before any read; s3 and s4 are not read again.
+site xcx60 main 3f4f88 1e203821 1e203821 52a85689 1e270123 1e20c024 7ea3e484 0e641c42
+# The eye blink (#106: faces blinked four times as often at 120 fps, and each blink was shorter). A blink controller is a
+# state machine of per-update callbacks: main+0x2b95ec sets the open-eye wait at +0x28 to rand(60) + 60, main+0x2b9658
+# takes 1 off it per update and at 0 closes the eyes (main+0x2b91c0) and sets +0x28 to the closed hold +0x2c + 1 (4 /
+# the blink speed, set by main+0x2b9548), and main+0x2b96b8 takes 1 off that and opens them. Both counts are 30 fps
+# frames. Each is divided by the patch page's +0x4c (30 / frame rate), rounded, where it is stored, so a wait lasts 2 to
+# 4 s and a blink its console length at any frame rate. x8 is written by the original at the first site, x10 is unused
+# in the rest of main+0x2b9658's function, and s0-s1 are free at both: the functions return without reading them.
+site xcx60 main 2b9608 1100f008 @page:x8 bd404d01 1100f008 1e220100 1e211800 1e200008
+site xcx60 main 2b969c 11000508 @page:x10 bd404d41 11000508 1e220100 1e211800 1e200008
 
 # The HUD's text windows (#116: the yellow tips at the lower left, among others): opening one (main+0x5d870c,
 # main+0x5d8ebc, main+0x5d966c) stores its data row's DispTime column, a count of 30 fps frames, at +0x2a of the window,
@@ -230,3 +283,39 @@ site xcx60 main 5d9708 79005680 @page:x9 1e230000 bd404d21 1e211800 1e250000 790
 # 2.5 s at 120. The 300 is divided by the patch page's +0x4c (30 / frame rate) instead, so the box holds 10 s at any
 # frame rate. x9 is set here anyway and s0-s1 are free: calls come just before and the function returns after.
 site xcx60 main 7fc8d0 52802589 @page:x9 bd404d21 52802589 1e230120 1e211800 1e250009
+
+# Voice language (runtime/voice_lang.c, XCX_VOICE_LANG, #58). The game keeps its voice choice as bit 1 of an option
+# word in the game data object (+0xa9f84) and hands it to the sound manager's setter (main+0x252c0, 1 Japanese,
+# 2 English) in three places. Making its options, at boot and again on starting a New Game (main+0x3473f0), it takes
+# the bit from the text language (main+0x4850: Japanese for the indices in 0x18841) and calls the setter at once, so a
+# New Game played in the voices of the text language whatever the setting. Applying its options (main+0xdefac and
+# main+0xdf014, as on loading a save) it loads the word and passes its bit. Each set makes the first give text language
+# 0 (Japanese) or 1 (American English) and the two loads give the chosen bit, so all three pick the setting's language;
+# the lip sync reads it back from the sound manager.
+set voicejp XCX_VOICE_JP_PATCH 0
+set voiceen XCX_VOICE_EN_PATCH 0
+site voicejp main deff0 b9400009 52800049
+site voicejp main df058 b9400009 52800049
+site voiceen main deff0 b9400009 52800009
+site voiceen main df058 b9400009 52800009
+site voicejp main 3478bc 97f2f3e5 52800000
+site voiceen main 3478bc 97f2f3e5 52800020
+
+# Issues #59, #75 and #172: a crash reading address 0x4 in main+0xa31e20, in the first update of a UI layout pane soon
+# after the avatar's name entry. On its first update (bit 0x400 of +0xd4 clear) a pane builds its draw entries from a
+# table of its resource (+0xe0): main+0xa490a0 returns the table at the offset in the resource's +0x20, or null when
+# that offset is 0, and main+0xa48e30 then reads the table's count at +4 without a check. Some players hit a resource
+# whose offset is 0 there (AMD and NVIDIA GPUs, Windows and Linux; not reproduced here). With the guard on:
+# - a null table leaves the setup through its own epilogue with +0xd4 unchanged (w8 holds it for the store at
+#   main+0xa31f78), so bit 0x400 stays clear and the next update (main+0xa31890) tries again; the second site reloads
+#   x8 for the original path;
+# - the pane's draw (main+0xa30ff0), which walks those entries, returns through its early exit (main+0xa31070, the one
+#   its +0x78 virtual takes) while bit 0x400 is clear; the second site there redoes the load it replaced.
+# A pane whose setup went through updates before it draws, so it draws as before; a pane without its table stays
+# hidden until the table is there instead of crashing (with the table forced null, dialog frames, the creator's tabs
+# and the minimap are missing but the game plays on).
+set meshguard XCX_MESH_GUARD 1
+site meshguard main a31e54 f941a268 b940d668 b40008e0
+site meshguard main a31e58 f90007e0 f941a268 f90007e0
+site meshguard main a3108c f941de68 b940d668 3657ff28
+site meshguard main a31090 f9000288 f941de68 f9000288

@@ -34,7 +34,7 @@ static int g_ring_n, g_ring_pos;
 
 // The per-frame counters, summed since t0 (the overlay's lines are averages over half a second).
 static struct {
-    uint64_t t0, frames, gpu0;
+    uint64_t t0, frames, gpu0, present0;
     double replay, pipe, xlate, tex;
     int64_t up0, up;
 } g_win;
@@ -79,7 +79,7 @@ static void frames_summary(PerfStats *s, uint64_t now) {   // (lock held)
 // Every half second: the window's sums as per-frame averages into g_stats, and a new window. (lock held)
 static void counters_summary(uint64_t now) {
     if (now - g_win.t0 < 500000000ull) return;
-    uint64_t gpu = perf_gpu_busy_total();
+    uint64_t gpu = perf_gpu_busy_total(), present = perf_present_gpu_total();
     if (g_win.t0 && g_win.frames) {
         double n = (double)g_win.frames;
         g_stats.replay_ms = (float)(g_win.replay / n);
@@ -89,10 +89,12 @@ static void counters_summary(uint64_t now) {
         g_stats.tex_uploads = (float)((g_win.up - g_win.up0) / n);
         // no GPU time over a window of frames: no timestamps on this device (or not yet set up)
         g_stats.gpu_ms = gpu > g_win.gpu0 ? (float)((gpu - g_win.gpu0) / 1e6 / n) : -1;
+        g_stats.present_ms = present > g_win.present0 ? (float)((present - g_win.present0) / 1e6 / n) : -1;
     }
     g_win.t0 = now;
     g_win.frames = 0;
     g_win.gpu0 = gpu;
+    g_win.present0 = present;
     g_win.replay = g_win.pipe = g_win.xlate = g_win.tex = 0;
     g_win.up0 = g_win.up;
 }
@@ -277,7 +279,8 @@ static struct {
 static void machine_clear(PerfStats *s) {
     s->cpu_total_pct = s->cpu_game_pct = s->cpu_temp_c = -1;
     s->ram_used_mb = s->ram_total_mb = s->ram_game_mb = -1;
-    s->gpu_pct = s->gpu_temp_c = s->gpu_power_w = s->gpu_clock_mhz = s->vram_used_mb = s->vram_total_mb = -1;
+    s->gpu_pct = s->gpu_game_pct = s->gpu_temp_c = s->gpu_power_w = s->gpu_clock_mhz = -1;
+    s->vram_used_mb = s->vram_total_mb = -1;
 }
 
 static void machine_copy(PerfStats *d, const PerfStats *s) {
@@ -285,7 +288,8 @@ static void machine_copy(PerfStats *d, const PerfStats *s) {
     memcpy(d->gpu_name, s->gpu_name, sizeof d->gpu_name);
     d->cpu_total_pct = s->cpu_total_pct, d->cpu_game_pct = s->cpu_game_pct, d->cpu_temp_c = s->cpu_temp_c;
     d->ram_used_mb = s->ram_used_mb, d->ram_total_mb = s->ram_total_mb, d->ram_game_mb = s->ram_game_mb;
-    d->gpu_pct = s->gpu_pct, d->gpu_temp_c = s->gpu_temp_c, d->gpu_power_w = s->gpu_power_w;
+    d->gpu_pct = s->gpu_pct, d->gpu_game_pct = s->gpu_game_pct, d->gpu_temp_c = s->gpu_temp_c;
+    d->gpu_power_w = s->gpu_power_w;
     d->gpu_clock_mhz = s->gpu_clock_mhz, d->vram_used_mb = s->vram_used_mb, d->vram_total_mb = s->vram_total_mb;
 }
 
@@ -311,7 +315,7 @@ static void sampler(void *arg) {
         machine_clear(&s);
         plat_cpu_load(l, &s.cpu_total_pct, &s.cpu_game_pct, &s.cpu_temp_c);
         plat_mem_info(&s.ram_used_mb, &s.ram_total_mb, &s.ram_game_mb);
-        plat_gpu_load(l, &s.gpu_pct, &s.vram_used_mb);
+        plat_gpu_load(l, &s.gpu_pct, &s.gpu_game_pct, &s.vram_used_mb);
         s.vram_total_mb = vram_total;
         nvml_sample(&s);
         adl_sample(&s);

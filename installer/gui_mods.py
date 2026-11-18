@@ -18,6 +18,7 @@ class ModsWindow:
     def __init__(self, parent, cat, dest, ui_font, index=None):
         self.cat, self.dest, self.index_source = cat, Path(dest), index
         self.entries = []
+        self.notes = []          # normalise's lines for the list on its way
         self.busy = False
         self.results = queue.Queue()
         w = self.win = tk.Toplevel(parent)
@@ -96,12 +97,20 @@ class ModsWindow:
                     self.busy = True
                     self.set_status(self.cat('mods.downloading', done=value[0] >> 20, total=max(1, value[1] >> 20)))
                     continue
+                if kind == 'notes':   # normalise's lines; shown once the list they belong to arrives
+                    self.busy = True
+                    self.notes = value
+                    continue
                 if kind == 'error':
                     self.set_status(self.cat(value.id, **value.params), error=True)
                 else:
                     if isinstance(value, list):
                         self.entries = value
-                        if self.status.cget('foreground') != theme.ERROR:
+                        notes, self.notes = self.notes, []
+                        if notes:
+                            self.set_status('\n'.join(self.cat(i, **p) for i, p in notes),
+                                            error=any(i != 'mods.moved' for i, _ in notes))
+                        elif self.status.cget('foreground') != theme.ERROR:
                             self.set_status('')   # the "reading" or "installing" line is done
                     elif isinstance(value, str):
                         self.set_status(value)
@@ -122,7 +131,7 @@ class ModsWindow:
             except mods.ModError:
                 index = []   # offline: still list and switch the installed mods
                 self.results.put(('error', mods.ModError('mods.offline')))
-            return mods.status(self.dest, index)
+            return self.listed(index)
         self.run(self.cat('mods.loading'), work)
 
     # ---- list ----------------------------------------------------------------------------------------------------
@@ -232,4 +241,12 @@ class ModsWindow:
         """The list after a change, on the worker thread (the library entries stay as they were)."""
         index = [{k: v for k, v in e.items() if k not in ('installed', 'enabled', 'update')}
                  for e in self.entries if e.get('url') or e.get('files')]
-        return mods.status(self.dest, index)
+        return self.listed(index)
+
+    def listed(self, index):
+        """mods.status on the worker thread; the lines about mods put in the folder by hand go to the status line."""
+        notes = []
+        out = mods.status(self.dest, index, notes)
+        if notes:
+            self.results.put(('notes', notes))
+        return out

@@ -209,6 +209,73 @@ uint64_t plat_thread_affinity(PlatThread *t, uint64_t mask) {
     return (uint64_t)SetThreadAffinityMask(t ? t->h : GetCurrentThread(), (DWORD_PTR)mask);
 }
 
+// The CPU sets of the highest efficiency class (the P-cores of a hybrid CPU), found once. Windows numbers the classes
+// from 0 (the most efficient, slowest cores) up; a CPU with one kind of core reports class 0 for all of them.
+static ULONG fast_sets[256];
+static ULONG fast_n = ~0u;
+// Windows 10 functions, looked up at run time: the headers declare them only for a newer _WIN32_WINNT than ours.
+typedef BOOL(WINAPI *CpuSetInfoFn)(SYSTEM_CPU_SET_INFORMATION *, ULONG, ULONG *, HANDLE, ULONG);
+typedef BOOL(WINAPI *ThreadCpuSetsFn)(HANDLE, const ULONG *, ULONG);
+typedef BOOL(WINAPI *ProcessInfoFn)(HANDLE, PROCESS_INFORMATION_CLASS, void *, DWORD);
+static ThreadCpuSetsFn set_thread_cpu_sets;
+
+static FARPROC kernel32_fn(const char *name) { return GetProcAddress(GetModuleHandleW(L"kernel32.dll"), name); }
+
+static void fast_sets_find(void) {
+    ULONG len = 0;
+    fast_n = 0;
+    CpuSetInfoFn info = (CpuSetInfoFn)(void *)kernel32_fn("GetSystemCpuSetInformation");
+    set_thread_cpu_sets = (ThreadCpuSetsFn)(void *)kernel32_fn("SetThreadSelectedCpuSets");
+    if (!info || !set_thread_cpu_sets) return;
+    info(NULL, 0, &len, GetCurrentProcess(), 0);
+    char *buf = len ? malloc(len) : NULL;
+    if (!buf || !info((SYSTEM_CPU_SET_INFORMATION *)buf, len, &len, GetCurrentProcess(), 0)) {
+        free(buf);
+        return;
+    }
+    int lo = 255, hi = -1;
+    for (ULONG at = 0; at < len; at += ((SYSTEM_CPU_SET_INFORMATION *)(buf + at))->Size) {
+        const SYSTEM_CPU_SET_INFORMATION *s = (const void *)(buf + at);
+        if (s->Type != CpuSetInformation) continue;
+        if (s->CpuSet.EfficiencyClass < lo) lo = s->CpuSet.EfficiencyClass;
+        if (s->CpuSet.EfficiencyClass > hi) hi = s->CpuSet.EfficiencyClass;
+    }
+    if (hi > lo)
+        for (ULONG at = 0; at < len && fast_n < sizeof fast_sets / sizeof *fast_sets;
+             at += ((SYSTEM_CPU_SET_INFORMATION *)(buf + at))->Size) {
+            const SYSTEM_CPU_SET_INFORMATION *s = (const void *)(buf + at);
+            if (s->Type == CpuSetInformation && s->CpuSet.EfficiencyClass == hi && !s->CpuSet.Parked)
+                fast_sets[fast_n++] = s->CpuSet.Id;
+        }
+    free(buf);
+}
+
+uint32_t plat_thread_prefer_fast_cores(void) {
+    static INIT_ONCE once = INIT_ONCE_STATIC_INIT;
+    BOOL pending;
+    if (InitOnceBeginInitialize(&once, 0, &pending, NULL) && pending) {
+        fast_sets_find();
+        InitOnceComplete(&once, 0, NULL);
+    }
+    if (!fast_n || !set_thread_cpu_sets(GetCurrentThread(), fast_sets, fast_n)) return 0;
+    return fast_n;
+}
+
+void plat_power_full_speed(void) {
+    // ControlMask names the policies the process sets itself; a zero StateMask turns each of them off.
+    PROCESS_POWER_THROTTLING_STATE p = {PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+                                        PROCESS_POWER_THROTTLING_EXECUTION_SPEED |
+                                            PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION,
+                                        0};
+    ProcessInfoFn set = (ProcessInfoFn)(void *)kernel32_fn("SetProcessInformation");
+    if (set) set(GetCurrentProcess(), ProcessPowerThrottling, &p, sizeof p);
+}
+
+// Laptops with two GPUs: the NVIDIA (Optimus) and AMD (PowerXpress) drivers read these exports of the exe and start it
+// on the dedicated GPU, which then also lists first for Vulkan (vk_device.c picks a discrete GPU when it sees one).
+__declspec(dllexport) DWORD NvOptimusEnablement = 1;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+
 uint32_t plat_cpu_count(void) {
     DWORD n = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
     return n ? (uint32_t)n : 1;
@@ -306,6 +373,50 @@ void plat_cond_signal(PlatCond *c) { WakeConditionVariable((PCONDITION_VARIABLE)
 void plat_cond_broadcast(PlatCond *c) { WakeAllConditionVariable((PCONDITION_VARIABLE)c); }
 
 // ---- files
+
+// ---- local channel (platform.h plat_ipc_*): a byte-mode named pipe the other program created
+struct PlatIpc { HANDLE h; };
+
+PlatIpc *plat_ipc_connect(const char *name) {
+    wchar_t w[512];
+    if (!MultiByteToWideChar(CP_UTF8, 0, name, -1, w, 512)) return NULL;
+    for (int tries = 0; tries < 3; tries++) {   // busy: the other side has a spare instance coming up
+        HANDLE h = CreateFileW(w, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+        if (h != INVALID_HANDLE_VALUE) {
+            PlatIpc *c = malloc(sizeof *c);
+            if (!c) { CloseHandle(h); return NULL; }
+            c->h = h;
+            return c;
+        }
+        if (GetLastError() != ERROR_PIPE_BUSY || !WaitNamedPipeW(w, 500)) return NULL;
+    }
+    return NULL;
+}
+
+int plat_ipc_write(PlatIpc *c, const void *buf, size_t n) {
+    const char *p = buf;
+    while (n) {
+        DWORD done = 0;
+        if (!WriteFile(c->h, p, n > 65536 ? 65536 : (DWORD)n, &done, NULL) || !done) return 0;
+        p += done;
+        n -= done;
+    }
+    return 1;
+}
+
+int64_t plat_ipc_read(PlatIpc *c, void *buf, size_t cap) {
+    DWORD avail = 0, got = 0;
+    if (!PeekNamedPipe(c->h, NULL, 0, NULL, &avail, NULL)) return -1;
+    if (!avail) return 0;
+    if (!ReadFile(c->h, buf, avail < cap ? avail : (DWORD)cap, &got, NULL)) return -1;
+    return got;
+}
+
+void plat_ipc_close(PlatIpc *c) {
+    if (!c) return;
+    CloseHandle(c->h);
+    free(c);
+}
 
 static int widen(const char *s, wchar_t *w, int cap) {
     int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, w, cap);
@@ -814,7 +925,34 @@ void plat_aligned_free(void *p) { _aligned_free(p); }
 
 // ---- process
 
+#ifdef XCX_PGO_GEN
+// compiler-rt's profile runtime (an instrumented build, tools/build_game.py --pgo gen), as TotK PC Recomp does it. It
+// writes its counters from an atexit handler, which ExitProcess skips; __llvm_profile_dump writes them once and makes
+// later writes no-ops.
+int __llvm_profile_dump(void);
+int __llvm_profile_write_file(void);
+void __llvm_profile_reset_counters(void);
+
+// A long played session must not lose its counts to a crash: every minute the counters are added to the .profraw (the
+// file merges, -fprofile-generate's %m) and zeroed. Counts taken between the write and the reset are lost.
+static DWORD WINAPI pgo_flush_thread(void *arg) {
+    (void)arg;
+    for (;;) {
+        Sleep(60 * 1000);
+        if (__llvm_profile_write_file() == 0) __llvm_profile_reset_counters();
+    }
+}
+
+__attribute__((constructor)) static void pgo_flush_start(void) {
+    HANDLE h = CreateThread(NULL, 0, pgo_flush_thread, NULL, 0, NULL);
+    if (h) CloseHandle(h);
+}
+#endif
+
 void plat_exit(int code) {
+#ifdef XCX_PGO_GEN
+    __llvm_profile_dump();
+#endif
     if (!code) rt_mods_shutdown();
     fflush(stdout);
     fflush(stderr);
@@ -1435,14 +1573,17 @@ static void inst_luid(const wchar_t *name, wchar_t *out) {
     out[n] = 0;
 }
 
-void plat_gpu_load(PlatLoad *l, float *load_pct, float *vram_used_mb) {
-    *load_pct = *vram_used_mb = -1;
+void plat_gpu_load(PlatLoad *l, float *load_pct, float *game_pct, float *vram_used_mb) {
+    *load_pct = *game_pct = *vram_used_mb = -1;
     if (!l || !l->gpu.q || pdh.collect(l->gpu.q) != ERROR_SUCCESS) return;
     // Engine instances: "pid_<n>_luid_0x.._0x.._phys_<n>_eng_<n>_engtype_<type>". Per adapter and engine type the
-    // processes' shares add up; the load is the busiest engine type.
+    // processes' shares add up; the load is the busiest engine type. game: the same over this process's instances, so
+    // other processes' work (the compositor's, another game's) shows apart from the game's.
     enum { TYPES = 32 };
-    struct { wchar_t luid[40], type[32]; double sum; } t[TYPES];
+    struct { wchar_t luid[40], type[32]; double sum, game; } t[TYPES];
     int nt = 0;
+    wchar_t self[24];
+    int self_n = swprintf(self, sizeof self / sizeof *self, L"pid_%lu_", (unsigned long)GetCurrentProcessId());
     DWORD n;
     PDH_FMT_COUNTERVALUE_ITEM_W *it = pdh_items(l->gpu.c[0], &n);
     for (DWORD i = 0; it && i < n; i++) {
@@ -1459,14 +1600,17 @@ void plat_gpu_load(PlatLoad *l, float *load_pct, float *vram_used_mb) {
             wcscpy(t[k].luid, lu);
             wcsncpy(t[k].type, ty, 31);
             t[k].type[31] = 0;
-            t[k].sum = 0;
+            t[k].sum = t[k].game = 0;
             nt++;
         }
         t[k].sum += it[i].FmtValue.doubleValue;
+        if (self_n > 0 && !wcsncmp(it[i].szName, self, (size_t)self_n)) t[k].game += it[i].FmtValue.doubleValue;
     }
     free(it);
-    for (int k = 0; k < nt; k++)
+    for (int k = 0; k < nt; k++) {
         if (t[k].sum > *load_pct) *load_pct = (float)(t[k].sum > 100 ? 100 : t[k].sum);
+        if (t[k].game > *game_pct) *game_pct = (float)(t[k].game > 100 ? 100 : t[k].game);
+    }
     // Adapter memory instances: "luid_0x.._0x.._phys_<n>", bytes. Without a LUID: the adapter that uses the most.
     it = pdh_items(l->gpu.c[1], &n);
     double sum = 0, best = -1;

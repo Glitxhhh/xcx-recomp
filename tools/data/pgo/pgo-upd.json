@@ -1,0 +1,15 @@
+{
+ "version": "upd",
+ "recomp_tree": "5a624a2ded7a9b5ba0ca45afe68aeaf3f4120191",
+ "merged": "2026-11-11",
+ "raw_files": 1,
+ "gen_headers": {
+  "appendage_glyph.h": "bcb722cc93571714",
+  "cpu.h": "02ba018906e035f4",
+  "input_glyphs.h": "819f1a034210e503",
+  "input_map.h": "085918313a337934",
+  "romfs_mods.h": "90561078e8a8c155",
+  "simd.h": "c730662282682581",
+  "simd_fp.h": "14ab85436eecf5c7"
+ }
+}

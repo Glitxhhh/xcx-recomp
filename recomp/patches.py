@@ -14,10 +14,19 @@ encoded for the site's address. The patch page is the first 4 KiB page after mai
 of the 2 MiB-aligned module slot free); the runtime commits it and owns its contents.
 
 The replacement words are lifted at the site's address in place of the original instruction, and the generated C reads
-`if (rt_patch_on[<set>]) { replacement } else { original }`: one byte load and a branch per executed site. Replacement
-words must not branch except a final `bl` (lifted with the site's return address); the original must not be a branch
-other than `bl`. So the function's control flow, labels and jump tables are the original's. The generator writes
-patches.h (set names, switches, the page address) next to layout.h for the runtime.
+`if (rt_patch_on[<set>]) { replacement } else { original }`: one byte load and a branch per executed site. Several
+sets may patch one address (cheats that write different values there): `if (a) {..} else if (b) {..} else {..}`, the
+first set in file order wins. The original may be any instruction but br, blr and ret; a replacement's last word may be
+a bl (lifted with the site's return address), a b or b.cond / cbz / tbz (its target joins the function's labels when
+inside it) or a ret; earlier words must not branch. Every alternative of a site writes the same flags. The generator
+writes patches.h (set names, switches, the page address) next to layout.h for the runtime.
+
+A replacement word `<word>@<index>` is a b, b.cond, cbz / cbnz or tbz / tbnz to word <index> of the same replacement
+(0 its first word; the word count: past the replacement, to the instruction after the site), whatever offset the word
+encodes: a cheat's code cave, inlined at its call site, keeps its own branches (tools/cheats.py). Such an alternative
+is self-contained: its flag-setting words and the conditions that read them use c->nzcv as the guest does, not the
+function's flags (recomp/flags.py), so the flags of the code around the site stay as the original leaves them. The
+original must neither read nor write flags then, and no word of the alternative may branch out of it but the last.
 
 A `spin` line names a spin wait found by tools/spin_waits.py: a loop with head <head> that only another thread can end,
 and the direct branches back to it (module offsets). Each back-edge (checked: a b, b.cond, cbz / cbnz or tbz / tbnz to
@@ -42,7 +51,8 @@ def adrp(pc, target, rd):
 
 
 class Table:
-    """sets: [(name, env, default)]; sites: {module: {offset: (set index, [word | ('page', reg)], original)}}; page."""
+    """sets: [(name, env, default)]; sites: {module: {offset: [(set index, [word | ('page', reg)], original)]}} (the
+    alternatives of a site in file order); page."""
 
     def __init__(self, sets=(), sites=None, page=0, spins=None):
         self.sets = list(sets)
@@ -55,11 +65,13 @@ class Table:
         return {base + b: base + h for b, h in self.spins.get(name, {}).items()}
 
     def for_module(self, name, base):
-        """{absolute address: (set index, [words])} with @page resolved."""
+        """{absolute address: [(set index, [words])]} with @page resolved; a word with @<index> stays ('to', word,
+        index)."""
         out = {}
-        for off, (k, repl, _) in self.sites.get(name, {}).items():
+        for off, alts in self.sites.get(name, {}).items():
             a = base + off
-            out[a] = (k, [adrp(a, self.page, w[1]) if isinstance(w, tuple) else w for w in repl])
+            page = lambda w: isinstance(w, tuple) and w[0] == 'page'
+            out[a] = [(k, [adrp(a, self.page, w[1]) if page(w) else w for w in repl]) for k, repl, _ in alts]
         return out
 
 
@@ -87,12 +99,23 @@ def load(path, mods):
             for w in f[5:]:
                 if w.startswith('@page:x'):
                     repl.append(('page', int(w[7:])))
+                elif '@' in w:   # <branch>@<index>: a branch to word <index> of this replacement
+                    word, to = w.split('@')
+                    word, to = int(word, 16), int(to)
+                    if branch_target(word, 0) is None:
+                        raise PatchError(f'{where}: {word:08x}@{to} is not a b, b.cond, cbz / cbnz or tbz / tbnz')
+                    repl.append(('to', word, to))
                 else:
                     repl.append(int(w, 16))
-            mod = sites.setdefault(f[2], {})
-            if off in mod:
-                raise PatchError(f'{where}: {f[2]}+{off:#x} patched twice')
-            mod[off] = (index[f[1]], repl, orig)
+            for w in repl:
+                if isinstance(w, tuple) and w[0] == 'to' and not 0 <= w[2] <= len(repl):
+                    raise PatchError(f'{where}: {w[1]:08x}@{w[2]} branches past the end of the replacement')
+            alts = sites.setdefault(f[2], {}).setdefault(off, [])
+            if any(k == index[f[1]] for k, _, _ in alts):
+                raise PatchError(f'{where}: {f[2]}+{off:#x} patched twice by set {f[1]}')
+            if alts and alts[0][2] != orig:
+                raise PatchError(f'{where}: {f[2]}+{off:#x} expects {orig:08x}, an earlier line {alts[0][2]:08x}')
+            alts.append((index[f[1]], repl, orig))
         elif f[0] == 'spin' and len(f) >= 4:
             if f[1] not in bases:
                 raise PatchError(f'{where}: module {f[1]} not in the layout')
@@ -114,7 +137,7 @@ def load(path, mods):
 
 def check(table, mod, name):
     """Stops on a site whose original word differs from the module's."""
-    for off, (_, _, want) in table.sites.get(name, {}).items():
+    for off, [(_, _, want), *_] in table.sites.get(name, {}).items():
         a = mod.base + off
         if not mod.in_text(a):
             raise PatchError(f'{name}+{off:#x}: patch site outside .text')
@@ -136,6 +159,18 @@ def branch_target(w, a):
     if w & 0x7E000000 == 0x36000000:
         return a + ((((w >> 5) & 0x3FFF) ^ 0x2000) - 0x2000 << 2)
     return None
+
+
+def call_targets(table, name, base):
+    """The absolute targets of the bl words of module name's replacements: function starts the game itself may never
+    call (a cheat's code cave calls one), which discovery has to know."""
+    out = set()
+    for a, alts in table.for_module(name, base).items():
+        for _, words in alts:
+            for w in words:
+                if isinstance(w, int) and w >> 26 == 0x25:
+                    out.add(a + ((((w & 0x3FFFFFF) ^ 0x2000000) - 0x2000000) << 2))
+    return sorted(out)
 
 
 def header_text(table, marker):

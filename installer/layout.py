@@ -77,6 +77,12 @@ class Layout:
         """libxcxrt-v2.a beside libxcxrt.a: the runtime for x86-64-v2 CPUs (build_game.py --cpu x86-64-v2)."""
         return self.runtime_lib.with_name('libxcxrt-v2.a')
 
+    def pgo(self, version):
+        """The shipped execution profile the update's code compiles with (tools/data/pgo, tools/pgo.py ship), None
+        without one. Windows only: the profile's format belongs to the LLVM of the Windows toolchain."""
+        p = self.tools / 'data' / 'pgo' / f'pgo-{version_tag(version)}.profdata.xz'
+        return p if WIN and p.is_file() else None
+
     def expected(self, version):
         """The expected hashes of the base game (BASE) or an update."""
         return self.tools / 'data' / f'expected-xcx-{version}.json'

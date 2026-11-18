@@ -25,6 +25,8 @@
 #include <sys/prctl.h>
 #include <sys/random.h>
 #include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/uio.h>
@@ -406,6 +408,9 @@ uint64_t plat_thread_affinity(PlatThread *t, uint64_t mask) {
         if (CPU_ISSET(i, &old)) prev |= 1ull << i;
     return prev;
 }
+
+uint32_t plat_thread_prefer_fast_cores(void) { return 0; }
+void plat_power_full_speed(void) {}
 
 uint32_t plat_cpu_count(void) {
     cpu_set_t set;
@@ -1362,7 +1367,16 @@ int plat_stderr_path(char *out, size_t cap) {
 
 // ---- process
 
+#ifdef XCX_PGO_GEN
+// compiler-rt's profile runtime (an instrumented build, tools/build_game.py --pgo gen). It writes its counters from an
+// atexit handler, which _exit skips; __llvm_profile_dump writes them once and makes later writes no-ops.
+int __llvm_profile_dump(void);
+#endif
+
 void plat_exit(int code) {
+#ifdef XCX_PGO_GEN
+    __llvm_profile_dump();
+#endif
     if (!code) rt_mods_shutdown();
     fflush(stdout);
     fflush(stderr);
@@ -1624,8 +1638,8 @@ void plat_cpu_load(PlatLoad *l, float *total_pct, float *proc_pct, float *temp_c
     if (l->temp[0] && read_u64_file(l->temp, &mc)) *temp_c = (float)mc / 1000.0f;
 }
 
-void plat_gpu_load(PlatLoad *l, float *load_pct, float *vram_used_mb) {
-    *load_pct = *vram_used_mb = -1;
+void plat_gpu_load(PlatLoad *l, float *load_pct, float *game_pct, float *vram_used_mb) {
+    *load_pct = *game_pct = *vram_used_mb = -1;   // gpu_busy_percent is the whole GPU's: no share per process
     if (!l || !l->gpu[0]) return;
     char path[300];
     uint64_t v;
@@ -1726,4 +1740,45 @@ long plat_child_read(PlatChild *c, void *buf, size_t cap) {
     do k = read(c->out, buf, cap);
     while (k < 0 && errno == EINTR);
     return (long)k;
+}
+
+// ---- local channel (platform.h plat_ipc_*): a Unix stream socket the other program listens on
+struct PlatIpc { int fd; };
+
+PlatIpc *plat_ipc_connect(const char *name) {
+    struct sockaddr_un a = {.sun_family = AF_UNIX};
+    if (strlen(name) >= sizeof a.sun_path) return NULL;
+    strcpy(a.sun_path, name);
+    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (fd < 0) return NULL;
+    if (connect(fd, (struct sockaddr *)&a, sizeof a) != 0) { close(fd); return NULL; }
+    PlatIpc *c = malloc(sizeof *c);
+    if (!c) { close(fd); return NULL; }
+    c->fd = fd;
+    return c;
+}
+
+int plat_ipc_write(PlatIpc *c, const void *buf, size_t n) {
+    const char *p = buf;
+    while (n) {
+        ssize_t done = send(c->fd, p, n, MSG_NOSIGNAL);
+        if (done < 0 && errno == EINTR) continue;
+        if (done <= 0) return 0;
+        p += done;
+        n -= (size_t)done;
+    }
+    return 1;
+}
+
+int64_t plat_ipc_read(PlatIpc *c, void *buf, size_t cap) {
+    ssize_t got = recv(c->fd, buf, cap, MSG_DONTWAIT);
+    if (got > 0) return got;
+    if (got < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) return 0;
+    return -1;
+}
+
+void plat_ipc_close(PlatIpc *c) {
+    if (!c) return;
+    close(c->fd);
+    free(c);
 }

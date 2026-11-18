@@ -7,6 +7,7 @@
 
 #include "cfg.h"
 #include "host.h"
+#include "input.h"
 #include "input_map.h"
 
 #define STICK_MAX 32767
@@ -89,6 +90,13 @@ int input_map_keys_of(const InputMap *m, int action, uint8_t *out, int max) {
     for (int i = 0; i < m->nkeys; i++)
         if (m->keys[i].action == action && n < max) out[n++] = m->keys[i].key;
     return n;
+}
+
+// F2 is the overlay key (issue #153) while no action has it; a player who bound F2 to a button keeps it for the game.
+int input_overlay_f2(void) {
+    for (int i = 0; i < input_map.nkeys; i++)
+        if (input_map.keys[i].key == KEY_F2) return 0;
+    return 1;
 }
 
 int input_map_pads_of(const InputMap *m, int action, int layout, uint8_t *out, int max) {
@@ -355,4 +363,24 @@ int input_menu_gate(int *held, int menu_open, uint64_t *buttons, int32_t sticks[
 // Game Mode). The same latch as the menu's above; the game sees neither click while it holds.
 int input_overlay_gate(int *held, uint64_t *buttons) {
     return chord(held, buttons, 1ull << B_STICK_L | 1ull << B_STICK_R);
+}
+
+// All four shoulder buttons held together for a second open the Quit Game prompt (issue #153), a chord play hardly
+// makes by chance. The game sees none of the four from the poll where the last of them goes down until all four are up
+// again, the same latch as the menu's above. A button let go before the second is up cancels; the four must go down
+// again.
+int input_quit_gate(InputQuitHold *q, uint64_t now_ns, uint64_t *buttons) {
+    const uint64_t combo = 1ull << B_L | 1ull << B_R | 1ull << B_ZL | 1ull << B_ZR;
+    int all = (*buttons & combo) == combo;
+    if (chord(&q->held, buttons, combo)) {
+        q->since = now_ns;
+        q->fired = 0;
+    }
+    if (!q->held || q->fired) return 0;
+    if (!all || now_ns - q->since < INPUT_QUIT_HOLD_NS) {
+        if (!all) q->fired = 1;
+        return 0;
+    }
+    q->fired = 1;
+    return 1;
 }

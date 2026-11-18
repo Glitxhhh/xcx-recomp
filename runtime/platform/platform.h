@@ -32,6 +32,15 @@ void plat_thread_detach(PlatThread *t);   // frees t; the thread runs on
 // Returns the previous mask, 0 on failure.
 uint64_t plat_thread_affinity(PlatThread *t, uint64_t mask);
 uint32_t plat_cpu_count(void);            // logical processors
+// On a CPU with cores of more than one kind (Intel P- and E-cores), asks the OS to run the calling thread on the fastest
+// kind: a preference the scheduler may break when those cores are busy, not a pin. Returns how many logical processors
+// the thread now prefers, 0 when the CPU has one kind of core or the OS has no such preference (Linux: its scheduler
+// already places busy threads on the fast cores of a hybrid CPU).
+uint32_t plat_thread_prefer_fast_cores(void);
+// The process asks to run at full speed: Windows' power throttling (EcoQoS, which slows a process whose window is
+// hidden or in the background, and ignores its 1 ms timer request while the window is hidden) is turned off for it.
+// Nothing on Linux.
+void plat_power_full_speed(void);
 uint64_t plat_thread_cpu_ns(uint32_t tid);  // CPU time of the thread with id tid (plat_thread_id) so far; 0 unknown
 // The logical processors the process may use (bit n = processor n, the first 64), into *all, and the lowest of each
 // physical core among them into *first; returns the number of physical cores, 0 when unknown.
@@ -394,14 +403,24 @@ void plat_load_close(PlatLoad *l);
 // Since the previous call on l (the first call gives -1): CPU use of the machine and of this process, percent of all
 // logical processors, and the hottest ACPI thermal zone in degrees Celsius.
 void plat_cpu_load(PlatLoad *l, float *total_pct, float *proc_pct, float *temp_c);
-// Since the previous call on l: the busiest GPU engine type in percent (as Task Manager shows it), and the adapter's
-// dedicated memory in use in MB. Any GPU vendor.
-void plat_gpu_load(PlatLoad *l, float *load_pct, float *vram_used_mb);
+// Since the previous call on l: the busiest GPU engine type in percent (as Task Manager shows it: every process's use,
+// the desktop compositor's included), the same for this process's use alone (-1 where the system gives no share per
+// process), and the adapter's dedicated memory in use in MB. Any GPU vendor.
+void plat_gpu_load(PlatLoad *l, float *load_pct, float *game_pct, float *vram_used_mb);
 // Physical memory in MB: in use and installed on the machine, and this process's working set.
 void plat_mem_info(float *used_mb, float *total_mb, float *proc_mb);
 // This process's memory in bytes: resident (the working set) and private (Windows: committed private bytes; Linux: the
 // resident anonymous pages). 0 when unknown.
 void plat_process_memory(uint64_t *resident, uint64_t *private_bytes);
+
+// ---- a local channel to another program on this computer: a named pipe on Windows (\\.\pipe\<name>), a Unix
+// socket path elsewhere, as the other program names it. Byte stream, one connection, used from one thread: reads never
+// block (a Windows pipe handle without overlapped I/O cannot read and write at once, so nothing waits in a read).
+typedef struct PlatIpc PlatIpc;
+PlatIpc *plat_ipc_connect(const char *name);                 // NULL when nobody listens there (or it stays busy)
+int plat_ipc_write(PlatIpc *c, const void *buf, size_t n);   // 1 when all of it went, 0 when the channel closed
+int64_t plat_ipc_read(PlatIpc *c, void *buf, size_t cap);    // what is there now: bytes read, 0 none, -1 closed
+void plat_ipc_close(PlatIpc *c);
 
 // ---- child processes: a program with stdin and stdout piped to us (stderr discarded), no console window.
 typedef struct PlatChild PlatChild;

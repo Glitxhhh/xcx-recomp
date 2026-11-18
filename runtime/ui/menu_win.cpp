@@ -52,7 +52,8 @@ extern "C" int menu_window_msg(HWND h, UINT m, WPARAM w, LPARAM l, LRESULT *res)
             *res = 0;
             return 1;
         }
-        if (w == VK_F10) {   // also keeps F10 from opening the window menu
+        // F10, and F2 while no button is bound to it; F10 also kept from opening the window menu
+        if (w == VK_F10 || (w == VK_F2 && input_overlay_f2())) {
             if (!(l & (1 << 30))) menu_perf_cycle();
             *res = 0;
             return 1;

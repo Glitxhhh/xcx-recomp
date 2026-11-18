@@ -149,12 +149,21 @@ def romfs_verified(romfs, expected):
     if not index.is_file() or not (romfs / 'romfs.bin').is_file():
         return False
     report = json.loads(index.read_text())
-    return report.get('romfs_sha256') == expected['romfs']['sha256'] and report.get('romfs_size') == expected['romfs']['size']
+    return romfs_matches(report, expected)
+
+
+def romfs_matches(report, expected):
+    """An index.json report holds the expected RomFS: the cartridge's image itself, or an image the setup packed from
+    loose files that each matched their hash (installer/extracted.py; source_sha256 names the image they came from)."""
+    want = expected['romfs']['sha256']
+    if report.get('source_sha256'):
+        return report['source_sha256'] == want and report.get('status') == 'pass'
+    return report.get('romfs_sha256') == want and report.get('romfs_size') == expected['romfs']['size']
 
 
 def check_romfs(romfs, expected):
     report = json.loads((romfs / 'index.json').read_text())
-    require(report['romfs_size'] == expected['romfs']['size'] and report['romfs_sha256'] == expected['romfs']['sha256'],
+    require(romfs_matches(report, expected),
             f'RomFS does not match {expected["display_version"]}: size {report["romfs_size"]}, '
             f'sha256 {report["romfs_sha256"][:16]}...')
     say(f'  RomFS {expected["display_version"]}: {report["romfs_size"]:,} bytes, {len(report["files"]):,} files, hash matches')

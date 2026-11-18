@@ -24,7 +24,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import ini
+from . import extracted, ini, nsz
 from .layout import APP_ID, BASE, EXE, GAME_EXE, SUPPORTED, version_tag
 from .runner import InstallError, Step
 
@@ -171,6 +171,23 @@ def raise_if_damaged(error, name, path):
         raise InstallError('check.input_damaged', input=name, path=str(path), detail=str(error)) from None
 
 
+def plain_input(ctx, path):
+    """The game file at path as the extraction reads it: the file itself, or for an NSZ or XCZ the plain NSP rebuilt
+    from it in the temp folder (installer/nsz.py), made once per run. The options keep the player's own file, which the
+    state records and the step keys hash."""
+    path = Path(path)
+    cache = ctx.__dict__.setdefault('plain_inputs', {})
+    if path not in cache:
+        rep = ctx.reporter
+        try:
+            cache[path] = nsz.plain_path(path, ctx.temp, lambda d, t: rep.progress('check', 'decompress', d, t, 'bytes'))
+        except nsz.NszError as e:
+            raise InstallError('check.input_damaged', input=path.name, path=str(path), detail=str(e)) from None
+        if cache[path] != path:
+            rep.log(f'nsz: {path.name} -> {cache[path].name}')
+    return cache[path]
+
+
 def game_version(ctx):
     """The update this install is built from: what the check identified, else the recorded one."""
     return ctx.state.get('version', SUPPORTED[0])
@@ -183,6 +200,21 @@ def expected_of(ctx, version):
 
 def expected_update(ctx):
     return expected_of(ctx, game_version(ctx))
+
+
+TITLE_KEY_LINE = re.compile(r'[0-9a-fA-F]{32}\s*=\s*[0-9a-fA-F]{32}')
+
+
+def is_title_keys(path):
+    """Whether the keys file is a title.keys (each line a 32-digit hex rights ID = a 32-digit hex title key) rather
+    than prod.keys: the two come from the same console dump and get mixed up. Only the shape is looked at."""
+    try:
+        with path.open('r', encoding='utf-8-sig', errors='replace') as f:
+            lines = [line.strip() for line in f.read(1 << 20).splitlines()]
+    except OSError:
+        return False
+    lines = [line for line in lines if line and not line.startswith(('#', ';'))]
+    return bool(lines) and all(TITLE_KEY_LINE.fullmatch(line) for line in lines)
 
 
 class Watch(threading.Thread):
@@ -239,7 +271,7 @@ class Check(Step):
             raise InstallError('check.lang_unknown', lang=lang, known=', '.join(ini.LANGUAGES))
         if lang in ini.NEED_SHARED_FONTS:
             rep.warning('warn.lang_needs_fonts', lang=lang)
-        ctx.lang = lang
+        ctx.lang = ini.playable(lang)   # an older setup wrote lang = ru for a Russian Windows
         ctx.temp.mkdir(parents=True, exist_ok=True)
 
         rep.progress('check', 'host', force=True)
@@ -306,6 +338,8 @@ class Check(Step):
     def inputs(self, ctx):
         """Open both files with the keys as the extraction will. Returns the bytes of both Program NCAs."""
         o = ctx.options
+        if getattr(o, 'extracted', None):
+            return self.extracted_inputs(ctx)
         for name in ('base', 'update', 'keys'):
             path = getattr(o, name)
             if not path:
@@ -317,7 +351,7 @@ class Check(Step):
         except (ValueError, OSError, UnicodeDecodeError):
             raise InstallError('check.keys_unreadable') from None
         if 'header_key' not in keys:
-            raise InstallError('check.keys_no_header_key')
+            raise InstallError('check.keys_title_keys' if is_title_keys(Path(o.keys)) else 'check.keys_no_header_key')
         total = 0
         for name, is_update in (('base', False), ('update', True)):
             path = Path(getattr(o, name))
@@ -338,6 +372,7 @@ class Check(Step):
         except ValueError as e:
             raise_if_damaged(e, name, path)
             raise InstallError('check.not_game_file', input=name) from None
+        entries = nsz.nca_entries(f, entries)   # an NSZ's headers read in place
         if is_update and kind != 'nsp':
             raise InstallError('check.update_not_nsp')
         try:
@@ -369,6 +404,24 @@ class Check(Step):
                                generation=max(header[0x206], header[0x220])) from None
         return record['size']
 
+    def extracted_inputs(self, ctx):
+        """An extracted game (installer/extracted.py): loose RomFS files need their table; add-on content still opens
+        with the keys. Returns 0: no NCA is copied out."""
+        o = ctx.options
+        if 'loose' in o.extracted and not extracted.table_of(ctx.layout, SUPPORTED[0]):
+            raise InstallError('check.romfs_no_table', version=SUPPORTED[0])
+        files = dlc_inputs(ctx)
+        if files:
+            if not o.keys or not Path(o.keys).is_file():
+                raise InstallError('check.inputs_needed')
+            keys = load_keys(Path(o.keys))
+            for path in files:
+                if not path.is_file():
+                    raise InstallError('check.input_missing', input='dlc', path=str(path))
+                with path.open('rb') as f:
+                    dlc_record(f, path, keys)
+        return 0
+
     def space(self, ctx, ncas):
         dest_need = temp_need = 0
         if ctx.will_run('extract'):
@@ -381,6 +434,9 @@ class Check(Step):
             dest_need += DEST_EXTRA
         if ctx.will_run('lift') or ctx.will_run('compile'):
             temp_need += TEMP_NEED
+        if ctx.will_run('extract'):   # an NSZ or XCZ is rebuilt as a plain NSP in the temp folder first
+            o = ctx.options
+            temp_need += sum(nsz.plain_size(p) for p in (o.base, o.update, *dlc_inputs(ctx)) if p)
         dest_free, dest_dev = free_bytes(ctx.dest)
         temp_free, temp_dev = free_bytes(ctx.temp)
         ctx.reporter.log(f'space: install folder needs {dest_need / GiB:.1f} GiB of {dest_free / GiB:.1f} free, '
@@ -401,11 +457,21 @@ class Check(Step):
         logs = ctx.temp / 'logs'
         logs.mkdir(parents=True, exist_ok=True)
         versions = {v: expected_of(ctx, v) for v in SUPPORTED}
+        if getattr(o, 'extracted', None):   # the update's ExeFS as it is, identified by the same hashes
+            try:
+                found = extract.identify_update(o.extracted['exefs'], versions)['version']
+            except ValueError:
+                found = 'unknown'
+            if found not in SUPPORTED:
+                raise InstallError('check.exefs_wrong_version', path=str(o.extracted['exefs']),
+                                   wanted=' / '.join(SUPPORTED))
+            self.set_version(ctx, found)
+            return
         for name, is_update in (('base', False), ('update', True)):
             out = work / name
             remove(out)
             try:
-                extract.extract_exefs(Path(getattr(o, name)), Path(o.keys), out, logs, update=is_update)
+                extract.extract_exefs(plain_input(ctx, getattr(o, name)), Path(o.keys), out, logs, update=is_update)
             except extract.DamagedFile as e:
                 raise InstallError('check.input_damaged', input=name, path=str(e.path), detail=e.detail) from None
             except ValueError:
@@ -420,6 +486,10 @@ class Check(Step):
             found = 'unknown'
         if found not in SUPPORTED:
             raise InstallError('check.update_wrong_version', found=found, wanted=' / '.join(SUPPORTED))
+        self.set_version(ctx, found)
+
+    @staticmethod
+    def set_version(ctx, found):
         if found != game_version(ctx):   # another update than the recorded one: every step builds again from it
             ctx.reporter.log(f'check: update {found} (recorded {game_version(ctx)})')
             ctx.state['version'] = found
@@ -456,12 +526,17 @@ class Extract(Step):
         image = ctx.dest / 'romfs' / 'romfs.bin'
         rep = ctx.reporter
         digest = file_sha256(image, lambda d, t: rep.progress('check', 'verify_romfs', d, t, 'bytes'))
+        report = json.loads((ctx.dest / 'romfs' / 'index.json').read_text())
+        if report.get('source_sha256'):   # packed from loose files (installer/extracted.py): its own hash
+            return digest == report['romfs_sha256'] and extract.romfs_matches(report, expected_update(ctx))
         return digest == expected_update(ctx)['romfs']['sha256']
 
     def run(self, ctx):
+        if getattr(ctx.options, 'extracted', None):
+            return self.run_extracted(ctx)
         o, dest, rep = ctx.options, ctx.dest, ctx.reporter
         expected = expected_update(ctx)
-        base, update, keys = Path(o.base), Path(o.update), Path(o.keys)
+        base, update, keys = Path(o.base), Path(o.update), Path(o.keys)   # the player's files: what the state records
         inputs = {}
         for name, path in (('base', base), ('update', update)):
             known = ctx.state['inputs'].get(name, {})
@@ -482,7 +557,8 @@ class Extract(Step):
         if not staged.is_dir():
             remove(ctx.temp / 'check' / 'update')
             try:
-                extract.extract_exefs(update, keys, ctx.temp / 'check' / 'update', ctx.temp / 'logs', update=True)
+                extract.extract_exefs(plain_input(ctx, update), keys, ctx.temp / 'check' / 'update', ctx.temp / 'logs',
+                                      update=True)
             except extract.DamagedFile as e:
                 raise InstallError('check.input_damaged', input='update', path=str(e.path), detail=e.detail) from None
             except ValueError:
@@ -500,11 +576,46 @@ class Extract(Step):
         if self.id in ctx.forced:
             remove(romfs)   # the full hash failed: index.json still claims the extraction's hash
         if not extract.romfs_verified(romfs, expected):
-            self.merge(ctx, base, update, keys, romfs, expected)
+            self.merge(ctx, plain_input(ctx, base), plain_input(ctx, update), keys, romfs, expected)
         report = json.loads((romfs / 'index.json').read_text())
         if report['romfs_size'] != expected['romfs']['size'] or report['romfs_sha256'] != expected['romfs']['sha256']:
             raise InstallError('extract.romfs_mismatch', version=game_version(ctx), size=report['romfs_size'],
                                sha256=report['romfs_sha256'][:16])
+        (dest / 'profile').mkdir(exist_ok=True)
+        st = (romfs / 'romfs.bin').stat()
+        return {'romfs_size': st.st_size, 'romfs_mtime_ns': st.st_mtime_ns}
+
+    def run_extracted(self, ctx):
+        """An extracted game (installer/extracted.py): its ExeFS copied, its RomFS image taken or its loose files
+        checked and packed."""
+        found, dest, rep = ctx.options.extracted, ctx.dest, ctx.reporter
+        expected = expected_update(ctx)
+        dest.mkdir(parents=True, exist_ok=True)
+        rep.progress('extract', 'exefs', force=True)
+        remove(dest / 'exefs')
+        shutil.copytree(found['exefs'], dest / 'exefs')
+        problems = extract.exefs_problems(dest / 'exefs', expected)
+        if problems:
+            raise InstallError('extract.exefs_mismatch', version=game_version(ctx), modules=', '.join(problems))
+        romfs = dest / 'romfs'
+        if self.id in ctx.forced:
+            remove(romfs)
+        if not extract.romfs_verified(romfs, expected):
+            remove(romfs)
+            if 'image' in found:
+                from extract_romfs import index_romfs
+                report = extracted.take_image(found['image'], romfs, index_romfs,
+                                              lambda d, t: rep.progress('extract', 'index', d, t, 'bytes'))
+                if not extract.romfs_matches(report, expected):
+                    remove(romfs)
+                    raise InstallError('extract.romfs_mismatch', version=game_version(ctx), size=report['romfs_size'],
+                                       sha256=report['romfs_sha256'][:16])
+            else:
+                table = extracted.table_of(ctx.layout, game_version(ctx))
+                files = extracted.check_loose(found['loose'], table,
+                                              lambda d, t: rep.progress('extract', 'check_files', d, t, 'bytes'))
+                extracted.pack_loose(files, table, romfs, lambda d, t: rep.progress('extract', 'pack', d, t, 'bytes'))
+        ctx.state['inputs'] = {'extracted': str(found['exefs'].parent)}
         (dest / 'profile').mkdir(exist_ok=True)
         st = (romfs / 'romfs.bin').stat()
         return {'romfs_size': st.st_size, 'romfs_mtime_ns': st.st_mtime_ns}
@@ -557,7 +668,7 @@ def dlc_record(f, path, keys):
     """(title id, NCA record) of the add-on content in an opened NSP. InstallError when it holds none of this game's."""
     try:
         kind, entries = container_entries(f, path.stat().st_size)
-        records = nca_inventory(f, entries, keys)
+        records = nca_inventory(f, nsz.nca_entries(f, entries), keys)
     except ValueError as e:
         raise_if_damaged(e, 'dlc', path)
         raise InstallError('check.file_unreadable', input='dlc', detail=str(e)) from None
@@ -596,11 +707,12 @@ class Dlc(Step):
         try:
             for n, path in enumerate(files):
                 rep.progress('dlc', 'extract', n, len(files), 'files')
-                with path.open('rb') as f:
-                    title_id, record = dlc_record(f, path, keys)
+                plain = plain_input(ctx, path)
+                with plain.open('rb') as f:
+                    title_id, record = dlc_record(f, plain, keys)
                 index = aoc_index(title_id)
                 nca, out = work / f'{index}.nca', dest / 'aoc' / str(index)
-                copy_range(path, record['nca_offset'], record['size'], nca)
+                copy_range(plain, record['nca_offset'], record['size'], nca)
                 remove(out)
                 out.parent.mkdir(parents=True, exist_ok=True)
                 code, log = extract.run_hactool([str(ctx.layout.hactool), '-y', '--disablekeywarns', '--suppresskeys',
@@ -620,7 +732,35 @@ class Dlc(Step):
 # ---- 3. lift
 
 EMITTED = re.compile(r'^emitted (\d+)/(\d+) chunks')
+LIFT_EXIT_MEMORY = 3   # recomp/gen.py EXIT_MEMORY: out of memory even with one worker
 DISCOVERED = re.compile(r'^(\w+): \d+ functions \(.*discovery')
+
+
+CHEAT_PLACES = ('cheats', 'atmosphere/contents/0100453019AA8000/cheats', 'contents/0100453019AA8000/cheats',
+                '0100453019AA8000/cheats')
+
+
+def cheat_files(ctx):
+    """The Atmosphere cheat files of the mods folder (<dest>/mods/<mod>/cheats/*.txt and the Atmosphere places, as
+    tools/cheats.py finds them), for the lift key. All of them: the build reads the ones named after the installed
+    main's build id, and the keys are computed before Extract runs, when a fresh install has no main yet."""
+    mods = ctx.dest / 'mods'
+    if not mods.is_dir():
+        return []
+    return sorted(f for mod in mods.iterdir() if mod.is_dir() for where in CHEAT_PLACES
+                  for f in ((mod / where).glob('*.txt') if (mod / where).is_dir() else ()))
+
+
+def builtin_cheats(ctx):
+    """The port's own cheat lists (tools/data/cheats, one per build of main), which every install builds in."""
+    folder = ctx.layout.tools / 'data' / 'cheats'
+    return sorted(folder.glob('*.txt')) if folder.is_dir() else []
+
+
+def cheats_status(ctx):
+    """The build's cheat status file (tools/cheats.py --status), which runtime/cheats.c reads: which cheats became
+    patch sets, which the cheat interpreter runs and which cannot work."""
+    return ctx.dest / 'build-cache' / 'cheats.status'
 
 
 class Lift(Step):
@@ -628,7 +768,11 @@ class Lift(Step):
     transient = True
 
     def key(self, ctx):
-        return fingerprint('lift-3', ctx.keys['extract'], ctx.layout.recomp)
+        # fingerprint takes a file's name and content only; the paths under mods/ go in too, because tools/cheats.py
+        # names each patch set after its mod folder, so a renamed folder needs a lift
+        files = cheat_files(ctx)
+        return fingerprint('lift-5', ctx.keys['extract'], ctx.layout.recomp, ctx.layout.tools / 'cheats.py', *files,
+                           *builtin_cheats(ctx), *(f.relative_to(ctx.dest / 'mods').as_posix() for f in files))
 
     def current(self, ctx, record):
         gen = ctx.temp / 'gen'
@@ -648,12 +792,36 @@ class Lift(Step):
         args = ['--exefs', ctx.dest / 'exefs', '--out', gen]
         if game_version(ctx) == '2.0.0':
             args += ['--mod-menu-hook']
-        table = layout.recomp / PATCHES
-        if table.is_file():   # the 60 fps sites (XCX_FPS60 switches them at run time)
-            args += ['--patches', table]
-        code, log = run_tool(ctx, 'lift', layout.recomp / 'gen.py', args, parse)
+        plain = layout.recomp / PATCHES   # the 60 fps sites and the other sets of 2.0.0
+        # The code cheats of the built-in cheat list and of the mods' cheat files become patch sets, off until switched
+        # on in the Cheats tab (tools/cheats.py); its status file tells the runtime what the build has. A failure costs
+        # the cheats, not the install: the game is built without them and the setup warns.
+        status = cheats_status(ctx)
+        status.unlink(missing_ok=True)   # no status: runtime/cheats.c treats every code cheat as not built
+        patches, skipped = plain, None
+        if plain.is_file() and (builtin_cheats(ctx) or cheat_files(ctx)):
+            code, log = run_tool(ctx, 'lift', layout.tools / 'cheats.py',
+                                 ['--exefs', ctx.dest / 'exefs', '--mods', ctx.dest / 'mods',
+                                  '--builtin', layout.tools / 'data' / 'cheats', '--patches', plain,
+                                  '--out', ctx.temp / 'patches-cheats.txt', '--status', status])
+            if code:
+                status.unlink(missing_ok=True)
+                skipped = log
+            else:
+                patches = ctx.temp / 'patches-cheats.txt'
+        tables = ['--patches', patches] if patches.is_file() else []
+        code, log = run_tool(ctx, 'lift', layout.recomp / 'gen.py', args + tables, parse)
+        if code and code != LIFT_EXIT_MEMORY and patches != plain:
+            status.unlink(missing_ok=True)
+            skipped = log
+            code, log = run_tool(ctx, 'lift', layout.recomp / 'gen.py',
+                                 args + (['--patches', plain] if plain.is_file() else []), parse)
+        if code == LIFT_EXIT_MEMORY:
+            raise InstallError('lift.memory', log=str(log))
         if code:
             raise InstallError('lift.failed', code=code, log=str(log))
+        if skipped:
+            rep.warning('warn.cheats_skipped', log=str(skipped))
         (gen / STAMP).write_text(ctx.keys['lift'] + '\n')
         return {}
 
@@ -670,8 +838,9 @@ class Compile(Step):
         layout = ctx.layout
         clang = subprocess.run([str(layout.clang), '--version'], capture_output=True, text=True).stdout
         tools = [layout.tools / n for n in ('build_game.py', 'build_shaders.py', 'romfs_index.py', 'check_content.py')]
-        return fingerprint('compile-1', ctx.keys['lift'], layout.runtime, self.runtime_lib(ctx), layout.deps or 'system',
-                           layout.sysroot or 'host', *tools, clang, *[d.name for d in layout.dlls])
+        pgo = layout.pgo(game_version(ctx))
+        return fingerprint('compile-2', ctx.keys['lift'], layout.runtime, self.runtime_lib(ctx), layout.deps or 'system',
+                           layout.sysroot or 'host', *tools, clang, *[d.name for d in layout.dlls], pgo or 'no profile')
 
     @staticmethod
     def v3(ctx):
@@ -712,7 +881,7 @@ class Compile(Step):
             '--cpu', 'x86-64-v3' if self.v3(ctx) else 'x86-64-v2',
             '--version', version_tag(game_version(ctx)), '--expected', layout.expected(game_version(ctx)),
             '--exefs', dest / 'exefs', '--romfs', dest / 'romfs',
-            '--profile', dest / 'profile'], parse)
+            '--profile', dest / 'profile', *(['--pgo', pgo] if (pgo := layout.pgo(game_version(ctx))) else [])], parse)
         exe = build / ('xcx' + EXE)
         if code or not exe.is_file():
             raise InstallError('compile.failed', code=code, log=str(log))
@@ -791,6 +960,9 @@ class Dlss(Step):
     id = 'dlss'
 
     def key(self, ctx):
+        given = getattr(ctx.options, 'dlss_file', None)
+        if given:
+            return fingerprint('dlss-1', 'file', file_sha256(given) if given.is_file() else 'missing')
         if not getattr(ctx.options, 'dlss', False):
             return fingerprint('dlss-1', 'off')
         return fingerprint('dlss-1', DLSS_VERSION, DLSS_SHA256)
@@ -801,6 +973,16 @@ class Dlss(Step):
         return not record.get('installed') or (ctx.dest / DLSS_DLL).is_file()
 
     def run(self, ctx):
+        given = getattr(ctx.options, 'dlss_file', None)
+        if given:
+            # A launcher fetched the file (--dlss-file): copy it over any library an older run left, but only when it
+            # is the same NVIDIA release the download takes, so the setup never installs an unchecked DLL
+            sha = file_sha256(given) if given.is_file() else 'missing'
+            if sha != DLSS_SHA256:
+                ctx.reporter.warning('warn.dlss_file_wrong', path=str(given), sha=sha[:16], version=DLSS_VERSION)
+                return {'failed': True}
+            replace_file(given, ctx.dest / DLSS_DLL)
+            return {'installed': DLSS_VERSION}
         if not getattr(ctx.options, 'dlss', False):
             return {}
         if os.name != 'nt':

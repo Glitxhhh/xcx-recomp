@@ -42,8 +42,12 @@ def render(catalog, id, params=None):
 
 
 class Reporter:
-    def __init__(self, out=None, log_path=None):
+    def __init__(self, out=None, log_path=None, lines=False):
         self.out = out or sys.stdout
+        # lines: print "progress <0 to 1> <text>" lines for a launcher instead of JSON events (--progress-lines)
+        self.lines = lines
+        self.step_ids = []
+        self.step_share = {}
         self.t0 = time.monotonic()
         self.catalog = load_catalog()
         self.lock = threading.Lock()
@@ -65,11 +69,35 @@ class Reporter:
 
     def emit(self, type, **fields):
         event = {'type': type, 't': round(self.elapsed(), 2), **fields}
-        with self.lock:
-            self.out.write(json.dumps(event, ensure_ascii=False) + '\n')
-            self.out.flush()
+        text = self.launcher_line(event) if self.lines else json.dumps(event, ensure_ascii=False)
+        if text:
+            with self.lock:
+                self.out.write(text + '\n')
+                self.out.flush()
         self.log(self.describe(event))
         return event
+
+    def launcher_line(self, e):
+        """The line a launcher reads for an event, or None: `progress <0 to 1> <text>`; warnings and errors as text.
+        The fraction is the steps done plus the share of each step whose size is known."""
+        kind = e['type']
+        if kind == 'start':
+            self.step_ids = e['steps']
+            return 'progress 0 ' + render(self.catalog, 'step.' + self.step_ids[0])
+        if kind in ('warning', 'error'):
+            return f'{kind}: {render(self.catalog, e["id"], e.get("params"))}'
+        if kind not in ('step', 'progress') or not self.step_ids:
+            return None
+        step = e['step']
+        if kind == 'step':
+            self.step_share[step] = 0 if e['state'] == 'started' else 1
+            text = render(self.catalog, 'step.' + step)
+        else:
+            if e.get('total') and e.get('done') is not None:
+                self.step_share[step] = min(e['done'] / e['total'], 1)
+            text = render(self.catalog, f'phase.{step}.{e["phase"]}')
+        fraction = sum(self.step_share.get(i, 0) for i in self.step_ids) / len(self.step_ids)
+        return f'progress {fraction:.3f} {text}'
 
     def describe(self, e):
         c = self.catalog

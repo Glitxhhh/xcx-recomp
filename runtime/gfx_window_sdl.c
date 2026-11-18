@@ -1,7 +1,8 @@
 // The SDL3 back end of the window (gfx_wsys.h), for hosts without Win32: the window on a thread of its own that also
-// runs SDL's event loop, F11 fullscreen (borderless, the desktop's mode), the settings XCX_WINDOW_SIZE and
-// XCX_FULLSCREEN, the display's refresh rate, focus, the Vulkan surface. The swapchain and the present are
-// gfx_present.c's. Keyboard and mouse events go to input_sdl.c and to the menu (ui/menu_sdl.cpp).
+// runs SDL's event loop, F11 fullscreen, the settings XCX_WINDOW_SIZE and XCX_FULLSCREEN (window, borderless over the
+// display, or exclusive fullscreen at the desktop's mode), the display's refresh rate, focus, the Vulkan surface. The
+// swapchain and the present are gfx_present.c's. Keyboard and mouse events go to input_sdl.c and to the menu
+// (ui/menu_sdl.cpp).
 //
 // SDL wants its video calls on the thread that initialised video, so this thread does them all: the others hand it
 // work through run_on_window (a user event and a wait) or post a user event. Video is initialised before the window
@@ -64,16 +65,22 @@ double gfx_window_sdl_density(void) { return __atomic_load_n(&g_density_milli, _
 
 SDL_Window *gfx_window_sdl(void) { return g_win; }
 
-// ---- settings: size and fullscreen
+// ---- settings: size and window mode
 static char g_applied_size[32];
-static int g_applied_fs;
+static int g_applied_mode;
+static volatile int32_t g_mode;            // the GFX_ mode the window is in (the window thread writes)
+static int g_last_full = GFX_BORDERLESS;   // window thread: the mode F11 goes to from a window
 
 static void note_applied(void) {
     snprintf(g_applied_size, sizeof g_applied_size, "%s", cfg_value("XCX_WINDOW_SIZE"));
-    g_applied_fs = gfx_cfg_fullscreen();
+    g_applied_mode = gfx_cfg_window_mode();
 }
 
 static int is_fullscreen(void) { return (SDL_GetWindowFlags(g_win) & SDL_WINDOW_FULLSCREEN) != 0; }
+
+int gfx_window_mode(void) { return plat_cas32(&g_mode, 0, 0); }
+
+const void *wsys_swapchain_next(void) { return NULL; }   // SDL picks borderless or exclusive itself
 
 // The window's size in its units for w x h pixels.
 static void set_pixel_size(int w, int h) {
@@ -82,27 +89,42 @@ static void set_pixel_size(int w, int h) {
     SDL_SetWindowSize(g_win, (int)(w / scale + 0.5f), (int)(h / scale + 0.5f));
 }
 
-static void set_fullscreen(int on) {
-    input_cursor_suspend(1);
-    SDL_SetWindowFullscreen(g_win, on);   // the desktop's mode: borderless over the display
-    SDL_SyncWindow(g_win);
-    input_cursor_suspend(0);
+// The fullscreen mode SDL uses for mode: NULL for Borderless (a window over the display), the display's desktop mode
+// for Fullscreen (exclusive, without changing the resolution).
+static void pick_fullscreen_mode(int mode) {
+    const SDL_DisplayMode *dm = mode == GFX_FULLSCREEN ? SDL_GetDesktopDisplayMode(SDL_GetDisplayForWindow(g_win)) : NULL;
+    if (!SDL_SetWindowFullscreenMode(g_win, dm)) rt_log("gfx: SDL_SetWindowFullscreenMode failed (%s)", SDL_GetError());
 }
 
-// Window thread: the window takes the size and fullscreen state of the settings when they changed. A window resized by
-// hand keeps its size when another setting changes.
+// Window thread: the window takes mode. Between the two full modes SDL switches the fullscreen mode in place.
+static void set_mode(int mode) {
+    input_cursor_suspend(1);
+    if (mode != GFX_WINDOWED) pick_fullscreen_mode(mode);
+    SDL_SetWindowFullscreen(g_win, mode != GFX_WINDOWED);
+    SDL_SyncWindow(g_win);
+    input_cursor_suspend(0);
+    if (mode != GFX_WINDOWED) g_last_full = mode;
+    if (plat_xchg32(&g_mode, mode) != mode) {
+        gfx_window_mark_dirty();
+        rt_log("gfx: window mode %s",
+               mode == GFX_BORDERLESS ? "borderless" : mode == GFX_FULLSCREEN ? "fullscreen" : "window");
+    }
+}
+
+// Window thread: the window takes the size and mode of the settings when they changed. A window resized by hand keeps
+// its size when another setting changes.
 static void apply_settings(void) {
-    int size_changed = strcmp(cfg_value("XCX_WINDOW_SIZE"), g_applied_size) != 0, fs = gfx_cfg_fullscreen();
-    int fs_changed = fs != g_applied_fs;
+    int size_changed = strcmp(cfg_value("XCX_WINDOW_SIZE"), g_applied_size) != 0, mode = gfx_cfg_window_mode();
+    int mode_changed = mode != g_applied_mode;
     note_applied();
     if (size_changed) {
         int w, h;
         gfx_cfg_window_size(&w, &h);
         if (is_fullscreen()) SDL_SetWindowFullscreen(g_win, false);
         set_pixel_size(w, h);
-        if (is_fullscreen() || (fs && !fs_changed)) SDL_SetWindowFullscreen(g_win, true);
+        if (gfx_window_mode() != GFX_WINDOWED && !(mode_changed && mode == GFX_WINDOWED)) SDL_SetWindowFullscreen(g_win, true);
     }
-    if (fs_changed && fs != is_fullscreen()) set_fullscreen(fs);
+    if (mode_changed && mode != gfx_window_mode()) set_mode(mode);
 }
 
 void gfx_window_apply_settings(void) {
@@ -154,9 +176,11 @@ static void handle(const SDL_Event *e) {
     menu_sdl_event(e);
     switch (e->type) {
     case SDL_EVENT_KEY_DOWN:
+        // F11: a window goes to the full mode it was last in (Borderless at first), a full mode back to the window
         if (e->key.scancode == SDL_SCANCODE_F11 && !e->key.repeat) {
-            set_fullscreen(!is_fullscreen());
-            cfg_set("XCX_FULLSCREEN", is_fullscreen() ? "1" : "0");   // the menu shows it; the next start keeps it
+            set_mode(gfx_window_mode() == GFX_WINDOWED ? g_last_full : GFX_WINDOWED);
+            // the menu shows it; the next start keeps it
+            cfg_set("XCX_FULLSCREEN", gfx_window_mode_value(gfx_window_mode()));
             cfg_save();
             note_applied();
         }
@@ -257,7 +281,7 @@ static void open_window(void *arg) {
     note_applied();
     refresh_rate_update();
     if (cfg_get("XCX_BACKGROUND_WINDOW")) rt_log("gfx: XCX_BACKGROUND_WINDOW has no effect with SDL windows");
-    if (gfx_cfg_fullscreen()) SDL_SetWindowFullscreen(g_win, true);
+    if (gfx_cfg_window_mode() != GFX_WINDOWED) set_mode(gfx_cfg_window_mode());
     SDL_SyncWindow(g_win);
     input_sdl_window(g_win);
     open_ok = 1;

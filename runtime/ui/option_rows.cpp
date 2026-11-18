@@ -34,14 +34,20 @@ static bool g_held;                      // the last row's left / right has been
 static float g_bottom;                   // opt_reserve_bottom: kept free under the panes
 static bool g_disable_next;              // opt_disable_next: the next row is greyed out with g_disable_note
 static UiTextId g_disable_note;
+// The rows of this frame's page: how many, which one has the controller / keyboard cursor (-1 none) and its id, and the
+// row that had it last frame (opt_end scrolls to the page's ends when the cursor arrives on its first or last row).
+static int g_rows, g_cursor_row;
+static ImGuiID g_cursor_id, g_cursor_last;
 
 // The description pane: this frame's hovered and selected rows, the page's first row, and the last one shown.
 struct Desc { char text[512]; };
 static Desc g_hover, g_focus, g_first, g_shown;
 
 // disabled: the note of a row opt_disable_next greyed out, else NULL.
+static const char *g_own_label, *g_own_desc;   // opt_row_text: this row's own text in place of its UiTextIds
+
 static void desc_set(Desc &d, UiTextId desc, const char *key, const CfgMeta *m, const char *disabled) {
-    int n = snprintf(d.text, sizeof d.text, "%s", menu_text(desc));
+    int n = snprintf(d.text, sizeof d.text, "%s", g_own_desc ? g_own_desc : menu_text(desc));
     if (n < 0 || n >= (int)sizeof d.text) return;
     if (disabled)
         snprintf(d.text + n, sizeof d.text - n, "\n\n%s", disabled);
@@ -68,6 +74,7 @@ void opt_begin(const char *id, float scale) {
     g_focus_req = false;
     if (g_take_first) ImGui::NavMoveRequestCancel();   // this frame's move goes to the first row instead
     g_hover.text[0] = g_focus.text[0] = g_first.text[0] = 0;
+    g_rows = 0, g_cursor_row = -1, g_cursor_id = 0;
     ImVec2 avail = ImGui::GetContentRegionAvail();
     avail.y -= g_bottom;
     ImGui::PushID(id);
@@ -77,6 +84,14 @@ void opt_begin(const char *id, float scale) {
 
 void opt_end(void) {
     ImGui::PopStyleVar();
+    // Moving the cursor scrolls just far enough to show the row, which leaves the text above the first row (a page's
+    // note, a heading) or under the last one (the Cheats tab's build id) out of view at the ends of the list: arriving on
+    // the first or last row scrolls the whole way. Only on arrival, so the mouse wheel still scrolls freely after it.
+    if (g_cursor_id && g_cursor_id != g_cursor_last) {
+        if (g_cursor_row == 0) ImGui::SetScrollY(0);
+        else if (g_cursor_row == g_rows - 1) ImGui::SetScrollY(ImGui::GetScrollMaxY());
+    }
+    g_cursor_last = g_cursor_id;
     ImGui::EndChild();
     // the hovered row (mouse) wins, else the selected one (controller), else the last shown, else the first row
     if (g_hover.text[0]) g_shown = g_hover;
@@ -146,7 +161,11 @@ static int row(const char *key, UiTextId label, UiTextId desc, const RowView &v)
             ImGui::SetKeyOwner(k, ImGui::GetItemID());
         }
     }
-    if (foc) desc_set(g_focus, desc, key, m, disabled);
+    if (foc) {
+        desc_set(g_focus, desc, key, m, disabled);
+        g_cursor_row = g_rows, g_cursor_id = ImGui::GetItemID();
+    }
+    g_rows++;
     if (hov) desc_set(g_hover, desc, key, m, disabled);
     if (!g_first.text[0]) desc_set(g_first, desc, key, m, disabled);
 
@@ -187,7 +206,8 @@ static int row(const char *key, UiTextId label, UiTextId desc, const RowView &v)
     }
     // the label and its note, clipped before the value
     ImVec4 clip(p.x, p.y, value_left - fs * 0.6f, p.y + h);
-    dl->AddText(font, fs, ImVec2(p.x + pad, ty), off ? kGrey : IM_COL32(230, 242, 250, 255), menu_text(label), NULL, 0,
+    dl->AddText(font, fs, ImVec2(p.x + pad, ty), off ? kGrey : IM_COL32(230, 242, 250, 255),
+                g_own_label ? g_own_label : menu_text(label), NULL, 0,
                 &clip);
     const char *note = disabled        ? disabled
                      : off             ? menu_text(UI_MENU_SET_BY_ENV)
@@ -236,14 +256,32 @@ bool opt_toggle(const char *key, UiTextId label, UiTextId desc, bool inverted) {
     return true;
 }
 
+bool opt_row_text(const char *id, const char *label, const char *desc, bool on) {
+    g_own_label = label;
+    g_own_desc = desc;
+    RowView v = {menu_text(on ? UI_MENU_ON : UI_MENU_OFF), false, false, NULL};
+    int step = row(id, UI_MENU_ON, UI_MENU_ON, v);
+    g_own_label = g_own_desc = NULL;
+    return step != 0;   // any step flips it
+}
+
+void opt_text_raw(const char *text) {
+    ImGui::PushTextWrapPos(0);
+    ImGui::TextDisabled("%s", text);
+    ImGui::PopTextWrapPos();
+    ImGui::Spacing();
+}
+
 bool opt_button(const char *id, UiTextId label, UiTextId desc, const char *value) {
     RowView v = {value ? value : "", false, false, NULL};
     return row(id, label, desc, v) == 2;   // A or a click; left and right do nothing
 }
 
-void opt_group(UiTextId title) {
+void opt_group(UiTextId title) { opt_group_raw(menu_text(title)); }
+
+void opt_group_raw(const char *title) {
     ImGui::Dummy(ImVec2(0, 6 * g_scale));
-    ImGui::TextColored(ImVec4(0.35f, 0.86f, 0.96f, 1), "%s", menu_text(title));
+    ImGui::TextColored(ImVec4(0.35f, 0.86f, 0.96f, 1), "%s", title);
 }
 
 void opt_text(UiTextId text, bool warn) {

@@ -117,6 +117,29 @@ your machines without MSYS2, Python or .NET. `romfs.bin` stays out unless you pa
 `romfs\` next to the exe or point `XCX_ROMFS` at its folder. Run `xcx.exe --prepare-shaders` once in the copied
 folder. The folder holds code and data derived from your game: for your own machines only.
 
+## Profile-guided build
+
+The Windows release compiles the game with an execution profile, as TotK Recomp does: `tools/data/pgo/pgo-upd.profdata.xz`
+and its training record `pgo-upd.json`. On a Ryzen 7 9800X3D it gave 4% more frames standing in NLA (a trained scene)
+and 9% walking a city of a 60-hour save it was not trained on. The profile holds run counts of the lifted functions,
+named by guest address, and no code or data of the game. It is the one game-derived file the repository and the
+packages carry, and `tools/check_content.py` lets it through only as an xz stream holding an LLVM indexed profile.
+
+Retrain when `recomp/` or the headers the generated C includes change (`make_release.py` warns when the profile's recomp
+tree differs; functions whose generated C changed compile without a profile):
+
+```sh
+# an instrumented build: xcx.exe adds its counts to build/<name>/pgo/default_<id>.profraw every minute and at exit
+.venv\Scripts\python tools\build_game.py --version upd --pgo gen --toolchain <llvm-mingw> --out build\pgogen ...
+# play the training scenes with that exe (scripted runs: --seconds and XCX_INPUT_SCRIPT), then merge and ship
+.venv\Scripts\python tools\pgo.py merge build\pgogen --version upd --toolchain <llvm-mingw>
+.venv\Scripts\python tools\pgo.py ship --version upd
+```
+
+`llvm-profdata` must come from the toolchain the instrumented build used. `build_game.py --pgo FILE` takes the
+`.profdata` or the shipped `.profdata.xz` and compiles the generated code at -O2; functions the training never entered
+are optimised for size.
+
 ## Linux (in progress)
 
 The runtime builds and runs on x86-64 Linux with a window, input and menu on SDL3 (`*_sdl.c`) in place of the Win32
@@ -177,7 +200,8 @@ change passes these, all run with `.venv`:
 | `tests\jumptables_check.py` | `recomp/jumptables.py` against a Unicorn oracle; must report 0 disagreements, on 1.4.3 too | yes |
 
 Runtime probes, each a mode of `xcx.exe` (the list is at the top of `runtime/main.c`): `--probe-kernel`,
-`--probe-vkexec`, `--probe-nvn-tex` and `--probe-shader` cover most runtime changes.
+`--probe-vkexec`, `--probe-nvn-tex` and `--probe-shader` cover most runtime changes. `--probe-cheats` checks the cheat
+format and interpreter ([cheats.md](cheats.md)).
 
 Shaders: `.venv-py314\Scripts\python tools\shader_census.py --version <ver> --translate` extracts every Maxwell shader
 to `build\<ver>\shaders\` and runs it through the translator and `spirv-val`; failure groups go to `failures.txt`.

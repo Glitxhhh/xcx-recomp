@@ -9,8 +9,10 @@ holds only the game; the installer and its tools stay outside it.
 1. Downloads `XCX-Setup-<version>-windows.zip` from GitHub Releases (none is published yet), unpacks it anywhere and
    starts `XCX-Setup.exe`.
 2. Picks:
-   - the base game (XCI or NSP) and the 1.2.1 or 1.4.3 update (NSP);
+   - the base game (XCI or NSP) and the 1.2.1 or 1.4.3 update (NSP), or the same compressed (XCZ, NSZ);
    - their `prod.keys`;
+   - or, in place of those files, a game they already extracted (Folder... next to the base game): `exefs/` and the
+     RomFS of the updated game. It needs no update file, and `prod.keys` only for add-on content (issue #175);
    - the game language and the install folder.
 3. Waits for the setup, one time. The window shows each step and its progress.
 4. Plays `xcx.exe` from the install folder. The installer and the source NSP or XCI can be deleted.
@@ -35,6 +37,21 @@ The player runs a newer installer on the same folder. It reads `xcx-install.json
 `profile/` and `xcx.ini` after checking their hashes, rebuilds `xcx.exe` and re-prepares the shaders. A newer
 release that changes nothing game-derived skips the rebuild.
 
+The window starts filled in from the last install it ran (issue #155): the install folder, the base game, the update,
+the add-on content and the keys file, so an update is one click on Start. A new release unpacks into a new folder, so
+the paths live outside it:
+
+- `%APPDATA%\XCX Recomp\setup.json` (`$XDG_CONFIG_HOME/xcx-recomp/setup.json`, default `~/.config/xcx-recomp/`,
+  elsewhere) points at the last install folder and keeps the paths of its last Start (`installer/recent.py`). The
+  window writes it when Start passes the form's checks.
+- The install folder's `xcx-install.json` records `"paths"`, the files the last run named (`--game` as given, not what
+  it resolved to; a run given only `--dest` keeps them). The CLI writes them, so a run from RecompLauncher or a script
+  counts too, and picking another install folder in the window fills the empty fields from that folder.
+
+The folder's record wins over the per-user file. Only paths are stored, never the contents of the keys file. A path
+that moved or is gone, or an install folder without `xcx-install.json`, leaves its field empty, and the window waits at
+most 1.5 seconds for these checks (a path on a disconnected network share can block). Delete `setup.json` to forget.
+
 Given another update file than the recorded one (1.2.1, then 1.4.3), the installer extracts and builds again from it and
 keeps `profile/`. Saves carry over both ways: 1.4.3 converts a 1.2.1 save on load, and 1.2.1 loads the saves 1.4.3 wrote.
 
@@ -51,6 +68,13 @@ what is in `mods/`:
   size and SHA-256, and unpacks its `romfs/` (or `romfs/mod/`) folder into `mods/<id>/romfs/`; `exefs/` is left out.
   **Add zip...** does the same for a zip the player downloaded. They are on when listed in `mods/romfs-enabled.txt`,
   which the game reads again twice a second (`runtime/romfs_mods.c`), so they switch while it runs.
+- A game-file mod unpacked into `mods/` by hand, as its download comes, is moved to `mods/<id>/romfs/` the next time
+  either manager lists the mods: a folder named after the mod (`Unburger Patch` becomes `unburger-patch`), the Switch
+  SD card layout (`atmosphere/contents/0100453019AA8000/romfs`, `contents/<title id>/romfs`, `<title id>/romfs`), a
+  bare `romfs/` (those three become `romfs-mod`, `romfs-mod-2` ...) and `romfs/mod/`. It starts off. A folder neither
+  manager can use (no `romfs` folder, two of them, another game's title ID, a Lua mod with a folder name that is not an
+  id, a zip) gets a line saying why, in the F1 Mods tab and in Setup's Mods window. `installer/mods.py` and
+  `runtime/mod_library.c` both carry these rules (`normalise`); `tests/mods_manager_test.py` checks they agree.
 
 Saves are never touched. The game uses a game-file mod's copy the next time it loads the file, so data read at
 start-up (the bdat tables) needs a restart.
@@ -94,6 +118,21 @@ python -m installer --base FILE --update FILE --keys FILE --lang CODE --dest DIR
 ```
 
 - On a folder with `xcx-install.json` only `--dest` is needed; the game files only when the extraction must run again.
+- For a launcher or a script (RecompLauncher passes them, `recomplauncher.json`): `--game PATH` takes the game file or
+  a folder holding the base game, the update and the add-on content in place of `--base`, `--update` and `--dlc`,
+  and sorts the files by content (`installer/game_files.py`); `--lang auto` keeps the language already in `xcx.ini`;
+  `--dlss-file PATH` copies a DLSS library, only NVIDIA's release the download takes (`DLSS_SHA256`), instead of
+  downloading one; `--progress-lines` prints `progress 0.4 Text` lines instead of JSON events. Empty values
+  (`--dlc=`, `--update=`, a launcher's optional input left empty) count as not given.
+- NSZ and XCZ (`installer/nsz.py`): the checks read their NCA headers in place; the extraction first rebuilds each as a
+  plain NSP in the temp folder (every NCA checked against its own name, a SHA-256), then goes on as with an NSP.
+- An extracted game (`installer/extracted.py`): `--game FOLDER`, or a folder as `--base`, holding `exefs/` of the 2.0.0
+  update and its RomFS as an image (`romfs.bin` or `romfs/romfs.bin`, hard-linked into the install when it can be) or as
+  loose files (`romfs/`, an emulator's "Dump RomFS" with the update installed). No update file or keys are needed. The
+  ExeFS and an image are checked by the same hashes as an extraction. Loose files are checked one by one against
+  `tools/data/romfs-files-xcx-<version>.json` (the SHA-256 of each path, size and SHA-256 of each file, written from a
+  verified extraction by `tools/romfs_files.py`) and packed into a new `romfs.bin`: `xcx.exe` reads the RomFS only at the
+  offsets of its index, so the image need not be the cartridge's byte for byte.
 - stdout: one JSON event per line, types `start`, `plan`, `step` (started, done, skipped), `progress` (step, phase,
   done/total/unit), `space` (bytes needed and free on the install disk and the temp disk), `warning`, `error`, `end` (`installer/events.py`). Messages are ids with parameters;
   `installer/text/en.json` holds their English text. The human-readable log goes to `<temp>/logs/`.
@@ -107,7 +146,8 @@ python -m installer --base FILE --update FILE --keys FILE --lang CODE --dest DIR
   progress, space line, collapsible log, Cancel (Ctrl+Break to the CLI's process group, then it waits for the exit),
   finish screen with Open folder. English or Russian, chosen from the Windows display language, switchable in the
   window; every sentence is an id in `installer/text/<en|ru>.json`. A folder with `xcx-install.json` needs only the
-  folder. `--selftest [--shots DIR]` builds every screen in both languages and closes itself.
+  folder. An extracted game folder as the base game (`Form.extracted_game`, `installer/extracted.py` find) goes to the
+  CLI as `--base FOLDER` without `--update`; a folder that is no extracted game is refused in the form. `--selftest [--shots DIR]` builds every screen in both languages and closes itself.
 - `tests/installer_gui_test.py`: event model, form, catalogs, cancel, the self-closing window and one end-to-end run
   of the CLI in `--verify` mode (needs `build/install-test` and `build/extracted/v121`; see its docstring).
 - `tests/installer_test.py`: bookkeeping with fake steps. `tests/installer_e2e.py`: a dev-mode run with the files of
@@ -132,8 +172,12 @@ xcx.ini.example, VERSION  the default ini; the release string (the repository's 
 
 - SDL3 comes from the upstream release, not MSYS2: MSYS2's DLL imports the LGPL libiconv.
 - Every bundled third-party piece gets a row in `THIRD_PARTY_NOTICES.md`.
-- The release contains nothing game-derived; `make_release.py` runs `tools/check_content.py` over the folder before it
-  finishes.
+- The release contains nothing game-derived but the execution profile `tools/data/pgo/pgo-upd.profdata.xz` (run counts
+  of the lifted functions, named by guest address; docs/building.md, "Profile-guided build"). `make_release.py` runs
+  `tools/check_content.py` over the folder before it finishes, and that check lets the profile through only as an xz
+  stream holding an LLVM indexed profile.
+- On Windows the Compile step builds the game with that profile at -O2 (`installer/layout.py` pgo); Linux has none,
+  since the profile belongs to the LLVM of the Windows toolchain.
 
 ## Linux release
 
@@ -175,7 +219,7 @@ bin/                  xcx_xlate, hactool, ninja, libSDL3.so.0
 
 `.github/workflows/release.yml` builds both packages with no game files. `libxcxrt.a` takes `MOD_COUNT` and
 `MOD_MAIN_BASE`, all the runtime reads of the module layout, from `tools/runtime-layout/layout.h`; nothing game-derived
-reaches a runner or a package.
+reaches a runner or a package except the committed execution profile, which also builds the Windows `libxcxrt.a`.
 
 Each run builds `XCX-Setup-<version>-windows.zip` on Windows and `XCX-Setup-<version>-linux.AppImage` on Linux, with
 `check_content`, the check-only installer pass and the window's `--selftest` inside `tools/make_release.py` and
@@ -183,8 +227,11 @@ Each run builds `XCX-Setup-<version>-windows.zip` on Windows and `XCX-Setup-<ver
 (`.github/actions/software-vulkan`). A second runner then unpacks each package and repeats those checks
 (`tools/check_release.py`). Downloads are cached from `toolchain/release-dl/`.
 
-For a test build, start the Release workflow on a branch from the Actions tab (or `gh workflow run release.yml --ref
-<branch>`). The packages are the run's artifacts.
+For a test build, push a tag `test-<name>` on the commit to try (`git tag test-issue123 && git push origin
+test-issue123`), or start the Release workflow on a branch from the Actions tab (`gh workflow run release.yml --ref
+<branch>`). Either only builds and checks: no draft release is made. The packages are the run's artifacts, named
+`XCX-Setup-test-<name>-windows.zip` and `XCX-Setup-test-<name>-linux.AppImage` for a tag (the `VERSION` for a run
+started by hand); link the run in the issue for the reporter.
 
 For a release:
 
@@ -228,4 +275,3 @@ Without Actions, the same two scripts build the packages locally; on Windows run
 ## Later
 
 - Re-warm the driver cache on start after a move, GPU or driver change.
-- NSZ and XCZ input.

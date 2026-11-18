@@ -40,6 +40,12 @@ void perf_gpu_busy(uint64_t ns) { plat_add64(&gpu_busy_total, (int64_t)ns); }
 
 uint64_t perf_gpu_busy_total(void) { return (uint64_t)__atomic_load_n(&gpu_busy_total, __ATOMIC_RELAXED); }
 
+static volatile int64_t present_gpu_total;
+
+void perf_present_gpu(uint64_t ns) { plat_add64(&present_gpu_total, (int64_t)ns); }
+
+uint64_t perf_present_gpu_total(void) { return (uint64_t)__atomic_load_n(&present_gpu_total, __ATOMIC_RELAXED); }
+
 void prof_start(void) {
     flight_init();
     atexit(perf_summary_flush);   // boot.c's _exit path goes through prof_write instead

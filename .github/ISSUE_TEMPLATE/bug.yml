@@ -4,19 +4,20 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not attach or link game files, keys, firmware or builds. Issues that do are closed.
+        Do not attach or link game files, keys, firmware or builds. Issues that do are closed. Your own save file is
+        fine; the bug report zip below can carry it.
   - type: input
     id: version
     attributes:
       label: Version
-      description: The title line of the settings menu (F1), for example "XCX Recomp 0.1.0, game 1.4.3".
+      description: The title line of the settings menu (F1), for example "XCX Recomp 0.1.20, game 2.0.0".
     validations:
       required: true
   - type: input
     id: system
     attributes:
-      label: GPU, driver and Windows version
-      description: Copy system info in the menu's Advanced tab puts them on the clipboard.
+      label: GPU, driver and operating system
+      description: Copy system info in the menu's Advanced tab puts them on the clipboard. The bug report zip has them too.
     validations:
       required: true
   - type: textarea
@@ -26,7 +27,19 @@ body:
     validations:
       required: true
   - type: textarea
-    id: log
+    id: report
     attributes:
-      label: Log
-      description: Attach logs\xcx.log from the folder of xcx.exe. After a crash, copy it before you start the game again.
+      label: Bug report zip
+      description: |
+        F1 > Advanced > Make a bug report packs the logs, the crash reports, xcx.ini, system info and the mod lists into
+        one zip and opens its folder: drag the zip into this box. Paths, user and computer names, email and network
+        addresses are masked in it. After a crash, make it after you start the game again: the zip keeps the last
+        eight crash reports.
+
+        A save standing where the problem shows speeds things up a lot. Turn on "Add the save to the bug report" in the
+        same tab before you make the zip. Not needed when the problem happens before any save can load.
+
+        Versions before the button: attach logs/xcx.log from the folder of xcx.exe instead, copied before you start
+        the game again after a crash.
+    validations:
+      required: true
