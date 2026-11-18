@@ -5,6 +5,13 @@
 #include <stdint.h>
 
 #define MODLIB_ROWS 64
+#define MODLIB_NOTES 16
+
+// A line on a folder of the mods folder put there by hand: moved to the layout the game reads, or not read and why.
+typedef struct {
+    char text[300];           // English
+    int error;                // not read
+} ModLibNote;
 
 typedef struct {
     char id[65];
@@ -30,6 +37,8 @@ typedef struct {
     char message[400];        // the last job's outcome; English reasons
     int message_error;
     int index_ok;             // the library was read
+    int nnotes;               // lines on the folders put in mods/ by hand, from the last reading of the library
+    ModLibNote notes[MODLIB_NOTES];
     uint64_t generation;      // changes whenever the view does
 } ModLibView;
 

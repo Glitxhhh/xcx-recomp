@@ -13,6 +13,11 @@
 // A cheat is matched to its line by the name hash (FNV-1a of "<mod>/<cheat>"), and switching it flips its set
 // (rt_patch_switch). A "key" cheat's set is on only while its buttons are held. A cheat whose content hash differs was
 // edited after the setup ran, so its set is stale and it stays off until the setup runs again.
+//
+// A "mixed" cheat writes instructions among button conditions and data opcodes (a hook whose code cave saves a pointer,
+// then data opcodes that change what it points at; a cave rewritten while a button is held). The interpreter runs it,
+// its instruction writes landing in a shadow of the words it writes (code_store), and after each pass the patch set
+// whose state the shadow holds is on (apply_mixed): the setup made one set per state of those words.
 #include "cheats.h"
 #include <ctype.h>
 #include <stdatomic.h>
@@ -46,6 +51,12 @@ typedef struct {
     int set;            // the patch set of a CHEAT_PATCHED cheat, else -1
     uint32_t buttons;   // a "key" cheat's buttons, else 0
     const char *note;   // why a CHEAT_UNSUPPORTED cheat cannot be built in (owned by the status lines)
+    // A mixed cheat: the words its instruction writes go to (guest addresses), their values as the game has them and
+    // as the cheat last wrote them; per patch set, the value each word must hold for it (any, where `any` is set).
+    int nwords, nsets, on;   // on: the set now switched on, -1 none
+    uint64_t *addr;
+    uint32_t *init, *shadow, *want, *any;   // want / any: nsets rows of nwords
+    int *sets;
 } CodeCheat;
 
 typedef struct {
@@ -253,8 +264,67 @@ static const StatusLine *status_of(const char *key) {
     return NULL;
 }
 
+// The words and sets of a mixed cheat from its status note (tools/cheats.py mixed): "<offset>:<initial>" per word,
+// then "#<n>:<value>,..." per set ("*": any value). 0 when a set was not built or the note does not parse.
+static int parse_mixed(CodeCheat *cc, const char *note, uint32_t h) {
+    char *copy = strdup(note);
+    if (!copy) rt_fatal("cheats: out of memory");
+    int ok = 1, cap = 0;
+    uint64_t base = ldr_module(0)->base;
+    for (char *t = copy, *next; t && *t && ok; t = next) {
+        next = strchr(t, ' ');
+        if (next) *next++ = 0;
+        if (!*t) continue;
+        char *colon = strchr(t, ':');
+        if (!colon) { ok = 0; break; }
+        *colon = 0;
+        if (*t != '#') {   // a word: <offset>:<initial>
+            if (cc->nsets) { ok = 0; break; }
+            if (cc->nwords == cap) {
+                cap = cap ? cap * 2 : 8;
+                cc->addr = realloc(cc->addr, (size_t)cap * sizeof *cc->addr);
+                cc->init = realloc(cc->init, (size_t)cap * sizeof *cc->init);
+                if (!cc->addr || !cc->init) rt_fatal("cheats: out of memory");
+            }
+            cc->addr[cc->nwords] = base + strtoull(t, NULL, 16);
+            cc->init[cc->nwords++] = (uint32_t)strtoul(colon + 1, NULL, 16);
+            continue;
+        }
+        if (!cc->nwords) { ok = 0; break; }
+        int n = cc->nsets + 1;   // a set: #<n>:<value>,<value>...
+        cc->want = realloc(cc->want, (size_t)n * (size_t)cc->nwords * sizeof *cc->want);
+        cc->any = realloc(cc->any, (size_t)n * (size_t)cc->nwords * sizeof *cc->any);
+        cc->sets = realloc(cc->sets, (size_t)n * sizeof *cc->sets);
+        if (!cc->want || !cc->any || !cc->sets) rt_fatal("cheats: out of memory");
+        char *v = colon + 1;
+        for (int w = 0; w < cc->nwords; w++) {
+            char *end = strchr(v, ',');
+            if (end) *end = 0;
+            cc->any[cc->nsets * cc->nwords + w] = !strcmp(v, "*");
+            cc->want[cc->nsets * cc->nwords + w] = (uint32_t)strtoul(v, NULL, 16);
+            if (!end && w + 1 < cc->nwords) ok = 0;
+            v = end ? end + 1 : v;
+        }
+        char name[48];
+        snprintf(name, sizeof name, "cheat_%08x_%s", h, t + 1);
+        cc->sets[cc->nsets++] = rt_patch_set(name);
+        if (cc->sets[cc->nsets - 1] < 0) ok = 0;
+    }
+    free(copy);
+    cc->shadow = malloc((size_t)(cc->nwords ? cc->nwords : 1) * sizeof *cc->shadow);
+    if (!cc->shadow) rt_fatal("cheats: out of memory");
+    if (cc->nwords) memcpy(cc->shadow, cc->init, (size_t)cc->nwords * sizeof *cc->shadow);
+    cc->on = -1;
+    return ok && cc->nwords && cc->nsets;
+}
+
+static void code_free(CodeCheat *cc) {
+    free(cc->addr), free(cc->init), free(cc->shadow), free(cc->want), free(cc->any), free(cc->sets);
+}
+
 // What the setup made of each cheat of s (tools/cheats.py: the same name and content hashes). A cheat it built in
-// becomes CHEAT_PATCHED and leaves the interpreter; a code cheat it did not build stays off with the reason.
+// becomes CHEAT_PATCHED and leaves the interpreter; a code cheat it did not build stays off with the reason. A mixed
+// cheat stays with the interpreter (CHEAT_OK) and gets its words and sets.
 static void match_status(Source *s) {
     s->code = calloc((size_t)(s->cheats.count ? s->cheats.count : 1), sizeof *s->code);
     if (!s->code) rt_fatal("cheats: out of memory");
@@ -285,8 +355,13 @@ static void match_status(Source *s) {
             // only for a cheat that changes code: tools/cheats.py also refuses opcodes the interpreter here runs
             c->state = CHEAT_UNSUPPORTED;
             cc->note = l->note;
+        } else if (l && !strcmp(l->kind, "mixed")) {
+            c->state = !strcmp(l->content, content) && parse_mixed(cc, l->note, h) ? CHEAT_OK : CHEAT_NOT_BUILT;
         } else if (patch && strcmp(l->content, content)) {
             c->state = CHEAT_NOT_BUILT;   // edited after the setup ran: its set has the old code
+            if (strcmp(s->name, CHEATS_BUILTIN))
+                rt_log("cheats: %s: %s was edited after the setup ran; run the setup again to build it in", s->name,
+                       c->name);
         } else if (patch) {
             char set[32];
             snprintf(set, sizeof set, "cheat_%08x", h);
@@ -296,12 +371,56 @@ static void match_status(Source *s) {
             c->master = !strcmp(l->kind, "master");
         } else if (c->state == CHEAT_WRITES_CODE) {
             c->state = CHEAT_NOT_BUILT;   // a code cheat the setup has not seen
+            if (strcmp(s->name, CHEATS_BUILTIN))   // the built-in ones lack a status only when the setup failed
+                rt_log("cheats: %s: %s changes code and is not among the %d cheats the setup saw; run the setup "
+                       "again to build it in", s->name, c->name, nstatus);
         }
     }
 }
 
+// The patch set of each mixed cheat of s whose state its shadow holds, the others off; a cheat that is off (or all
+// cheats) starts again from the game's own words.
+static void apply_mixed(Source *s) {
+    for (int k = 0; k < s->cheats.count; k++) {
+        Cheat *c = &s->cheats.cheats[k];
+        CodeCheat *cc = &s->code[k];
+        if (!cc->nsets || c->state != CHEAT_OK) continue;
+        int on = -1;
+        if (allowed && c->enabled) {
+            for (int j = 0; j < cc->nsets && on < 0; j++) {
+                int match = 1;
+                for (int w = 0; w < cc->nwords && match; w++)
+                    match = cc->any[j * cc->nwords + w] || cc->want[j * cc->nwords + w] == cc->shadow[w];
+                if (match) on = j;
+            }
+        } else {
+            memcpy(cc->shadow, cc->init, (size_t)cc->nwords * sizeof *cc->shadow);
+        }
+        if (on == cc->on) continue;
+        if (cc->on >= 0) rt_patch_switch(cc->sets[cc->on], 0);
+        if (on >= 0) rt_patch_switch(cc->sets[on], 1);
+        cc->on = on;
+        rt_log("cheats: %s: %s: code state %d of %d", s->name, c->name, on + 1, cc->nsets);
+    }
+}
+
+// A mixed cheat's store to one of its words goes to its shadow; 8 bytes are two words.
+static int code_store(void *ctx, int cheat, uint64_t addr, uint64_t value, int n) {
+    const CodeCheat *cc = &((Source *)ctx)->code[cheat];
+    if (!cc->nwords || (n != 4 && n != 8)) return 0;
+    int took = 0;
+    for (int part = 0; part < n / 4; part++)
+        for (int w = 0; w < cc->nwords; w++)
+            if (cc->addr[w] == addr + 4 * (uint64_t)part) {
+                cc->shadow[w] = (uint32_t)(value >> 32 * part);
+                took = 1;
+            }
+    return took;
+}
+
 // The patch set of each patched cheat of s, on or off as the cheat is; a key cheat's set waits for its buttons.
 static void apply_sets(Source *s) {
+    apply_mixed(s);
     uint64_t held = keys;
     for (int k = 0; k < s->cheats.count; k++) {
         Cheat *c = &s->cheats.cheats[k];
@@ -374,8 +493,13 @@ static void load_mod(const char *dir, const char *mod) {
 static void load_all(void) {
     for (int i = 0; i < nsources; i++) {
         for (int k = 0; k < sources[i].cheats.count; k++)
+        {
             if (sources[i].cheats.cheats[k].state == CHEAT_PATCHED && !sources[i].cheats.cheats[k].master)
                 rt_patch_switch(sources[i].code[k].set, 0);
+            if (sources[i].code[k].on >= 0 && sources[i].code[k].nsets)
+                rt_patch_switch(sources[i].code[k].sets[sources[i].code[k].on], 0);
+            code_free(&sources[i].code[k]);
+        }
         cheat_free(&sources[i].cheats);
         free(sources[i].code);
         free(sources[i].name);
@@ -433,7 +557,7 @@ static void cheat_thread(void *arg) {
     (void)arg;
     const RtGuestLayout *l = mem_layout();
     CheatEnv env = {.base = {ldr_module(0)->base, l->heap.base, l->alias.base, l->aslr.base, 0},
-                    .read = guest_read, .write = guest_write, .log = guest_log};
+                    .read = guest_read, .write = guest_write, .log = guest_log, .code = code_store};
     for (;;) {
         plat_sleep_ms(PERIOD_MS);
         env.keys = keys;
@@ -447,6 +571,7 @@ static void cheat_thread(void *arg) {
         for (int i = 0; i < nsources && on; i++) {
             env.ctx = &sources[i];
             cheat_run(&sources[i].cheats, &env);
+            apply_mixed(&sources[i]);
             for (int k = 0; k < sources[i].cheats.count; k++) {
                 Cheat *c = &sources[i].cheats.cheats[k];
                 if (!c->refused || c->refusal_logged) continue;

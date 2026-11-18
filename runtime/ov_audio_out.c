@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "cfg.h"
 #include "host.h"
 #include "platform/platform.h"
 
@@ -164,6 +165,19 @@ static void ov_stop(Cpu *c) {
     plat_mutex_unlock(&lock);
 }
 
+// XCX_VOLUME (0..100, the player's volume, see audio_mixer.c host_volume) applies to this output too, so a muted game
+// is silent on both of its outputs. Parsed again when cfg_version changes. Called with `lock` held.
+static float player_volume(void) {
+    static float v = 1.0f;
+    static unsigned seen = ~0u;
+    unsigned ver = cfg_version();
+    if (ver == seen) return v;
+    seen = ver;
+    double pct = cfg_double("XCX_VOLUME");
+    v = (float)((pct < 0 ? 0 : pct > 100 ? 100 : pct) / 100);
+    return v;
+}
+
 // bool AppendAudioOutBuffer(AudioOut *, AudioOutBuffer *)
 static void ov_append(Cpu *c) {
     uint64_t buf = arg_x(c, 1);
@@ -176,7 +190,7 @@ static void ov_append(Cpu *c) {
     if (ok) {
         size -= size % frame_bytes(o);
         if (o->stream && size) {
-            if (o->volume != 1.0f) SDL_SetAudioStreamGain(o->stream, o->volume);
+            SDL_SetAudioStreamGain(o->stream, o->volume * player_volume());
             SDL_PutAudioStreamData(o->stream, data, (int)size);
         }
         o->appended += size;

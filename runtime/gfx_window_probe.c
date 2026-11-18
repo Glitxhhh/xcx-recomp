@@ -1,10 +1,13 @@
 // --probe-window: presents 300 frames of a cycling clear colour through vk_present_image, reads the swapchain image back
 // and compares every pixel, measures the vsync rate, flips the focus state and drives the cursor release with synthetic
-// window events (the window back end's wsys_probe_*, gfx_wsys.h) and resizes the window. Run with XCX_VK_VALIDATION=1
-// to count validation errors.
+// window events (the window back end's wsys_probe_*, gfx_wsys.h), resizes the window and takes it to Borderless and
+// back (XCX_FULLSCREEN through cfg_set, as the menu does). Run with XCX_VK_VALIDATION=1 to count validation errors and
+// XCX_BACKGROUND_WINDOW=1 to keep the monitor-sized window behind the desktop's windows.
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
+#include "cfg.h"
 #include "gfx.h"
 #include "gfx_wsys.h"
 #include "input.h"
@@ -201,6 +204,67 @@ int probe_window(void) {
         return fail("swapchain size after resize");
     }
     printf("probe-window: resized to %dx%d, presents still exact\n", w, h);
+
+    // Borderless and back: the window covers the monitor, the swapchain follows (with the request that keeps the desktop
+    // composing) and presents read back exact; Window brings the 1280x720 client area back. Exclusive fullscreen is not
+    // tried: it may hand the monitor to the swapchain.
+    int mw = 0, mh = 0;
+    if (getenv("XCX_FULLSCREEN")) {
+        printf("probe-window: XCX_FULLSCREEN is set in the environment; display mode check skipped\n");
+    } else if (gfx_window_monitor_size(&mw, &mh)) {
+        static const char *const steps[] = {"borderless", "0"};
+        for (int k = 0; k < 2; k++) {
+            int want = k ? GFX_WINDOWED : GFX_BORDERLESS;
+            cfg_set("XCX_FULLSCREEN", steps[k]);
+            gfx_window_apply_settings();
+            for (int t = 0; t < 200 && gfx_window_mode() != want; t++) plat_sleep_ms(10);
+            if (gfx_window_mode() != want) return fail("display mode did not change");
+            for (int i = 0; i < 10; i++)
+                if (present_and_check(&s, 0, FRAMES + 10 + k * 10 + i, &w, &h)) return fail("presents after a mode change");
+            int ew = k ? 1280 : mw, eh = k ? 720 : mh;
+            wsys_client_size(&cw, &ch);
+            if (w != ew || h != eh || cw != ew || ch != eh) {
+                printf("probe-window: %s: readback %dx%d, client area %dx%d, expected %dx%d\n", steps[k], w, h, cw, ch,
+                       ew, eh);
+                return fail("size after a mode change");
+            }
+        }
+        printf("probe-window: Borderless covered the monitor (%dx%d), Window brought 1280x720 back, presents exact\n",
+               mw, mh);
+    }
+
+    // Fullscreen (issue #148): the swapchain takes the whole monitor and comes back to the window, also when the window
+    // thread changes the mode while a present rebuilds the swapchain (a resize during a rebuild used to be lost: the
+    // swapchain kept the windowed size in fullscreen). The modes go through the settings, as from the menu, posted to
+    // the window thread at once instead of at the next present, and are not saved.
+    if (!cfg_from_env("XCX_FULLSCREEN")) {
+        int mw = 0, mh = 0;
+        gfx_window_monitor_size(&mw, &mh);
+        const char *modes[] = {"1", "0"};
+        for (int round = 0; round < 2; round++) {
+            for (int m = 0; m < 2; m++) {
+                // Round 0 takes each mode once; round 1 flips 8 times, one present each, ending on the mode.
+                for (int k = round ? 7 : 0; k >= 0; k--) {
+                    cfg_set("XCX_FULLSCREEN", modes[(m + k) & 1]);
+                    gfx_window_apply_settings();
+                    if (present_and_check(&s, 0, FRAMES + 20 + k, &w, &h)) return fail("presents during a mode change");
+                }
+                int ok = 0;
+                for (int i = 0; i < 120 && !ok; i++) {
+                    plat_sleep_ms(10);
+                    if (present_and_check(&s, 0, FRAMES + 40 + i, &w, &h)) return fail("presents after a mode change");
+                    wsys_client_size(&cw, &ch);
+                    ok = w == cw && h == ch && (m ? cw == 1280 && ch == 720 : cw == mw && ch == mh);
+                }
+                if (!ok) {
+                    printf("probe-window: %s: readback %dx%d, client area %dx%d, monitor %dx%d\n",
+                           m ? "window" : "fullscreen", w, h, cw, ch, mw, mh);
+                    return fail("swapchain size after a mode change");
+                }
+            }
+        }
+        printf("probe-window: fullscreen %dx%d and back to the window, also after 8 quick flips each way\n", mw, mh);
+    }
     vk_present_capture(0);
 
     // Vsync: count ticks between two tick edges about 5 s apart.

@@ -414,6 +414,7 @@ void rt_boot(void) {
     frame_step_init();
     res_init();
     rt_grass_init();
+    voice_lang_init();
     cheats_start();
     achievements_start();
     cb_addr[0] = hostfn_register("<rtld loader_ready>", cb_loader_ready);
