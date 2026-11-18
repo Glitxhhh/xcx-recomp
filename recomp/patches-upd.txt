@@ -101,6 +101,18 @@ site xcx60 main a1116c bd489501 bd489501 @page:x11 bd404d65 1e250821
 site xcx60 main a11180 bd489501 bd489501 @page:x11 bd404d65 1e250821
 site xcx60 main a1126c bd489500 bd489500 @page:x8 bd404d02 1e220800
 
+# The EXP gauges after a battle (issue #123): the party HUD's gauge update (main+0x8a2960) fills each gauge (level,
+# class) in its state 2 by adding a rate of 100% of the bar per second times the frame time to its progress at +0x8b4
+# of the gauge entry (main+0x8a2b14), turns progress * the EXP of the current rank into whole EXP, rounded to nearest,
+# carries a rank-up (main+0x25d2f0 for the class), and while short of the target stores progress = EXP / the rank's EXP
+# (main+0x8a2dbc). That rounds each frame's gain away when it is under half an EXP: with the 15 Class EXP of Drifter
+# rank 1 a frame adds 0.5 EXP at 30 fps, 0.25 at 60 and 0.17 at 90, so above 30 fps the Class EXP bar stopped short of
+# its target and stayed on screen. The stored progress keeps its unrounded value when that value still rounds to the
+# new EXP (|progress * EXP of the rank - EXP| <= 0.5, which fails after a rank-up, where EXP / the rank's EXP is kept),
+# so the bar fills at its rate at any frame rate. Branchless (fabd, fcmge, bit): no flags are written. s0 is the stored
+# value, s1 the rank's EXP, w8 the new EXP; s2..s4 are free until the call at main+0x8a2dc4.
+site xcx60 main 8a2dbc 1e211800 1e211800 bd48b6a2 1e210843 1e220104 7ea4d463 1e2c1004 7e23e483 2ea31c40
+
 # The mod's getter that returns false on Switch (1.0.1 +0x13eb280): true. Off: in 2.0.0 it crashes the title screen's
 # rendering (main+0x9530b0 reads through a bad pointer).
 site xcx60g main 13db618 2a1f03e0 52800020
