@@ -21,19 +21,30 @@ Emission runs in worker processes, one chunk per task. Each worker loads the mod
 time and resolves its jump tables (recomp/jumptables.py), so memory per worker does not grow with the module.
 Chunks are sized from a per-instruction estimate of the C they produce, so their names and contents only depend on
 the input; a chunk whose text did not change is not rewritten and keeps its mtime.
-"""
-import mod_menu
-import argparse
-import json
-import multiprocessing as mp
-import os
-import re
-import sys
-import time
-from collections import Counter
-from pathlib import Path
 
-import numpy as np
+Workers default to one per core, at most as many as fit the memory a new process can commit (worker_budget()). A
+worker that runs out of memory makes the run retry the chunks left with half the workers; out of memory with one
+worker, the run exits with EXIT_MEMORY.
+"""
+import os
+
+# numpy's OpenBLAS commits about 32 MiB of thread buffers per core (up to its 24 threads) as soon as numpy loads. The
+# lifter does no linear algebra, and with one worker per core that commit grew with the square of the core count
+# (#197). Spawned workers inherit the setting.
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+
+import mod_menu  # noqa: E402
+import argparse  # noqa: E402
+import ctypes  # noqa: E402
+import json  # noqa: E402
+import multiprocessing as mp  # noqa: E402
+import re  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from collections import Counter  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import numpy as np  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
@@ -698,10 +709,14 @@ def _emit_chunk(task):
     """Worker: write one chunk. Returns its statistics."""
     name, number, path, fns = task
     t0 = time.perf_counter()
-    e = _emitter(name)
-    e.stats.clear()
-    e.unsupported.clear()
-    text = chunk_text(name, number, e, fns)
+    try:
+        e = _emitter(name)
+        e.stats.clear()
+        e.unsupported.clear()
+        text = chunk_text(name, number, e, fns)
+    except MemoryError as ex:
+        # A plain MemoryError: numpy's subclass does not survive the pickling back to the parent.
+        raise MemoryError(f'{name} chunk {number}: {ex}') from None
     error = None
     try:
         written = write_if_changed(Path(path), text)
@@ -713,6 +728,67 @@ def _emit_chunk(task):
 
 
 # ------------------------------------------------------------------------------------------------ driver
+
+EXIT_MEMORY = 3            # out of memory with one worker (installer/steps.py Lift reports it as lift.memory)
+WORKER_MEM = 640 << 20     # peak commit of a worker that emits chunks of all three modules of 2.0.0
+MEMORY_SHARE = 0.8         # of the memory a new process can commit, for all workers together
+
+
+def commit_available():
+    """Bytes the system can still commit: free RAM plus free page file on Windows (GlobalMemoryStatusEx
+    ullAvailPageFile), MemAvailable elsewhere, never more than the RAM."""
+    if os.name == 'nt':
+        import ctypes.wintypes as wt
+
+        class MemStatus(ctypes.Structure):
+            _fields_ = [('dwLength', wt.DWORD), ('dwMemoryLoad', wt.DWORD)] + \
+                       [(n, ctypes.c_ulonglong) for n in ('total', 'avail', 'tpf', 'apf', 'tv', 'av', 'aev')]
+        s = MemStatus()
+        s.dwLength = ctypes.sizeof(s)
+        if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(s)):
+            return None
+        return min(s.total, s.apf)
+    try:
+        with open('/proc/meminfo') as f:
+            info = {k: int(v.split()[0]) << 10 for k, v in (line.split(':', 1) for line in f)}
+        return min(info['MemTotal'], info['MemAvailable'])
+    except (OSError, KeyError, ValueError):
+        return None
+
+
+def worker_budget():
+    """Workers for a run without --jobs: one per core, at most as many as WORKER_MEM each fits MEMORY_SHARE of
+    commit_available(). Many cores and modest memory ran the workers out of memory (#197)."""
+    cpus = os.cpu_count() or 4
+    avail = commit_available()
+    if avail is None:
+        return cpus
+    return max(1, min(cpus, int(avail * MEMORY_SHARE) // WORKER_MEM))
+
+
+def emit(tasks, jobs, init_args, on_result):
+    """Emit tasks in a pool of jobs workers, calling on_result for each result. A worker out of memory ends the pool;
+    the tasks without a result run again with half the workers. Returns the worker count that finished, or None when
+    one worker ran out of memory."""
+    pending = list(tasks)
+    ctx = mp.get_context('spawn')
+    while True:
+        done = set()
+        try:
+            with ctx.Pool(jobs, initializer=_worker_init, initargs=init_args) as pool:
+                for r in pool.imap_unordered(_emit_chunk, pending, chunksize=1):
+                    done.add((r['module'], r['number']))
+                    on_result(r)
+            return jobs
+        except MemoryError as ex:
+            pending = [t for t in pending if (t[0], t[1]) not in done]
+            if jobs == 1:
+                print(f'out of memory with 1 worker ({ex})', file=sys.stderr, flush=True)
+                return None
+            jobs = max(1, jobs // 2)
+            print(f'out of memory ({ex}); emitting the {len(pending)} chunks left with {jobs} '
+                  f'worker{"s" * (jobs > 1)}', file=sys.stderr, flush=True)
+
 
 def table_text(name, addrs):
     lines = [header(f'{name} function table'), '#include "cpu.h"\n\n']
@@ -745,7 +821,8 @@ def main():
     ap.add_argument('--exefs', type=Path, required=True)
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--modules', default='main,subsdk0,sdk')
-    ap.add_argument('--jobs', type=int, default=os.cpu_count() or 4)
+    ap.add_argument('--jobs', type=int, default=0,
+                    help='worker processes (default: one per core, as many as fit the memory; worker_budget())')
     ap.add_argument('--limit', type=int, default=0, help='emit only the first N functions of each module')
     ap.add_argument('--chunk-fns', type=int, default=3000, help='functions per chunk at most')
     ap.add_argument('--chunk-bytes', type=int, default=3000000, help='estimated bytes of C per chunk')
@@ -813,16 +890,22 @@ def main():
     results = {name: [] for name in info}
     done_at, errors = {}, []
     t_emit = time.perf_counter()
-    ctx = mp.get_context('spawn')
-    with ctx.Pool(max(1, args.jobs), initializer=_worker_init, initargs=(paths, starts_abs, table, opts)) as pool:
-        for i, r in enumerate(pool.imap_unordered(_emit_chunk, [t for _, t in tasks], chunksize=1)):
-            results[r['module']].append(r)
-            if r['error']:
-                errors.append(r['error'])
-            done_at[r['module']] = time.perf_counter() - t_emit
-            if (i + 1) % 200 == 0 or i + 1 == len(tasks):
-                print(f'emitted {i + 1}/{len(tasks)} chunks, {time.perf_counter() - t_emit:.0f}s', file=sys.stderr,
-                      flush=True)
+    jobs = max(1, args.jobs or worker_budget())
+    print(f'{jobs} worker{"s" * (jobs > 1)}', file=sys.stderr, flush=True)
+    count = [0]
+
+    def on_result(r):
+        results[r['module']].append(r)
+        if r['error']:
+            errors.append(r['error'])
+        done_at[r['module']] = time.perf_counter() - t_emit
+        count[0] += 1
+        if count[0] % 200 == 0 or count[0] == len(tasks):
+            print(f'emitted {count[0]}/{len(tasks)} chunks, {time.perf_counter() - t_emit:.0f}s', file=sys.stderr,
+                  flush=True)
+
+    if emit([t for _, t in tasks], jobs, (paths, starts_abs, table, opts), on_result) is None:
+        return EXIT_MEMORY
 
     for name, d in info.items():
         rs = sorted(results[name], key=lambda r: r['number'])
@@ -895,4 +978,8 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except MemoryError as ex:
+        print(f'out of memory ({ex})', file=sys.stderr)
+        sys.exit(EXIT_MEMORY)

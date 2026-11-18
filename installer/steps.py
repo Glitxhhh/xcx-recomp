@@ -732,6 +732,7 @@ class Dlc(Step):
 # ---- 3. lift
 
 EMITTED = re.compile(r'^emitted (\d+)/(\d+) chunks')
+LIFT_EXIT_MEMORY = 3   # recomp/gen.py EXIT_MEMORY: out of memory even with one worker
 DISCOVERED = re.compile(r'^(\w+): \d+ functions \(.*discovery')
 
 
@@ -810,11 +811,13 @@ class Lift(Step):
                 patches = ctx.temp / 'patches-cheats.txt'
         tables = ['--patches', patches] if patches.is_file() else []
         code, log = run_tool(ctx, 'lift', layout.recomp / 'gen.py', args + tables, parse)
-        if code and patches != plain:
+        if code and code != LIFT_EXIT_MEMORY and patches != plain:
             status.unlink(missing_ok=True)
             skipped = log
             code, log = run_tool(ctx, 'lift', layout.recomp / 'gen.py',
                                  args + (['--patches', plain] if plain.is_file() else []), parse)
+        if code == LIFT_EXIT_MEMORY:
+            raise InstallError('lift.memory', log=str(log))
         if code:
             raise InstallError('lift.failed', code=code, log=str(log))
         if skipped:

@@ -76,6 +76,7 @@
  "extract.romfs_merge_failed": "Applying the update to the game data failed: {detail}. Details: {log}",
  "extract.romfs_mismatch": "The extracted game data does not match version {version} (size {size}, checksum {sha256}...).",
  "lift.failed": "Translating the game code failed (exit code {code}). Details: {log}",
+ "lift.memory": "Translating the game code ran out of memory, even with one worker process. Close other programs, or let Windows manage the page file size (System > About > Advanced system settings > Performance > Advanced > Virtual memory), then run the setup again. Details: {log}",
  "compile.failed": "Compiling {game_exe} failed (exit code {code}). Details: {log}",
  "dlc.extract_failed": "The add-on content in {path} cannot be extracted. Details: {log}",
  "compile.exe_in_use": "{path} is in use. Close the game and run the installer again.",
