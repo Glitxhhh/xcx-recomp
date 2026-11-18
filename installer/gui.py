@@ -95,6 +95,7 @@ class App:
         self.frames = {'form': self.build_form(), 'run': self.build_run(), 'finish': self.build_finish()}
         self.vars['lang'].set(self.lang_label(self.lang_code))
         self.vars['dest'].trace_add('write', lambda *_: self.refresh_form())
+        self.vars['base'].trace_add('write', lambda *_: self.refresh_form())
         self.show('form')
 
     # ---- text -----------------------------------------------------------------------------------------------------
@@ -199,6 +200,8 @@ class App:
             ttk.Entry(grid, textvariable=self.vars[name]).grid(row=i, column=1, sticky='ew', pady=4)
             b = self.button(grid, 'ui.browse', lambda n=name, p=pick_id: self.pick_file(n, p))
             b.grid(row=i, column=2, padx=(8, 0))
+            if name == 'base':   # an extracted game folder instead of the base game file (issue #175)
+                self.button(grid, 'ui.browse_folder', self.pick_game_folder).grid(row=i, column=3, padx=(4, 0))
             self.form_rows[name] = lab
         i = len(rows)
         self.label(grid, 'ui.game_language').grid(row=i, column=0, sticky='w', pady=4)
@@ -210,6 +213,7 @@ class App:
         self.label(grid, 'ui.dest').grid(row=i + 1, column=0, sticky='w', pady=4)
         ttk.Entry(grid, textvariable=self.vars['dest']).grid(row=i + 1, column=1, sticky='ew', pady=4)
         self.button(grid, 'ui.browse', self.pick_dest).grid(row=i + 1, column=2, padx=(8, 0))
+        self.extracted_hint = ttk.Label(f, wraplength=620, justify='left')
         self.dlss_var = tk.BooleanVar(value=True)
         dlss = ttk.Checkbutton(f, variable=self.dlss_var)
         self.bind_text(dlss, 'text', 'ui.dlss')
@@ -217,6 +221,7 @@ class App:
         self.label(f, 'ui.dlss_help', wraplength=600, justify='left').pack(anchor='w', padx=(22, 0))
         self.update_hint = ttk.Label(f, wraplength=620, justify='left')
         self.update_hint.pack(anchor='w', pady=(8, 0))
+        self.extracted_hint.pack(anchor='w', pady=(8, 0))
         self.form_error = ttk.Label(f, style='Err.TLabel', wraplength=620, justify='left')
         self.form_error.pack(anchor='w', pady=(8, 0))
         self.label(f, 'ui.keys_private', wraplength=620, justify='left').pack(anchor='w', pady=(8, 0))
@@ -290,6 +295,7 @@ class App:
                 self.vars['lang'].set(self.lang_label(state['lang']))
         else:
             self.update_hint.configure(text='')
+        self.extracted_hint.configure(text=self.cat('ui.extracted_game') if form.extracted_game() else '')
         self.fit()
 
     def pick_file(self, name, pick_id):
@@ -301,6 +307,11 @@ class App:
         path = filedialog.askopenfilename(title=self.cat(pick_id), filetypes=types)
         if path:
             self.vars[name].set(os.path.normpath(path))
+
+    def pick_game_folder(self):
+        path = filedialog.askdirectory(title=self.cat('ui.pick_game_folder'), mustexist=True)
+        if path:
+            self.vars['base'].set(os.path.normpath(path))
 
     def pick_dest(self):
         path = filedialog.askdirectory(title=self.cat('ui.pick_dest'), mustexist=False)

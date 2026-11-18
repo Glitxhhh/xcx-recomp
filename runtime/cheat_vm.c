@@ -250,6 +250,7 @@ static uint64_t load(const Vm *vm, uint64_t addr, uint32_t t) {
 }
 
 static void store(const Vm *vm, Cheat *c, uint64_t addr, uint64_t v, uint32_t t) {
+    if (vm->env->code && vm->env->code(vm->env->ctx, (int)(c - vm->file->cheats), addr, v, (int)t)) return;
     if (!vm->env->write(vm->env->ctx, addr, &v, (int)t)) c->refused++;
 }
 

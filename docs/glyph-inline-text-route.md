@@ -209,6 +209,10 @@ mechanism; it also added the D-pad, stick and plus/minus symbols to the text pat
   per layer for every image pane, so these panes reach the existing hook; no new generator site is needed.
 - Not on this path: `common_button_red_a` (a single 64x64 red-ringed `A` image in `common_button`), `03020_button_glow`, the Soul Challenge
   `B`, `icon_button03`'s consumer. They are listed, not claimed.
+- `icon_button03`'s consumer, found later (issue #102): the field HUD's `R + X  Follow Ball` guide at the bottom right, two panes (cells 14
+  and 5) through the same type-1 bind. Its 24-record table is the closed form `{1, 1, 45/368, 149/450, (col*46+0.5)/368, (row*50+0.5)/150}`
+  of 46x50 cells, so it is the third verified sheet kind (`INLINE_LAYOUT_MASK`, `runtime/inline_glyph.h`); its cells use the text atlas's
+  standard glyph boxes and hold the fitted tiles unchanged: the layout's tint is near white, so Colored faces keep their colors.
 
 ### What was added
 
