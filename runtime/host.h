@@ -80,6 +80,8 @@ void perf_set_overlay(int mode);
 int perf_gpu_timing(void);                      // GPU timestamps wanted: XCX_TRACE=perf or the full overlay
 void perf_gpu_busy(uint64_t ns);                // GPU busy time of a timed submission part (vk_sync.c, any thread)
 uint64_t perf_gpu_busy_total(void);             // its running total (the overlay's GPU time per frame)
+void perf_present_gpu(uint64_t ns);             // GPU time of one present command buffer (gfx_present.c)
+uint64_t perf_present_gpu_total(void);          // its running total (the overlay's present time per frame)
 #define RT_RESULT(module, desc) ((uint32_t)(module) | ((uint32_t)(desc) << 9))
 void rt_sha256(const void *p, size_t n, uint8_t out[32]);   // BCrypt; fatal if the provider fails
 
