@@ -488,6 +488,20 @@ static void free_id(const char *base, const char *folder, char out[65]) {
 
 static int move(const char *from, const char *to) { return plat_fs_rename(from, to, 1) == PLAT_FS_OK; }
 
+// Whether a folder of the mods folder holds cheat files, in one of the places cheats.c (load_mod) reads them from:
+// the game lists its cheats in the Cheats tab, and the Mods tab leaves it alone. installer/mods.py, has_cheats, is
+// the same.
+static int has_cheats(const char *top) {
+    static const char *const places[] = {"cheats", "atmosphere/contents/0100453019AA8000/cheats",
+                                         "contents/0100453019AA8000/cheats", "0100453019AA8000/cheats"};
+    char path[4400];
+    for (int i = 0; i < 4; i++) {
+        snprintf(path, sizeof path, "%s/%s", top, places[i]);
+        if (plat_fs_kind(path) == PLAT_FS_DIR) return 1;
+    }
+    return 0;
+}
+
 // One entry of the mods folder; see the comment above.
 static void normalise_one(const char *name, int kind) {
     char top[4200], romfs[4200], path[4300], first[260];
@@ -517,7 +531,8 @@ static void normalise_one(const char *name, int kind) {
         f.base = strlen(top);
         find_in(&f);
         if (!f.count) {
-            note(1, "\"%s\" in the mods folder is not read: it has no romfs folder or mod.ini.%s", name, NULL);
+            if (has_cheats(top)) return;   // a folder of cheats only is the Cheats tab's (cheats.c), not a mod
+            note(1,"\"%s\" in the mods folder is not read: it has no romfs folder or mod.ini.%s", name, NULL);
             return;
         }
         if (f.count > 1) {

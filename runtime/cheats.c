@@ -359,6 +359,9 @@ static void match_status(Source *s) {
             c->state = !strcmp(l->content, content) && parse_mixed(cc, l->note, h) ? CHEAT_OK : CHEAT_NOT_BUILT;
         } else if (patch && strcmp(l->content, content)) {
             c->state = CHEAT_NOT_BUILT;   // edited after the setup ran: its set has the old code
+            if (strcmp(s->name, CHEATS_BUILTIN))
+                rt_log("cheats: %s: %s was edited after the setup ran; run the setup again to build it in", s->name,
+                       c->name);
         } else if (patch) {
             char set[32];
             snprintf(set, sizeof set, "cheat_%08x", h);
@@ -368,6 +371,9 @@ static void match_status(Source *s) {
             c->master = !strcmp(l->kind, "master");
         } else if (c->state == CHEAT_WRITES_CODE) {
             c->state = CHEAT_NOT_BUILT;   // a code cheat the setup has not seen
+            if (strcmp(s->name, CHEATS_BUILTIN))   // the built-in ones lack a status only when the setup failed
+                rt_log("cheats: %s: %s changes code and is not among the %d cheats the setup saw; run the setup "
+                       "again to build it in", s->name, c->name, nstatus);
         }
     }
 }

@@ -186,6 +186,16 @@ def is_loader(romfs):
     return len(entries) == 1 and entries[0].is_dir() and entries[0].name.lower() == 'mod'
 
 
+# The places of a mod folder's Atmosphere cheat files, as runtime/cheats.c (load_mod) and tools/cheats.py look for them.
+CHEAT_PLACES = ('cheats', 'atmosphere/contents/0100453019AA8000/cheats', 'contents/0100453019AA8000/cheats',
+                '0100453019AA8000/cheats')
+
+
+def has_cheats(folder):
+    """Whether a folder of the mods folder holds cheat files: the game reads it for the Cheats tab, not as a mod."""
+    return any((folder / where).is_dir() for where in CHEAT_PLACES)
+
+
 def normalise(root):
     """Moves the mods put in root by hand to root/<id>/romfs. Returns [(catalog id, params)]: a 'mods.moved' line for
     each folder moved, a 'mods.skip_*' line for each one left alone."""
@@ -214,7 +224,8 @@ def normalise(root):
         else:
             found = find_romfs(top)
             if not found:
-                notes.append(('mods.skip_no_romfs', {'folder': name}))
+                if not has_cheats(top):   # a folder of cheats only is the Cheats tab's (runtime/cheats.c)
+                    notes.append(('mods.skip_no_romfs', {'folder': name}))
                 continue
             if len(found) > 1:
                 notes.append(('mods.skip_two_romfs', {'folder': name}))
