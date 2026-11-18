@@ -595,16 +595,35 @@ static void tab_screen(float scale) {
 // Object detail range (objlod.c): metres added to every map object's LOD distance. The game's own distances run from
 // under 5 m to about 50 m, so the steps are fine at the low end and coarse above.
 static void row_object_lod() {
-    static const char *const values[] = {"0", "10", "20", "30", "50", "75", "100", "150", "200", "300", "500", "750", "1000"};
-    enum { N = sizeof values / sizeof *values };
-    static char text[N][24];
-    static const char *names[N];
-    names[0] = menu_text(UI_MENU_OBJECT_LOD_ORIGINAL);
-    for (int i = 1; i < N; i++) {
-        snprintf(text[i], sizeof text[i], menu_text(UI_MENU_OBJECT_LOD_STEP), values[i]);
-        names[i] = text[i];
+    static const char *const steps[] = {"0", "10", "20", "30", "50", "75", "100", "150", "200", "300", "500", "750", "1000"};
+    enum { N = sizeof steps / sizeof *steps };
+    // a value set by hand in xcx.ini between two steps (objlod.c applies any 0..1000) joins the list in its place while
+    // it is set, so the row shows it and left / right step to the steps on either side of it
+    static char own[16], text[N + 1][24];
+    static const char *values[N + 1], *names[N + 1];
+    const char *now = cfg_value("XCX_OBJECT_LOD_RANGE");
+    char *end = NULL;
+    double v = now && *now ? strtod(now, &end) : 0;
+    bool between = end && !*end && v > 0 && v < 1000;
+    for (int i = 0; between && i < N; i++)
+        if (!strcmp(steps[i], now)) between = false;
+    int n = 0;
+    for (int i = 0; i < N; i++) {
+        if (between && atof(steps[i]) > v) {
+            snprintf(own, sizeof own, "%s", now);
+            values[n++] = own;
+            between = false;
+        }
+        values[n++] = steps[i];
     }
-    opt_choice_list("XCX_OBJECT_LOD_RANGE", UI_MENU_OBJECT_LOD, values, names, N, UI_MENU_OBJECT_LOD_DESC);
+    for (int i = 0; i < n; i++) {
+        if (!strcmp(values[i], "0")) names[i] = menu_text(UI_MENU_OBJECT_LOD_ORIGINAL);
+        else {
+            snprintf(text[i], sizeof text[i], menu_text(UI_MENU_OBJECT_LOD_STEP), values[i]);
+            names[i] = text[i];
+        }
+    }
+    opt_choice_list("XCX_OBJECT_LOD_RANGE", UI_MENU_OBJECT_LOD, values, names, n, UI_MENU_OBJECT_LOD_DESC);
     // Adjust range to frame rate (objlod.c): Auto or Fixed, a sub-row of the range shown only above Original; under
     // Auto the value shows the range in effect
     if (cfg_double("XCX_OBJECT_LOD_RANGE") > 0) {
