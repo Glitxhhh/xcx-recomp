@@ -26,6 +26,7 @@ from . import theme
 from .events import GAME_EXE
 from .gui_mods import ModsWindow
 from . import layout as layouts
+from . import recent
 from .guilogic import (DONE, FAILED, PENDING, RUNNING, SKIPPED, UI_LANGUAGES, Catalog, Form, Model, Process,
                        amount, default_game_language, describe_event, parse_line, windows_ui_language)
 
@@ -45,8 +46,9 @@ def fix_tcl_paths():
 
 
 class App:
-    def __init__(self, root, ui_lang, layout, run_args=None):
+    def __init__(self, root, ui_lang, layout, run_args=None, remember=True):
         self.root, self.layout = root, layout
+        self.remember = remember         # read and write the per-user file of the last install (installer/recent.py)
         self.cat = Catalog(ui_lang)
         self.model = Model()
         self.process = None
@@ -94,8 +96,15 @@ class App:
         self.body.pack(fill='both', expand=True)
         self.frames = {'form': self.build_form(), 'run': self.build_run(), 'finish': self.build_finish()}
         self.vars['lang'].set(self.lang_label(self.lang_code))
+        self.vars['dest'].trace_add('write', lambda *_: self.fill_from_folder())
         self.vars['dest'].trace_add('write', lambda *_: self.refresh_form())
         self.vars['base'].trace_add('write', lambda *_: self.refresh_form())
+        if remember:
+            # dest goes last: its traces run refresh_form (update hint and recorded language)
+            last = recent.load_bounded()
+            for name in recent.FIELDS:
+                if name in last:
+                    self.vars[name].set(last[name])
         self.show('form')
 
     # ---- text -----------------------------------------------------------------------------------------------------
@@ -298,6 +307,16 @@ class App:
         self.extracted_hint.configure(text=self.cat('ui.extracted_game') if form.extracted_game() else '')
         self.fit()
 
+    def fill_from_folder(self):
+        """An install folder typed or picked fills the empty file fields with the paths it recorded (xcx-install.json
+        "paths") that still name files; a field the player filled stays as it is."""
+        dest = self.vars['dest'].get().strip()
+        if not self.remember or not dest:
+            return
+        for name, value in recent.from_folder(dest).items():
+            if not self.vars[name].get().strip():
+                self.vars[name].set(value)
+
     def pick_file(self, name, pick_id):
         types = [(self.cat('ui.type_game'), '*.nsp *.xci *.nsz *.xcz'), (self.cat('ui.type_all'), '*.*')]
         if name in ('update', 'dlc'):
@@ -328,6 +347,8 @@ class App:
             self.fit()
             return
         self.form_error.configure(text='')
+        if self.remember:
+            recent.save(form.dest, {name: getattr(form, name) for name in recent.SOURCES})
         command = form.command(self.layout.python, root=self.layout.root if self.layout.dev else None,
                                temp=self.run_args.get('temp'), verify=self.run_args.get('verify', False))
         self.begin(command, self.layout.root)
@@ -569,7 +590,7 @@ def selftest(layout, shots=None):
     fix_tcl_paths()
     root = tk.Tk()
     root.geometry('+60+40')
-    app = App(root, 'en', layout)
+    app = App(root, 'en', layout, remember=False)   # the screenshots show no path of the player's
     steps, mixed = [], []
 
     def shot(name):

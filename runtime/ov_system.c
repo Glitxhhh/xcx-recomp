@@ -91,7 +91,11 @@ static const char *switch_language(const char *tag) {
 // The game cannot start in Russian: given "ru", XCX 2.0.0 stops while loading, before the title screen, with a black
 // window (issue #58: a Russian Windows locale, or the setup's lang = ru for a Russian display language). Dutch and
 // Portuguese, which it does not ship either, reach the title. So "ru" is reported as en-US, wherever it came from.
+// Chinese has the same stop with the old codes zh-CN and zh-TW (issue #172): the game knows only zh-Hans and zh-Hant,
+// the codes a console gives for Simplified and Traditional Chinese, so those are reported instead.
 static const char *playable(const char *code, const char *from) {
+    if (!strcmp(code, "zh-CN")) return "zh-Hans";
+    if (!strcmp(code, "zh-TW")) return "zh-Hant";
     if (strcmp(code, "ru")) return code;
     static volatile int32_t logged;
     if (!plat_xchg32(&logged, 1))

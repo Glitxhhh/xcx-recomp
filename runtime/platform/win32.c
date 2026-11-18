@@ -1573,14 +1573,17 @@ static void inst_luid(const wchar_t *name, wchar_t *out) {
     out[n] = 0;
 }
 
-void plat_gpu_load(PlatLoad *l, float *load_pct, float *vram_used_mb) {
-    *load_pct = *vram_used_mb = -1;
+void plat_gpu_load(PlatLoad *l, float *load_pct, float *game_pct, float *vram_used_mb) {
+    *load_pct = *game_pct = *vram_used_mb = -1;
     if (!l || !l->gpu.q || pdh.collect(l->gpu.q) != ERROR_SUCCESS) return;
     // Engine instances: "pid_<n>_luid_0x.._0x.._phys_<n>_eng_<n>_engtype_<type>". Per adapter and engine type the
-    // processes' shares add up; the load is the busiest engine type.
+    // processes' shares add up; the load is the busiest engine type. game: the same over this process's instances, so
+    // other processes' work (the compositor's, another game's) shows apart from the game's.
     enum { TYPES = 32 };
-    struct { wchar_t luid[40], type[32]; double sum; } t[TYPES];
+    struct { wchar_t luid[40], type[32]; double sum, game; } t[TYPES];
     int nt = 0;
+    wchar_t self[24];
+    int self_n = swprintf(self, sizeof self / sizeof *self, L"pid_%lu_", (unsigned long)GetCurrentProcessId());
     DWORD n;
     PDH_FMT_COUNTERVALUE_ITEM_W *it = pdh_items(l->gpu.c[0], &n);
     for (DWORD i = 0; it && i < n; i++) {
@@ -1597,14 +1600,17 @@ void plat_gpu_load(PlatLoad *l, float *load_pct, float *vram_used_mb) {
             wcscpy(t[k].luid, lu);
             wcsncpy(t[k].type, ty, 31);
             t[k].type[31] = 0;
-            t[k].sum = 0;
+            t[k].sum = t[k].game = 0;
             nt++;
         }
         t[k].sum += it[i].FmtValue.doubleValue;
+        if (self_n > 0 && !wcsncmp(it[i].szName, self, (size_t)self_n)) t[k].game += it[i].FmtValue.doubleValue;
     }
     free(it);
-    for (int k = 0; k < nt; k++)
+    for (int k = 0; k < nt; k++) {
         if (t[k].sum > *load_pct) *load_pct = (float)(t[k].sum > 100 ? 100 : t[k].sum);
+        if (t[k].game > *game_pct) *game_pct = (float)(t[k].game > 100 ? 100 : t[k].game);
+    }
     // Adapter memory instances: "luid_0x.._0x.._phys_<n>", bytes. Without a LUID: the adapter that uses the most.
     it = pdh_items(l->gpu.c[1], &n);
     double sum = 0, best = -1;

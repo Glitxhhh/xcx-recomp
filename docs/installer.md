@@ -37,6 +37,21 @@ The player runs a newer installer on the same folder. It reads `xcx-install.json
 `profile/` and `xcx.ini` after checking their hashes, rebuilds `xcx.exe` and re-prepares the shaders. A newer
 release that changes nothing game-derived skips the rebuild.
 
+The window starts filled in from the last install it ran (issue #155): the install folder, the base game, the update,
+the add-on content and the keys file, so an update is one click on Start. A new release unpacks into a new folder, so
+the paths live outside it:
+
+- `%APPDATA%\XCX Recomp\setup.json` (`$XDG_CONFIG_HOME/xcx-recomp/setup.json`, default `~/.config/xcx-recomp/`,
+  elsewhere) points at the last install folder and keeps the paths of its last Start (`installer/recent.py`). The
+  window writes it when Start passes the form's checks.
+- The install folder's `xcx-install.json` records `"paths"`, the files the last run named (`--game` as given, not what
+  it resolved to; a run given only `--dest` keeps them). The CLI writes them, so a run from RecompLauncher or a script
+  counts too, and picking another install folder in the window fills the empty fields from that folder.
+
+The folder's record wins over the per-user file. Only paths are stored, never the contents of the keys file. A path
+that moved or is gone, or an install folder without `xcx-install.json`, leaves its field empty, and the window waits at
+most 1.5 seconds for these checks (a path on a disconnected network share can block). Delete `setup.json` to forget.
+
 Given another update file than the recorded one (1.2.1, then 1.4.3), the installer extracts and builds again from it and
 keeps `profile/`. Saves carry over both ways: 1.4.3 converts a 1.2.1 save on load, and 1.2.1 loads the saves 1.4.3 wrote.
 
@@ -53,6 +68,13 @@ what is in `mods/`:
   size and SHA-256, and unpacks its `romfs/` (or `romfs/mod/`) folder into `mods/<id>/romfs/`; `exefs/` is left out.
   **Add zip...** does the same for a zip the player downloaded. They are on when listed in `mods/romfs-enabled.txt`,
   which the game reads again twice a second (`runtime/romfs_mods.c`), so they switch while it runs.
+- A game-file mod unpacked into `mods/` by hand, as its download comes, is moved to `mods/<id>/romfs/` the next time
+  either manager lists the mods: a folder named after the mod (`Unburger Patch` becomes `unburger-patch`), the Switch
+  SD card layout (`atmosphere/contents/0100453019AA8000/romfs`, `contents/<title id>/romfs`, `<title id>/romfs`), a
+  bare `romfs/` (those three become `romfs-mod`, `romfs-mod-2` ...) and `romfs/mod/`. It starts off. A folder neither
+  manager can use (no `romfs` folder, two of them, another game's title ID, a Lua mod with a folder name that is not an
+  id, a zip) gets a line saying why, in the F1 Mods tab and in Setup's Mods window. `installer/mods.py` and
+  `runtime/mod_library.c` both carry these rules (`normalise`); `tests/mods_manager_test.py` checks they agree.
 
 Saves are never touched. The game uses a game-file mod's copy the next time it loads the file, so data read at
 start-up (the bdat tables) needs a restart.

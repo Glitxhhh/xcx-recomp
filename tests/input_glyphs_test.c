@@ -95,7 +95,7 @@ int main(void){
   for(int physical=PAD_SOUTH;physical<=PAD_NORTH;physical++) {
    int standard=glyph_art_find(style,physical), colored=glyph_art_variant(standard,GLYPH_COLORED);
    CHECK(colored>=63 && colored<75);CHECK(colored!=standard);CHECK(glyph_art_variant(standard,GLYPH_STANDARD)==standard);
-   CHECK(strstr(glyph_art_name(colored),"color"));
+   CHECK(strstr(glyph_art_name(colored),"color"));CHECK(glyph_art_variant(colored,GLYPH_STANDARD)==standard);
   }
   CHECK(glyph_art_variant(glyph_art_find(style,PAD_R),GLYPH_COLORED)==glyph_art_find(style,PAD_R));
  }

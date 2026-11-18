@@ -513,12 +513,13 @@ static void row_gpu(void) {
 
 // The game language: one entry per language XCX ships (a Switch code that names it), each under its own name. The
 // Switch's Portuguese is not among them, nor Russian: the game stops before the title in it (ov_system.c playable).
+// Chinese takes the codes zh-Hans and zh-Hant, which the game knows; it stops the same way with zh-CN and zh-TW.
 static void row_game_lang(void) {
     static const struct { const char *code; UiTextId name; } langs[] = {
         {"en-US", UI_MENU_LANGNAME_EN}, {"ja", UI_MENU_LANGNAME_JA}, {"fr", UI_MENU_LANGNAME_FR},
         {"de", UI_MENU_LANGNAME_DE}, {"it", UI_MENU_LANGNAME_IT}, {"es", UI_MENU_LANGNAME_ES},
         {"nl", UI_MENU_LANGNAME_NL},
-        {"zh-CN", UI_MENU_LANGNAME_ZH_HANS}, {"zh-TW", UI_MENU_LANGNAME_ZH_HANT}, {"ko", UI_MENU_LANGNAME_KO},
+        {"zh-Hans", UI_MENU_LANGNAME_ZH_HANS}, {"zh-Hant", UI_MENU_LANGNAME_ZH_HANT}, {"ko", UI_MENU_LANGNAME_KO},
     };
     enum { N = sizeof langs / sizeof *langs + 1 };
     const char *vals[N], *names[N];
@@ -1614,13 +1615,21 @@ static void perf_full_draw(const MenuTarget *t, float scale) {
     // per frame, averaged over the last half second; the labels' column stretches, so the numbers end at the panel's
     // right edge, and the table still asks for no more than its widest label and number
     if (ImGui::BeginTable("##perfw", 2, ImGuiTableFlags_SizingFixedFit)) {
-        static const PerfCol c1[] = {{UI_MENU_OV_FMT_MS, 888.88f}, {UI_MENU_OV_PER_FRAME, 888.8f}};
+        static const PerfCol c1[] = {{UI_MENU_OV_FMT_MS, 888.88f}, {UI_MENU_OV_PER_FRAME, 888.8f},
+                                     {UI_MENU_OV_FMT_PCT, 100}};
         ImGui::TableSetupColumn("##w0", ImGuiTableColumnFlags_WidthStretch);
-        perf_column("##w1", c1, 2);
+        perf_column("##w1", c1, 3);
         perf_label(UI_MENU_OV_REPLAY, wait_c);
         perf_cell(UI_MENU_OV_FMT_MS, s.replay_ms);
         perf_label(UI_MENU_OV_GPU_TIME, wait_c);
         perf_cell(UI_MENU_OV_FMT_MS, s.gpu_ms);
+        perf_label(UI_MENU_OV_PRESENT_TIME, wait_c);   // not in the row above: the present's own command buffer
+        perf_cell(UI_MENU_OV_FMT_MS, s.present_ms);
+        // the GPU row at the top counts every process; this is the game's own part, so work outside it shows apart
+        if (s.gpu_game_pct >= 0) {
+            perf_label(UI_MENU_OV_GPU_GAME, wait_c);
+            perf_cell(UI_MENU_OV_FMT_PCT, s.gpu_game_pct);
+        }
         perf_label(UI_MENU_OV_PIPE_WAIT, wait_c);
         perf_cell(UI_MENU_OV_FMT_MS, s.pipe_wait_ms);
         perf_label(UI_MENU_OV_SHADER_WAIT, wait_c);
