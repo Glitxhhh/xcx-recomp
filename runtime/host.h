@@ -261,6 +261,7 @@ void account_uid(uint64_t out[2]);                         // the local user's n
 void movie_tick(Cpu *c);                                   // at every present, on the presenting guest thread: hands
                                                            // decoded movie frames over when due, signals their events
 int movie_playing(void);                                   // a pre-rendered movie plays (ov_movie.c)
+void voice_lang_tick(void);                               // at every present: XCX_VOICE_LANG sets the game's voice option
 // ---- game resolution (resolution.c): XCX_OUTPUT_RES, XCX_RENDER_SCALE
 uint64_t res_heap_extra_bytes(void);                       // added to the application pool (mem_init), 2 MiB steps
 uint64_t res_heap_extra_kib(void);                         // added to the HeapDef texture heap and its parent; 0 = none

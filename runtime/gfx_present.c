@@ -11,7 +11,7 @@
 // dirty (gfx_window_mark_dirty), the next present (or gfx_window_resize) rebuilds it.
 //
 // The in-game menu (ui/menu.h) draws over the game image in the present's command buffer, after the blit. The window's
-// size and fullscreen state are the settings XCX_WINDOW_SIZE and XCX_FULLSCREEN, which the back end applies at start
+// size and window mode are the settings XCX_WINDOW_SIZE and XCX_FULLSCREEN, which the back end applies at start
 // and whenever a cfg_set changes them (window_settings_live -> gfx_window_apply_settings).
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,9 +65,18 @@ void gfx_window_closed(void) {
     plat_exit(0);
 }
 
-// XCX_FULLSCREEN=1: borderless window over the monitor. XCX_WINDOW_SIZE=<w>x<h>: client area of the window (the
-// swapchain follows the window; the game image is scaled to it).
-int gfx_cfg_fullscreen(void) { return cfg_bool("XCX_FULLSCREEN"); }
+// XCX_FULLSCREEN: 0 a window, borderless a window without a frame over the monitor that the desktop still composes (the
+// taskbar and Alt+Tab come up over it), 1 the same window with the driver allowed to take the monitor for the swapchain
+// (exclusive fullscreen at the desktop's mode). Any other value counts as 1, as when the key was a switch.
+// XCX_WINDOW_SIZE=<w>x<h>: client area of the window (the swapchain follows the window; the game image is scaled to it).
+int gfx_cfg_window_mode(void) {
+    const char *v = cfg_value("XCX_FULLSCREEN");
+    return !strcmp(v, "0") ? GFX_WINDOWED : !strcmp(v, "borderless") ? GFX_BORDERLESS : GFX_FULLSCREEN;
+}
+
+const char *gfx_window_mode_value(int mode) {
+    return mode == GFX_BORDERLESS ? "borderless" : mode == GFX_FULLSCREEN ? "1" : "0";
+}
 
 void gfx_cfg_window_size(int *w, int *h) {
     int x = 0, y = 0;
@@ -328,7 +337,7 @@ static int create_swapchain_once(void) {
                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,   // every surface supports it (the menu overlay draws into it)
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = caps.currentTransform,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, .presentMode = pick_present_mode(c->phys), .clipped = VK_TRUE,
-        .oldSwapchain = old};
+        .oldSwapchain = old, .pNext = wsys_swapchain_next()};
     VkResult r = vkCreateSwapchainKHR(c->device, &ci, NULL, &g_sc);
     if (r != VK_SUCCESS) {
         rt_log("gfx: vkCreateSwapchainKHR failed (%d)", (int)r);

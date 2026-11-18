@@ -49,7 +49,7 @@ static const char *const known[] = {
     "ROMFS_PROOF_DIR", "ROMFS_VERIFY", "RUMBLE", "RUMBLE_CURVE", "RUMBLE_STRENGTH", "RUMBLE_TRIGGERS", "SHADER_CACHE",
     "SHADER_MEMO", "SHARED_FONTS", "SHARPNESS", "SHOTS", "SHOTS_DIR", "SHOTS_FULL", "SPEED_PROBE", "SPIN", "SPIN_HANDOFF_US", "SPLIT_DRAWS", "SUBMIT_WAIT", "SPLIT_US", "SWKBD_ANSWER",
     "SWKBD_TEST", "TEST_PREPARE_SHADERS", "TEX_ALIAS", "TEX_MEMO", "TIMER_1MS", "TRACE", "UBO_SNAPSHOT", "UI_FIT", "UPSCALER", "VK_DYN_A2C", "VK_DYN_VERTEX", "VK_NO_FLOAT64",
-    "VK_PRESENT", "VK_RECORDER", "VK_SSBO_ALIGN", "VK_SUBGROUP", "VK_SUBGROUP_PIN", "VK_VALIDATION", "VOLUME", "VRAM_HEADROOM", "VRAM_LIMIT", "VS_OUTS",
+    "VK_PRESENT", "VK_RECORDER", "VK_SSBO_ALIGN", "VK_SUBGROUP", "VK_SUBGROUP_PIN", "VK_VALIDATION", "VOICE_LANG", "VOLUME", "VRAM_HEADROOM", "VRAM_LIMIT", "VS_OUTS",
     "WINDOW_SIZE", "XLATE", "XLATE_ID", "XLATE_KEEP", "XLATE_PROCS", "ZSTD_CHECK", "ZSTD_NATIVE",
 };
 
@@ -63,7 +63,7 @@ static const struct { const char *key, *section; } sections[] = {
     {"HDR", "display"}, {"HDR_PEAK_NITS", "display"}, {"HDR_GAME_NITS", "display"}, {"HDR_UI_NITS", "display"},
     {"HDR_HUE", "display"},
     {"DEVICE_PROFILE", "display"},
-    {"MENU_LANG", "language"}, {"LANG", "language"}, {"OPERATION_MODE", "language"},
+    {"MENU_LANG", "language"}, {"LANG", "language"}, {"VOICE_LANG", "language"}, {"OPERATION_MODE", "language"},
     {"VOLUME", "audio"}, {"PAUSE_IN_BACKGROUND", "audio"}, {"CHEATS", "cheats"},
     {"MOTION", "input"}, {"RUMBLE_STRENGTH", "input"}, {"RUMBLE_CURVE", "input"}, {"RUMBLE_TRIGGERS", "input"},
     {"GLYPH_STYLE", "input"}, {"GLYPH_APPEARANCE", "input"}, {"PAD_LAYOUT", "input"}, {"MOUSE_SENS", "input"}, {"INPUT_RECORD", "input"},
@@ -91,7 +91,7 @@ static const struct { const char *key, *section; } sections[] = {
 #define RESTART 0
 static const CfgMeta metas[] = {
     // Screen
-    {"FULLSCREEN", "0", "0|1", LIVE}, {"WINDOW_SIZE", "1920x1080", NULL, LIVE},
+    {"FULLSCREEN", "0", "0|borderless|1", LIVE}, {"WINDOW_SIZE", "1920x1080", NULL, LIVE},
     {"VK_PRESENT", "mailbox", "mailbox|fifo|immediate", LIVE}, {"GPU_INDEX", "", NULL, RESTART},
     {"PERF_OVERLAY", "off", "off|fps|full", LIVE},
     {"OUTPUT_RES", "1920x1080", NULL, RESTART}, {"RENDER_SCALE", "game", "game|50|67|75|100", RESTART},
@@ -108,6 +108,7 @@ static const CfgMeta metas[] = {
     {"REALTIME", "1", "0|1", RESTART}, {"CLOTH_REALTIME", "1", "0|1", RESTART},
     {"HIGHFPS_FIX", "1", "0|1", RESTART},
     {"LANG", "", "ja|en-US|fr|de|it|es|zh-CN|ko|nl|pt|ru|zh-TW|en-GB|fr-CA|es-419|zh-Hans|zh-Hant|pt-BR", RESTART},
+    {"VOICE_LANG", "", "ja|en", LIVE},
     {"OPERATION_MODE", "docked", "docked|handheld", RESTART},
     // Sound, Controls, Menu
     {"VOLUME", "100", "0..100", LIVE}, {"PAUSE_IN_BACKGROUND", "0", "0|1", RESTART},
