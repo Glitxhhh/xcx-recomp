@@ -354,6 +354,7 @@ static void crash_test(uint64_t n) {
 // counted by the back end only.
 void rt_frame_presented(const tex_t *t, uint64_t n) {
     const RtConfig *cfg = rt_config();
+    rt_aniso_update();
     hang_note_present();
     crash_test(n);
     series_shot(t, n);
