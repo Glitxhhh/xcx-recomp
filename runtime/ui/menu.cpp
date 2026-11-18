@@ -657,16 +657,31 @@ static const char *cal_tick(void) {
             cal_finish(UI_MENU_STICK_MOVED);
             return menu_text(g_cal.note);
         }
+    // A center inside the default deadzone (2500 of 32767) changes nothing a player can feel, so it is not saved, and an
+    // earlier center of that stick is cleared; a stick whose deadzone is set lower keeps any offset larger than its own
+    // deadzone. Inside means what the shape tests: each axis for Per axis, the distance from the center for Round (a
+    // stick resting at 2400,2400 is past a round 2500 deadzone and needs its center).
+    bool round = !strcmp(cfg_value("XCX_STICK_DEADZONE_SHAPE"), "round");
     static const char *const keys[2] = {"XCX_STICK_CENTER_L", "XCX_STICK_CENTER_R"};
+    static const char *const reset_keys[2] = {"STICK_CENTER_L", "STICK_CENTER_R"};   // cfg_reset takes them without XCX_
+    static const char *const dead_keys[2] = {"XCX_STICK_DEADZONE_L", "XCX_STICK_DEADZONE_R"};
     for (int st = 0; st < 2; st++) {
-        char v[32];
-        snprintf(v, sizeof v, "%d,%d", (int)lrint((double)g_cal.sum[st * 2] / g_cal.n),
-                 (int)lrint((double)g_cal.sum[st * 2 + 1] / g_cal.n));
-        cfg_set(keys[st], v);
+        int cx = (int)lrint((double)g_cal.sum[st * 2] / g_cal.n), cy = (int)lrint((double)g_cal.sum[st * 2 + 1] / g_cal.n);
+        double dead = cfg_double(dead_keys[st]) / 100 * 32767;
+        double keep = dead < 2500 ? (dead < 0 ? 0 : dead) : 2500;
+        bool outside = round ? hypot((double)cx, (double)cy) > keep : abs(cx) > keep || abs(cy) > keep;
+        if (outside) {
+            char v[32];
+            snprintf(v, sizeof v, "%d,%d", cx, cy);
+            cfg_set(keys[st], v);
+        } else if (cfg_is_set(keys[st])) {
+            cfg_reset(&reset_keys[st], 1);
+        }
     }
     opt_save_soon();
-    rt_log("menu: stick centers calibrated over %d samples: left %s, right %s", g_cal.n, cfg_value(keys[0]),
-           cfg_value(keys[1]));
+    rt_log("menu: stick centers calibrated over %d samples: left %s, right %s", g_cal.n,
+           cfg_is_set(keys[0]) ? cfg_value(keys[0]) : "none (inside the deadzone)",
+           cfg_is_set(keys[1]) ? cfg_value(keys[1]) : "none (inside the deadzone)");
     cal_finish(UI_MENU_STICK_CALIBRATED);
     return menu_text(g_cal.note);
 }

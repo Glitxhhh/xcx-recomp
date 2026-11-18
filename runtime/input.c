@@ -282,7 +282,7 @@ static void tune_refresh(void) {
     static const char *const center_key[2] = {"XCX_STICK_CENTER_L", "XCX_STICK_CENTER_R"};
     for (int s = 0; s < 2; s++) {
         double d = cfg_double(dead_key[s]);
-        tune[s].dead = (float)(d < 0 ? 0 : d > 90 ? 0.9 : d / 100);
+        tune[s].dead = (float)(d < 0 ? 0 : d > 40 ? 0.4 : d / 100);   // the setting's range, 0..40 (cfg.c)
         input_stick_center_parse(cfg_get(center_key[s]), &tune[s].cx, &tune[s].cy);
     }
 }
@@ -535,6 +535,9 @@ void input_poll_ui(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int
     poll_merged(buttons, lx, ly, rx, ry);
 }
 
+// Called from the menu thread (Controls: the stick view and calibration). pad_physical runs SDL_UpdateGamepads and,
+// while no gamepad is open, scan_pads here too, not only on the game's input thread; `lock` serialises both callers,
+// so the two never touch SDL's gamepad state or `pad` at the same time.
 int input_pad_sticks(int16_t raw[4], int32_t shaped[4]) {
     memset(raw, 0, 4 * sizeof *raw);
     memset(shaped, 0, 4 * sizeof *shaped);
