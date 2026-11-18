@@ -284,6 +284,23 @@ site xcx60 main 5d9708 79005680 @page:x9 1e230000 bd404d21 1e211800 1e250000 790
 # frame rate. x9 is set here anyway and s0-s1 are free: calls come just before and the function returns after.
 site xcx60 main 7fc8d0 52802589 @page:x9 bd404d21 52802589 1e230120 1e211800 1e250009
 
+# Voice language (runtime/voice_lang.c, XCX_VOICE_LANG, #58). The game keeps its voice choice as bit 1 of an option
+# word in the game data object (+0xa9f84) and hands it to the sound manager's setter (main+0x252c0, 1 Japanese,
+# 2 English) in three places. Making its options, at boot and again on starting a New Game (main+0x3473f0), it takes
+# the bit from the text language (main+0x4850: Japanese for the indices in 0x18841) and calls the setter at once, so a
+# New Game played in the voices of the text language whatever the setting. Applying its options (main+0xdefac and
+# main+0xdf014, as on loading a save) it loads the word and passes its bit. Each set makes the first give text language
+# 0 (Japanese) or 1 (American English) and the two loads give the chosen bit, so all three pick the setting's language;
+# the lip sync reads it back from the sound manager.
+set voicejp XCX_VOICE_JP_PATCH 0
+set voiceen XCX_VOICE_EN_PATCH 0
+site voicejp main deff0 b9400009 52800049
+site voicejp main df058 b9400009 52800049
+site voiceen main deff0 b9400009 52800009
+site voiceen main df058 b9400009 52800009
+site voicejp main 3478bc 97f2f3e5 52800000
+site voiceen main 3478bc 97f2f3e5 52800020
+
 # Issues #59, #75 and #172: a crash reading address 0x4 in main+0xa31e20, in the first update of a UI layout pane soon
 # after the avatar's name entry. On its first update (bit 0x400 of +0xd4 clear) a pane builds its draw entries from a
 # table of its resource (+0xe0): main+0xa490a0 returns the table at the offset in the resource's +0x20, or null when
