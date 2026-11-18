@@ -72,7 +72,7 @@ The stick direction bits (`StickLLeft` to `StickRDown`) are derived from the sti
 
 ## Stick deadzone and calibration
 
-Each gamepad stick goes through `input_stick_shape` (`runtime/input_map.c`) before the game sees it. The resting offset `XCX_STICK_CENTER_L` / `_R` (`"x,y"` in raw SDL units, y down; unset is none) is taken off, and the deflection stretched so the edge still gives full deflection. Then the deadzone `XCX_STICK_DEADZONE_L` / `_R` (percent of full deflection, 0 to 40, default 7.63, which is 2500 of 32767; the menu steps in whole percents plus 7.63) applies in the shape `XCX_STICK_DEADZONE_SHAPE`:
+Each gamepad stick goes through `input_stick_shape` (`runtime/input_map.c`) before the game sees it. The resting offset `XCX_STICK_CENTER_L` / `_R` (`"x,y"` in raw SDL units, y down, -16384 to 16384 on each axis; unset is none) is taken off, and the deflection stretched so the edge still gives full deflection. Then the deadzone `XCX_STICK_DEADZONE_L` / `_R` (percent of full deflection, 0 to 40, default 7.63, which is 2500 of 32767; the menu steps in whole percents plus 7.63) applies in the shape `XCX_STICK_DEADZONE_SHAPE`:
 
 - `axis` (default, *Per axis*): each axis reads 0 while it is under the deadzone and passes unchanged above it. This is how the runtime always handled the sticks: at the defaults, with no calibration, the game gets exactly what it got before these settings existed.
 - `round` (*Round*): the stick reads center while its distance from the center is under the deadzone, in any direction, and the deflection past it is stretched to start from 0 and still reach full deflection at the edge. Diagonal drift is caught as well as drift along an axis, and a larger deadzone does not make the stick jump when it leaves it.

@@ -661,7 +661,8 @@ static const char *cal_tick(void) {
     // earlier center of that stick is cleared; a stick whose deadzone is set lower keeps any offset larger than its own
     // deadzone. Inside means what the shape tests: each axis for Per axis, the distance from the center for Round (a
     // stick resting at 2400,2400 is past a round 2500 deadzone and needs its center). A center is saved at most
-    // INPUT_STICK_CENTER_MAX off on each axis, the most input_stick_center_parse takes, so xcx.ini holds what is applied.
+    // INPUT_STICK_CENTER_MAX off on each axis, the most input_stick_center_parse (input_map.c) applies, so xcx.ini holds
+    // what is applied.
     bool round = !strcmp(cfg_value("XCX_STICK_DEADZONE_SHAPE"), "round");
     static const char *const keys[2] = {"XCX_STICK_CENTER_L", "XCX_STICK_CENTER_R"};
     static const char *const reset_keys[2] = {"STICK_CENTER_L", "STICK_CENTER_R"};   // cfg_reset takes them without XCX_
