@@ -4,6 +4,7 @@
 //   mods/<id>/romfs/...      a game-file mod (runtime/romfs_mods.c), on when listed in romfs-enabled.txt
 //   mods/<id>/mod.ini ...    a Lua mod (runtime/mod_package.c), listed in catalog.txt, on when in enabled.txt
 //   mods/<id>/library.ini    name, author, version and kind of a mod either manager installed
+//   mods/<anything else>     a mod unpacked there by hand, moved to mods/<id>/romfs when the library is read (normalise)
 //
 // Jobs run one at a time on a thread of their own: the index download, an install (download, size and SHA-256
 // check, unpack into mods/.install-<id>, then a rename to mods/<id>) or a removal. The menu reads a copy of the
@@ -355,6 +356,254 @@ static void ini_value(const char *text, const char *key, char *out, size_t cap) 
     }
 }
 
+// ---- mods put in the folder by hand
+//
+// A player unpacks a mod's download into mods/ as it comes: a folder named after the mod ("Unburger Patch"), the
+// Switch SD card layout (atmosphere/contents/<title id>/romfs, <title id>/romfs, contents/<title id>/romfs) or a bare
+// romfs/. normalise moves each such folder to mods/<id>/romfs, the one layout romfs_mods.c reads, and keeps a line
+// for the Mods tab on each folder it moved or left alone. installer/mods.py, normalise, follows the same rules, so
+// XCX Setup and the game agree on the result.
+
+#define TITLE_ID "0100453019aa8000"   // Xenoblade Chronicles X: Definitive Edition
+#define SEARCH_DEPTH 4                 // folders below the top one in which a romfs folder is looked for
+#define TOP_NAMES 256                  // entries of mods/ looked at
+
+static ModLibNote notes[MODLIB_NOTES];
+static int nnotes;
+
+static void note(int error, const char *fmt, const char *a, const char *b) {
+    if (nnotes < MODLIB_NOTES) {
+        snprintf(notes[nnotes].text, sizeof notes[nnotes].text, fmt, a, b ? b : "");
+        notes[nnotes++].error = error;
+    }
+    char line[sizeof notes[0].text];
+    snprintf(line, sizeof line, fmt, a, b ? b : "");
+    rt_log("mod library: %s", line);
+}
+
+static int is_title_id(const char *s, size_t n) {
+    if (n != 16) return 0;
+    for (size_t i = 0; i < n; i++)
+        if (!isxdigit((unsigned char)s[i])) return 0;
+    return 1;
+}
+
+// The mod id made from a folder name: ASCII letters and digits lowercased, '.' and '_' kept, anything else a '-'
+// (one for a run), 'mod-' in front when it does not start with a letter, at most 64 characters. installer/mods.py,
+// slug, is the same.
+static void slug(const char *text, char out[65]) {
+    char s[300];
+    size_t n = 0;
+    for (const unsigned char *p = (const unsigned char *)text; *p && n < sizeof s - 1; p++) {
+        char c = *p < 0x80 && (isalnum(*p) || *p == '.' || *p == '_') ? (char)tolower(*p) : '-';
+        if (c == '-' && n && s[n - 1] == '-') continue;
+        s[n++] = c;
+    }
+    s[n] = 0;
+    char *b = s;
+    while (*b && strchr("-._", *b)) b++;
+    size_t len = strlen(b);
+    while (len && strchr("-._", b[len - 1])) b[--len] = 0;
+    char t[310];
+    if (len && islower((unsigned char)b[0])) snprintf(t, sizeof t, "%s", b);
+    else snprintf(t, sizeof t, len ? "mod-%s" : "mod", b);
+    t[64] = 0;
+    len = strlen(t);
+    while (len && strchr("-._", t[len - 1])) t[--len] = 0;
+    memcpy(out, t, len + 1);
+}
+
+// The romfs folders nearest below a top folder: best is their depth, count how many, found the first one's path.
+typedef struct { char path[4200]; size_t base; int best, count; char found[4200]; } Find;
+
+static void find_in(Find *f);
+static int find_entry(const char *name, int kind, uint64_t size, void *ctx) {
+    (void)size;
+    Find *f = ctx;
+    if (kind != PLAT_FS_DIR) return 1;
+    size_t len = strlen(f->path), n = strlen(name);
+    if (len + n + 2 >= sizeof f->path) return 1;
+    int depth = 0;   // folders below the top one, this one included
+    for (const char *p = f->path + f->base; *p; p++) depth += *p == '/';
+    depth++;
+    f->path[len] = '/';
+    memcpy(f->path + len + 1, name, n + 1);
+    if (!strcasecmp(name, "romfs")) {
+        if (depth < f->best) { f->best = depth; f->count = 0; }
+        if (depth == f->best && f->count++ == 0) snprintf(f->found, sizeof f->found, "%s", f->path);
+    } else if (depth < f->best && depth < SEARCH_DEPTH) {
+        find_in(f);
+    }
+    f->path[len] = 0;
+    return 1;
+}
+static void find_in(Find *f) { plat_fs_list(f->path, find_entry, f); }
+
+typedef struct { int n; char *name[TOP_NAMES]; } Tops;
+
+static int top_entry(const char *name, int kind, uint64_t size, void *ctx) {
+    (void)kind; (void)size;
+    Tops *t = ctx;
+    if (name[0] == '.') return 1;   // .install-, .old-: the managers' own
+    return t->n < TOP_NAMES && (t->name[t->n] = strdup(name)) != NULL ? (t->n++, 1) : 0;
+}
+
+static int by_str(const void *a, const void *b) {
+    const char *const *x = a, *const *y = b;
+    return strcmp(*x, *y);
+}
+
+typedef struct { int n, mod; char first[260]; } Count;
+static int count_entry(const char *name, int kind, uint64_t size, void *ctx) {
+    (void)size;
+    Count *c = ctx;
+    if (!c->n++) snprintf(c->first, sizeof c->first, "%s", name);
+    c->mod = c->n == 1 && kind == PLAT_FS_DIR && !strcasecmp(name, "mod");
+    return 1;
+}
+
+// Whether romfs holds just a folder named mod: the XCXDE mod loader's layout, romfs/mod/<game path>.
+static int is_loader(const char *romfs, char first[260]) {
+    Count c = {0};
+    plat_fs_list(romfs, count_entry, &c);
+    if (first) memcpy(first, c.first, sizeof c.first);
+    return c.n == 1 && c.mod;
+}
+
+static int exists(const char *path) { return plat_fs_kind(path) != PLAT_FS_MISSING; }
+
+// base, or base-2, base-3 ...: the first id not taken in the mods folder. The folder itself (same name but for
+// case) does not count, so on a file system that ignores case "Uncensor" becomes "uncensor".
+static void free_id(const char *base, const char *folder, char out[65]) {
+    char path[4300];
+    snprintf(out, 65, "%s", base);
+    for (int n = 2; n < 1000; n++) {
+        snprintf(path, sizeof path, "%s/%s", root(), out);
+        if (!exists(path) || (folder && !strcasecmp(out, folder))) return;
+        char suffix[8];
+        int sl = snprintf(suffix, sizeof suffix, "-%d", n);
+        snprintf(out, 65, "%.*s%s", 64 - sl, base, suffix);
+    }
+}
+
+static int move(const char *from, const char *to) { return plat_fs_rename(from, to, 1) == PLAT_FS_OK; }
+
+// One entry of the mods folder; see the comment above.
+static void normalise_one(const char *name, int kind) {
+    char top[4200], romfs[4200], path[4300], first[260];
+    join(top, sizeof top, root(), name);
+    size_t rl = strlen(root());
+    if (kind == PLAT_FS_FILE) {
+        size_t n = strlen(name);
+        if (n > 4 && !strcasecmp(name + n - 4, ".zip"))
+            note(1, "%s in the mods folder is not read: unpack it there, or add it with Add zip in XCX Setup.%s",
+                 name, NULL);
+        return;
+    }
+    if (kind != PLAT_FS_DIR) return;
+    snprintf(path, sizeof path, "%s/mod.ini", top);
+    if (plat_fs_kind(path) == PLAT_FS_FILE) {
+        if (!valid_id(name))
+            note(1, "\"%s\" in the mods folder is not read: a Lua mod's folder name may have only lowercase letters, "
+                    "digits, '.', '_' and '-'.%s", name, NULL);
+        return;
+    }
+    int bare = !strcasecmp(name, "romfs");
+    if (bare) {
+        snprintf(romfs, sizeof romfs, "%s", top);
+    } else {
+        Find f = {.best = SEARCH_DEPTH + 1};
+        snprintf(f.path, sizeof f.path, "%s", top);
+        f.base = strlen(top);
+        find_in(&f);
+        if (!f.count) {
+            note(1, "\"%s\" in the mods folder is not read: it has no romfs folder or mod.ini.%s", name, NULL);
+            return;
+        }
+        if (f.count > 1) {
+            note(1, "\"%s\" in the mods folder is not read: it has more than one romfs folder. Put each mod in a "
+                    "folder of its own.%s", name, NULL);
+            return;
+        }
+        snprintf(romfs, sizeof romfs, "%s", f.found);
+    }
+    const char *rel = romfs + rl + 1;   // name/.../romfs
+    for (const char *p = rel; *p;) {
+        size_t n = strcspn(p, "/");
+        char part[17];
+        if (is_title_id(p, n) && (memcpy(part, p, 16), part[16] = 0, strcasecmp(part, TITLE_ID))) {
+            note(1, "\"%s\" in the mods folder is not read: it is made for another game (title ID %s).", name, part);
+            return;
+        }
+        p += n + (p[n] == '/');
+    }
+    const char *inner = strchr(rel, '/');   // the romfs below the top folder: "/.../romfs", or NULL when bare
+    if (valid_id(name) && inner && !strcmp(inner, "/romfs") && !is_loader(romfs, NULL)) return;   // already right
+    int generic = bare || !strcasecmp(name, "atmosphere") || !strcasecmp(name, "contents") ||
+                  is_title_id(name, strlen(name));
+    char id[65], base[65], final[4200], dst[4300];
+    if (generic) free_id("romfs-mod", NULL, id);
+    else if (valid_id(name)) snprintf(id, sizeof id, "%s", name);
+    else { slug(name, base); free_id(base, name, id); }
+    join(final, sizeof final, root(), id);
+    snprintf(dst, sizeof dst, "%s/romfs", final);
+    int made = 0, ok;
+    if (bare) {
+        ok = (made = plat_fs_mkdir(final) == PLAT_FS_OK) && move(top, dst);
+    } else if (generic) {
+        snprintf(path, sizeof path, "%s/%s", final, name);
+        char from[4400];
+        snprintf(from, sizeof from, "%s/%s", final, rel);
+        ok = (made = plat_fs_mkdir(final) == PLAT_FS_OK) && move(top, path) && move(from, dst);
+    } else {
+        ok = !strcmp(id, name) || move(top, final);
+        if (ok && strcmp(inner, "/romfs")) {
+            snprintf(path, sizeof path, "%s%s", final, inner);
+            ok = move(path, dst);
+        }
+    }
+    if (ok && is_loader(dst, first)) {
+        char tmp[4300], mod[4600];
+        snprintf(tmp, sizeof tmp, "%s/.romfs-loader", final);
+        snprintf(mod, sizeof mod, "%s/%s", tmp, first);
+        ok = move(dst, tmp) && move(mod, dst) && plat_fs_rmdir(tmp) == PLAT_FS_OK;
+    }
+    if (!ok) {
+        char detail[32];
+        snprintf(detail, sizeof detail, "error %u", plat_fs_os_error());
+        if (made) plat_fs_rmdir(final);   // only while still empty
+        note(1, "\"%s\" in the mods folder could not be moved to the layout the game reads: %s", name, detail);
+        return;
+    }
+    snprintf(path, sizeof path, "%s/library.ini", final);
+    if (!exists(path)) {
+        char text[400];
+        int n = snprintf(text, sizeof text, "name = %.90s\nauthor = \nversion = \nkind = romfs\nsource = folder\n",
+                         generic ? id : name);
+        plat_file_write(path, text, (size_t)n);
+    }
+    note(0, "\"%s\" in the mods folder is now the mod %s. Turn it on to use it.", name, id);
+}
+
+// Runs on the library thread, which alone writes notes; the view gets a copy.
+static void normalise(void) {
+    nnotes = 0;
+    Tops t = {0};
+    if (root()) plat_fs_list(root(), top_entry, &t);
+    qsort(t.name, (size_t)t.n, sizeof t.name[0], by_str);   // the order installer/mods.py goes in
+    for (int i = 0; i < t.n; i++) {
+        char path[4200];
+        join(path, sizeof path, root(), t.name[i]);
+        normalise_one(t.name[i], plat_fs_kind(path));
+        free(t.name[i]);
+    }
+    plat_mutex_lock(&lock);
+    memcpy(view.notes, notes, sizeof notes);
+    view.nnotes = nnotes;
+    publish_locked();
+    plat_mutex_unlock(&lock);
+}
+
 typedef struct { ModLibRow *rows; int n, cap; } Scan;
 
 static int scan_entry(const char *name, int kind, uint64_t size, void *ctx) {
@@ -695,6 +944,7 @@ static void job_thread(void *arg) {
     if (job.type == JOB_INDEX) {
         static int cleaned;
         if (!cleaned++ && root()) plat_fs_list(root(), cleanup_entry, NULL);
+        normalise();
         rescan();
         load_index();
         static int scripted;

@@ -53,6 +53,13 @@ what is in `mods/`:
   size and SHA-256, and unpacks its `romfs/` (or `romfs/mod/`) folder into `mods/<id>/romfs/`; `exefs/` is left out.
   **Add zip...** does the same for a zip the player downloaded. They are on when listed in `mods/romfs-enabled.txt`,
   which the game reads again twice a second (`runtime/romfs_mods.c`), so they switch while it runs.
+- A game-file mod unpacked into `mods/` by hand, as its download comes, is moved to `mods/<id>/romfs/` the next time
+  either manager lists the mods: a folder named after the mod (`Unburger Patch` becomes `unburger-patch`), the Switch
+  SD card layout (`atmosphere/contents/0100453019AA8000/romfs`, `contents/<title id>/romfs`, `<title id>/romfs`), a
+  bare `romfs/` (those three become `romfs-mod`, `romfs-mod-2` ...) and `romfs/mod/`. It starts off. A folder neither
+  manager can use (no `romfs` folder, two of them, another game's title ID, a Lua mod with a folder name that is not an
+  id, a zip) gets a line saying why, in the F1 Mods tab and in Setup's Mods window. `installer/mods.py` and
+  `runtime/mod_library.c` both carry these rules (`normalise`); `tests/mods_manager_test.py` checks they agree.
 
 Saves are never touched. The game uses a game-file mod's copy the next time it loads the file, so data read at
 start-up (the bdat tables) needs a restart.

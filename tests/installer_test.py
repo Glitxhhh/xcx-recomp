@@ -276,6 +276,32 @@ class EventsTest(unittest.TestCase):
         self.assertEqual(sorted(i for i in used if i not in catalog), [])
 
 
+class KeysTest(unittest.TestCase):
+    """#158: a title.keys picked for prod.keys is named as such. The keys here are made up."""
+
+    def inputs_error(self, text):
+        from installer import steps
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            for name in ('base.nsp', 'update.nsp'):
+                (d / name).write_bytes(b'')
+            (d / 'keys.txt').write_text(text, encoding='utf-8')
+            options = SimpleNamespace(base=d / 'base.nsp', update=d / 'update.nsp', keys=d / 'keys.txt')
+            with self.assertRaises(runner.InstallError) as e:
+                steps.Check().inputs(SimpleNamespace(options=options))
+            return e.exception.args[0]
+
+    def test_title_keys_is_named(self):
+        title = ''.join(f'{i:032x} = {i * 7:032X}\n' for i in range(1, 4))
+        self.assertEqual(self.inputs_error(title), 'check.keys_title_keys')
+        self.assertEqual(self.inputs_error('\ufeff' + title.replace('\n', '\r\n')), 'check.keys_title_keys')
+
+    def test_other_keys_without_header_key(self):
+        self.assertEqual(self.inputs_error('key_area_key_application_00 = ' + '0' * 32 + '\n'),
+                         'check.keys_no_header_key')
+        self.assertEqual(self.inputs_error(''), 'check.keys_no_header_key')
+
+
 class CliTest(unittest.TestCase):
     def test_auto_language_keeps_the_one_in_the_ini(self):
         from installer.cli import auto_language

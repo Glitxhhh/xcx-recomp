@@ -12,8 +12,9 @@ Two kinds of mod, as the library's index.json lists them:
          mods/romfs-enabled.txt, which the game reads again twice a second, so they switch while it runs. Earlier
          lines win when two mods have the same file; a mod turned on goes first.
 A game-file mod comes from its author's page as a zip in the Switch layout: romfs/<path>, or romfs/mod/<path> for mods
-made for the XCXDE mod loader, possibly inside one top folder. exefs/ (Switch code) is not used. The zip must match the
-library's size and SHA-256 before anything is unpacked.
+made for the XCXDE mod loader, possibly inside top folders (atmosphere/contents/<title id>/romfs). exefs/ (Switch code)
+is not used. The zip must match the library's size and SHA-256 before anything is unpacked. A mod unpacked into mods/
+by hand in any of those layouts is moved to mods/<id>/romfs the next time the mods are listed (normalise).
 
 mods/library.json records what this manager installed (kind, version, name) so updates and removals know the kind.
 """
@@ -48,6 +49,17 @@ class ModError(Exception):
 def valid_id(mid):
     return (isinstance(mid, str) and 0 < len(mid) <= 64 and 'a' <= mid[0] <= 'z'
             and all('a' <= ch <= 'z' or '0' <= ch <= '9' or ch in '._-' for ch in mid))
+
+
+def slug(text):
+    """A mod id made from a folder or file name: ASCII letters and digits lowercased, anything else a '-', 'mod-' in
+    front when it does not start with a letter, at most 64 characters. runtime/mod_library.c, slug, is the same."""
+    s = ''.join(ch if ch.isascii() and (ch.isalnum() or ch in '._') else '-' for ch in text.lower())
+    while '--' in s:
+        s = s.replace('--', '-')
+    s = s.strip('-._')
+    s = s if s and 'a' <= s[0] <= 'z' else f'mod-{s}'.rstrip('-')
+    return s[:64].rstrip('-._')
 
 
 # ---- files ---------------------------------------------------------------------------------------------------------
@@ -111,11 +123,149 @@ def kind_of(root, mid, record=None):
 LISTS = {'romfs': 'romfs-enabled.txt', 'lua': 'enabled.txt'}
 
 
-def installed(dest):
-    """[{id, kind, version, name, enabled}] for every mod folder, the manager's or one put there by hand."""
+# ---- mods put in mods/ by hand ---------------------------------------------------------------------------------------
+# A player unpacks a mod's download into mods/ as it comes: a folder named after the mod ("Unburger Patch"), the
+# Switch SD card layout (atmosphere/contents/<title id>/romfs, <title id>/romfs, contents/<title id>/romfs) or a bare
+# romfs/. normalise moves each such folder to mods/<id>/romfs, the one layout the game reads, and names every folder
+# it leaves alone with the reason. runtime/mod_library.c, normalise, does the same when the F1 Mods tab reads the
+# folder; the two follow the same rules, so either one's result looks the same to the other.
+
+TITLE_ID = '0100453019aa8000'     # Xenoblade Chronicles X: Definitive Edition
+SEARCH_DEPTH = 4                  # folders below the top one in which a romfs folder is looked for
+WRAPPERS = {'romfs', 'atmosphere', 'contents'}   # top folder names that say nothing about the mod
+
+
+def is_title_id(name):
+    return len(name) == 16 and all(ch in '0123456789abcdefABCDEF' for ch in name)
+
+
+def find_romfs(folder, depth=SEARCH_DEPTH):
+    """The romfs folders below folder (not inside one another), nearest first; at most two are looked for."""
+    found, level = [], [folder]
+    for _ in range(depth):
+        nxt = []
+        for d in level:
+            try:
+                subs = sorted((p for p in d.iterdir() if p.is_dir() and not p.is_symlink()), key=lambda p: p.name)
+            except OSError:
+                continue
+            for p in subs:
+                (found if p.name.lower() == 'romfs' else nxt).append(p)
+        if found or not nxt:
+            break
+        level = nxt
+    return found
+
+
+def other_game(rel_parts):
+    """The title id of another game in a path below mods/, else None."""
+    return next((p for p in rel_parts if is_title_id(p) and p.lower() != TITLE_ID), None)
+
+
+def free_id(root, base, folder=None):
+    """base, or base-2, base-3 ...: the first name not taken in root. folder itself does not count, so on a file
+    system that ignores case "Uncensor" becomes "uncensor"."""
+    def taken(mid):
+        p = root / mid
+        if folder is not None and p.exists() and os.path.samefile(p, folder):
+            return False
+        return p.exists() or p.is_symlink()
+    mid, n = base, 2
+    while taken(mid):
+        suffix = f'-{n}'
+        mid, n = base[:64 - len(suffix)] + suffix, n + 1
+    return mid
+
+
+def is_loader(romfs):
+    """Whether romfs holds just a folder named mod: the XCXDE mod loader's layout, romfs/mod/<game path>."""
+    try:
+        entries = list(romfs.iterdir())
+    except OSError:
+        return False
+    return len(entries) == 1 and entries[0].is_dir() and entries[0].name.lower() == 'mod'
+
+
+def normalise(root):
+    """Moves the mods put in root by hand to root/<id>/romfs. Returns [(catalog id, params)]: a 'mods.moved' line for
+    each folder moved, a 'mods.skip_*' line for each one left alone."""
+    notes = []
+    try:
+        names = sorted(p.name for p in root.iterdir())
+    except OSError:
+        return notes
+    for name in names:
+        top = root / name
+        if name.startswith('.') or top.is_symlink():
+            continue
+        if top.is_file():
+            if name.lower().endswith('.zip'):
+                notes.append(('mods.skip_zip', {'folder': name}))
+            continue
+        if not top.is_dir():
+            continue
+        if valid_id(name) and (top / 'mod.ini').is_file():
+            continue
+        if (top / 'mod.ini').is_file():
+            notes.append(('mods.skip_lua_name', {'folder': name}))
+            continue
+        if name.lower() == 'romfs':
+            romfs = top
+        else:
+            found = find_romfs(top)
+            if not found:
+                notes.append(('mods.skip_no_romfs', {'folder': name}))
+                continue
+            if len(found) > 1:
+                notes.append(('mods.skip_two_romfs', {'folder': name}))
+                continue
+            romfs = found[0]
+        rel = romfs.relative_to(root).parts
+        title = other_game(rel)
+        if title:
+            notes.append(('mods.skip_other_game', {'folder': name, 'title': title}))
+            continue
+        if valid_id(name) and rel == (name, 'romfs') and not is_loader(romfs):
+            continue   # already mods/<id>/romfs
+        generic = name.lower() in WRAPPERS or is_title_id(name)
+        mid = free_id(root, 'romfs-mod') if generic else name if valid_id(name) else free_id(root, slug(name), top)
+        final = root / mid
+        try:
+            if name.lower() == 'romfs':          # the folder is the mod's romfs
+                final.mkdir()
+                os.replace(top, final / 'romfs')
+            elif generic:                         # atmosphere/..., contents/..., <title id>/...: kept whole inside
+                final.mkdir()
+                os.replace(top, final / name)
+                os.replace(final.joinpath(*rel), final / 'romfs')
+            else:                                 # a folder named after the mod
+                if mid != name:
+                    os.replace(top, final)
+                if rel[1:] != ('romfs',):
+                    os.replace(final.joinpath(*rel[1:]), final / 'romfs')
+            if is_loader(final / 'romfs'):
+                tmp = final / '.romfs-loader'
+                os.replace(final / 'romfs', tmp)
+                os.replace(next(tmp.iterdir()), final / 'romfs')
+                tmp.rmdir()
+            if not (final / 'library.ini').exists():
+                write_info(final, 'romfs', mid if generic or name.lower() == 'romfs' else name, source='folder')
+        except OSError as e:
+            notes.append(('mods.skip_move_failed', {'folder': name, 'detail': str(e)}))
+            continue
+        notes.append(('mods.moved', {'folder': name, 'id': mid}))
+    return notes
+
+
+def installed(dest, notes=None):
+    """[{id, kind, version, name, enabled}] for every mod folder, the manager's or one put there by hand. Folders put
+    there in another layout are moved first (normalise); notes, a list, gets its lines."""
     root = mods_dir(dest)
     if not root.is_dir():
         return []
+    found = normalise(root)
+    if notes is not None:
+        notes.extend(found)
     record = load_record(root)
     on = {k: set(read_list(root / f)) for k, f in LISTS.items()}
     out = []
@@ -188,6 +338,9 @@ def romfs_members(z):
         low = [p.lower() for p in parts]
         if 'romfs' not in low:
             continue
+        title = other_game(parts[:len(low) - low[::-1].index('romfs')])
+        if title:
+            raise ModError('mods.zip_other_game', title=title)
         rest = parts[len(low) - low[::-1].index('romfs'):]
         if rest and rest[0].lower() == 'mod' and len(rest) > 1:
             rest = rest[1:]
@@ -296,9 +449,7 @@ def add_zip(dest, zip_path, mid=None, name=None):
     """Installs a game-file mod zip the player downloaded; the id comes from the file name when not given."""
     zip_path = Path(zip_path)
     if not mid:
-        stem = ''.join(ch if ch.isalnum() or ch in '._-' else '-' for ch in zip_path.stem.lower()).strip('-._')
-        mid = stem if stem and 'a' <= stem[0] <= 'z' else f'mod-{stem}'
-        mid = mid[:64]
+        mid = slug(zip_path.stem)
     if not valid_id(mid):
         raise ModError('mods.bad_id', id=mid)
     root = mods_dir(dest)
@@ -341,10 +492,10 @@ def remove(dest, mid):
     shutil.rmtree(root / mid)
 
 
-def status(dest, index):
+def status(dest, index, notes=None):
     """The library entries joined with what is installed: [{...entry, installed, enabled, update}] plus mods that are
-    installed but not in the library."""
-    have = {m['id']: m for m in installed(dest)}
+    installed but not in the library. notes, a list, gets the lines of normalise."""
+    have = {m['id']: m for m in installed(dest, notes)}
     out = []
     for e in index:
         m = have.pop(e['id'], None)
@@ -369,7 +520,10 @@ def main(argv=None):
     args = ap.parse_args(argv)
     try:
         if args.cmd == 'list':
-            print(json.dumps(status(args.dest, fetch_index(args.index)), indent=1))
+            notes = []
+            print(json.dumps(status(args.dest, fetch_index(args.index), notes), indent=1))
+            for note, params in notes:
+                print(f'{note} {json.dumps(params)}', file=sys.stderr)
         elif args.cmd == 'install':
             entry = next((e for e in fetch_index(args.index) if e['id'] == args.id), None)
             if not entry:

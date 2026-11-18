@@ -202,6 +202,21 @@ def expected_update(ctx):
     return expected_of(ctx, game_version(ctx))
 
 
+TITLE_KEY_LINE = re.compile(r'[0-9a-fA-F]{32}\s*=\s*[0-9a-fA-F]{32}')
+
+
+def is_title_keys(path):
+    """Whether the keys file is a title.keys (each line a 32-digit hex rights ID = a 32-digit hex title key) rather
+    than prod.keys: the two come from the same console dump and get mixed up. Only the shape is looked at."""
+    try:
+        with path.open('r', encoding='utf-8-sig', errors='replace') as f:
+            lines = [line.strip() for line in f.read(1 << 20).splitlines()]
+    except OSError:
+        return False
+    lines = [line for line in lines if line and not line.startswith(('#', ';'))]
+    return bool(lines) and all(TITLE_KEY_LINE.fullmatch(line) for line in lines)
+
+
 class Watch(threading.Thread):
     """Polls a measure() of bytes written while a long call runs and reports it as progress."""
 
@@ -336,7 +351,7 @@ class Check(Step):
         except (ValueError, OSError, UnicodeDecodeError):
             raise InstallError('check.keys_unreadable') from None
         if 'header_key' not in keys:
-            raise InstallError('check.keys_no_header_key')
+            raise InstallError('check.keys_title_keys' if is_title_keys(Path(o.keys)) else 'check.keys_no_header_key')
         total = 0
         for name, is_update in (('base', False), ('update', True)):
             path = Path(getattr(o, name))
