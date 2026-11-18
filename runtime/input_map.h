@@ -101,7 +101,10 @@ void input_mouse_stick(int32_t dx, int32_t dy, double dt_s, float sens, int32_t 
 //   clamped to the unit circle.
 // Pure.
 void input_stick_shape(int32_t x, int32_t y, int32_t cx, int32_t cy, float dead, int round, int32_t out[2]);
-// "x,y" (XCX_STICK_CENTER_*) to a resting offset, each clamped to +-16384; 0, 0 and returns 0 for NULL, "" or a bad value.
+// The most a resting offset (XCX_STICK_CENTER_*) can be on each axis: half the stick's travel.
+enum { INPUT_STICK_CENTER_MAX = 16384 };
+// "x,y" (XCX_STICK_CENTER_*) to a resting offset, each clamped to +-INPUT_STICK_CENTER_MAX; 0, 0 and returns 0 for NULL,
+// "" or a bad value.
 int input_stick_center_parse(const char *s, int32_t *cx, int32_t *cy);
 
 // ---- the remapping rows' edits, on a copy of input_map. Pure.

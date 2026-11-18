@@ -306,7 +306,8 @@ int probe_cfg(void) {
     int32_t cx, cy;
     CHECK(input_stick_center_parse(" 1200 , -300 ", &cx, &cy) && cx == 1200 && cy == -300, "stick center: x,y parses");
     CHECK(!input_stick_center_parse("1,2,3", &cx, &cy) && cx == 0 && cy == 0, "stick center: a bad value is no offset");
-    CHECK(input_stick_center_parse("99999,-99999", &cx, &cy) && cx == 16384 && cy == -16384, "stick center: clamped");
+    CHECK(input_stick_center_parse("99999,-99999", &cx, &cy) && cx == INPUT_STICK_CENTER_MAX && cy == -INPUT_STICK_CENTER_MAX &&
+              INPUT_STICK_CENTER_MAX == 16384, "stick center: clamped to 16384");
     // Gamepad layouts (input_map.c)
     CHECK(input_pad_layout_pick("auto", 1) == PAD_LAYOUT_NINTENDO && input_pad_layout_pick(NULL, 0) == PAD_LAYOUT_XBOX,
           "pad layout: automatic is Nintendo for an east button labelled A, Xbox otherwise");

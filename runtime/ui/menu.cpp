@@ -660,7 +660,8 @@ static const char *cal_tick(void) {
     // A center inside the default deadzone (2500 of 32767) changes nothing a player can feel, so it is not saved, and an
     // earlier center of that stick is cleared; a stick whose deadzone is set lower keeps any offset larger than its own
     // deadzone. Inside means what the shape tests: each axis for Per axis, the distance from the center for Round (a
-    // stick resting at 2400,2400 is past a round 2500 deadzone and needs its center).
+    // stick resting at 2400,2400 is past a round 2500 deadzone and needs its center). A center is saved at most
+    // INPUT_STICK_CENTER_MAX off on each axis, the most input_stick_center_parse takes, so xcx.ini holds what is applied.
     bool round = !strcmp(cfg_value("XCX_STICK_DEADZONE_SHAPE"), "round");
     static const char *const keys[2] = {"XCX_STICK_CENTER_L", "XCX_STICK_CENTER_R"};
     static const char *const reset_keys[2] = {"STICK_CENTER_L", "STICK_CENTER_R"};   // cfg_reset takes them without XCX_
@@ -671,6 +672,9 @@ static const char *cal_tick(void) {
         double keep = dead < 2500 ? (dead < 0 ? 0 : dead) : 2500;
         bool outside = round ? hypot((double)cx, (double)cy) > keep : abs(cx) > keep || abs(cy) > keep;
         if (outside) {
+            const int m = INPUT_STICK_CENTER_MAX;
+            cx = cx < -m ? -m : cx > m ? m : cx;
+            cy = cy < -m ? -m : cy > m ? m : cy;
             char v[32];
             snprintf(v, sizeof v, "%d,%d", cx, cy);
             cfg_set(keys[st], v);

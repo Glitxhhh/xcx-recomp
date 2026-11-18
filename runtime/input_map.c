@@ -359,8 +359,8 @@ int input_stick_center_parse(const char *s, int32_t *cx, int32_t *cy) {
     int x, y;
     char tail;
     if (!s || sscanf(s, " %d , %d %c", &x, &y, &tail) != 2) return 0;
-    *cx = x < -16384 ? -16384 : x > 16384 ? 16384 : x;
-    *cy = y < -16384 ? -16384 : y > 16384 ? 16384 : y;
+    *cx = x < -INPUT_STICK_CENTER_MAX ? -INPUT_STICK_CENTER_MAX : x > INPUT_STICK_CENTER_MAX ? INPUT_STICK_CENTER_MAX : x;
+    *cy = y < -INPUT_STICK_CENTER_MAX ? -INPUT_STICK_CENTER_MAX : y > INPUT_STICK_CENTER_MAX ? INPUT_STICK_CENTER_MAX : y;
     return 1;
 }
 
