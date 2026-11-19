@@ -166,6 +166,13 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                      "the range as set. Applies at once.",
     [UI_MENU_OBJECT_LOD_AUTO] = "Auto", [UI_MENU_OBJECT_LOD_FIXED] = "Fixed",
     [UI_MENU_OBJECT_LOD_NOW] = "now +%.0f m",
+    [UI_MENU_CROWD] = "Crowd distance",
+    [UI_MENU_CROWD_DESC] = "How far from you the crowd people (the walkers in NLA) appear and fade out. Original "
+                           "keeps the game's distances (about 25 m); higher values multiply them. Turn on GPU "
+                           "frame prep on its own thread (Advanced tab) before raising it: without it the extra "
+                           "people slow busy places a lot (in the Commercial District at 4x, about 66 instead of "
+                           "90 fps). Applies at once.",
+    [UI_MENU_CROWD_ORIGINAL] = "Original", [UI_MENU_CROWD_STEP] = "%sx",
     [UI_MENU_SHARPNESS] = "FSR sharpness",
     [UI_MENU_SHARPNESS_DESC] = "Sharpening after FSR scaling; 0 turns it off.",
     [UI_MENU_BRIGHTNESS] = "Brightness",
@@ -297,6 +304,8 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_PREEMPT_OFF] = "Off", [UI_MENU_PREEMPT_ON] = "On", [UI_MENU_PREEMPT_INHERIT] = "Inheritance only",
     [UI_MENU_REPLAY_ASYNC] = "GPU frame prep on its own thread",
     [UI_MENU_REPLAY_ASYNC_DESC] = "Prepares frames for the GPU on a separate thread instead of the game thread. Adds up to one frame of latency.",
+    [UI_MENU_MIRROR_COW] = "Snapshot GPU data at submit",
+    [UI_MENU_MIRROR_COW_DESC] = "With frame prep on its own thread: keeps the vertex and storage data of each frame as it was when the game submitted it, so models do not stretch into spikes at the start of camera pans with large crowds. Costs about 1 ms a frame.",
     [UI_MENU_FREE_CORES] = "Virtual core gate",
     [UI_MENU_FREE_CORES_DESC] = "Lets only one thread run per virtual core, as on the console.",
     [UI_MENU_TIMER_1MS] = "1 ms Windows timer",
@@ -537,6 +546,12 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
                                      "Применяется сразу.",
     [UI_MENU_OBJECT_LOD_AUTO] = "Авто", [UI_MENU_OBJECT_LOD_FIXED] = "Фиксированная",
     [UI_MENU_OBJECT_LOD_NOW] = "сейчас +%.0f м",
+    [UI_MENU_CROWD] = "Дальность толпы",
+    [UI_MENU_CROWD_DESC] = "Как далеко от вас появляются и исчезают прохожие (в NLA). «Как в игре» — расстояния "
+                           "игры (около 25 м); большие значения умножают их. Сначала включите «Подготовка кадра "
+                           "для GPU в отдельном потоке» («Дополнительно»): без неё людные места сильно тормозят. "
+                           "Применяется сразу.",
+    [UI_MENU_CROWD_ORIGINAL] = "Как в игре", [UI_MENU_CROWD_STEP] = "%sx",
     [UI_MENU_SHARPNESS] = "Резкость FSR",
     [UI_MENU_SHARPNESS_DESC] = "Повышение резкости после масштабирования FSR; 0 выключает его.",
     [UI_MENU_BRIGHTNESS] = "Яркость",
@@ -664,6 +679,8 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_PREEMPT_OFF] = "Выкл.", [UI_MENU_PREEMPT_ON] = "Вкл.", [UI_MENU_PREEMPT_INHERIT] = "Только наследование",
     [UI_MENU_REPLAY_ASYNC] = "Подготовка кадра для GPU в отдельном потоке",
     [UI_MENU_REPLAY_ASYNC_DESC] = "Кадр для GPU готовится в отдельном потоке, а не в потоке игры. Добавляет до одного кадра задержки.",
+    [UI_MENU_MIRROR_COW] = "Снимок данных GPU при отправке",
+    [UI_MENU_MIRROR_COW_DESC] = "При подготовке кадра в отдельном потоке: данные вершин и буферов каждого кадра остаются такими, какими были при отправке, и модели не вытягиваются в шипы в начале поворота камеры при больших толпах. Стоит около 1 мс на кадр.",
     [UI_MENU_FREE_CORES] = "Ограничение виртуальных ядер",
     [UI_MENU_FREE_CORES_DESC] = "На каждом виртуальном ядре работает один поток, как на консоли.",
     [UI_MENU_TIMER_1MS] = "Таймер Windows 1 мс",

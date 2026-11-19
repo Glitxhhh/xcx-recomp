@@ -152,6 +152,7 @@ typedef struct {
     int kind, n, has_crop, crop[4];
     uint64_t value, submit_no, at, queued;
     uint32_t base;      // RI_SUBMIT: the page write generation at the submit (vk_texture_submit_baseline)
+    uint32_t cow;       // RI_SUBMIT: its copy-on-write snapshot number (vk_mem_cow_submit), 0 none
     uint64_t *h;
     const tex_t *tex;   // RI_RELEASE: a copy the item owns (the game may reuse the object's memory)
 } ReplayItem;
@@ -217,7 +218,9 @@ static void replay_main(void *arg) {
         plat_mutex_unlock(&rl);
         if (it.kind == RI_SUBMIT) {
             vk_texture_replay_base(it.base);
+            vk_mem_cow_use(it.cow);
             uint64_t f = submit_sync(it.h, it.n);
+            vk_mem_cow_done(it.cow);
             vk_texture_replay_base(0);
             if (f != it.value)
                 rt_fatal("vk: replayed submission signalled %llu, queued as %llu", (unsigned long long)f,
@@ -409,6 +412,7 @@ static uint64_t vk_be_submit(const uint64_t *handles, int n) {
         if (!it.h) rt_fatal("vk: out of memory (replay queue)");
         memcpy(it.h, handles, sizeof *it.h * (size_t)n);
     }
+    it.cow = vk_mem_cow_submit();   // the mirrored blocks as of now: later writes save them first
     return replay_enqueue(&it);
 }
 static void vk_be_finish(void) { vk_sync_start(); replay_drain(DR_FINISH); vk_present_drain(); vk_sync_finish(); }

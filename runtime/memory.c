@@ -98,9 +98,294 @@ static void thaw_locked(uint64_t r, int why) {
     plat_inc64(&frz_count[why]);
 }
 
+// ---- copy-on-write blocks
+// With the replay on its own thread (XCX_REPLAY_ASYNC) the VRAM mirror sync of a submission runs up to a frame after
+// it, while the game already rewrites vertex and storage data for the next one. At each submit the back end makes the
+// blocks of the pools it mirrors read-only (mem_cow_protect, vk_memory.c vk_mem_cow_submit); the first write into one
+// faults, cow_fault_locked saves the block as it was (valid for every submission from the protect to the fault) when
+// the replay has not recorded those yet, makes it writable and lets the write retry. mem_cow_read gives the replay the
+// bytes as of its submission: the saved copy, or live memory where nothing wrote since. All under frz_lock (a leaf
+// lock: the replay's copies under it read guest memory, nothing writes it). A protected block lies in one region and
+// never in a frozen one: freeze_locked refuses regions with read-only pages, and mem_cow_protect skips frozen regions.
+#define COW_CHUNK_SHIFT 28
+#define COW_IDLE 30                 // submissions without a fault before a region's blocks are made writable again
+#define COW_HASH 4096
+static int cow_shift;               // block size log2; 0: off
+static uint32_t *cow_tab[RT_ADDRESS_LIMIT >> COW_CHUNK_SHIFT];   // per block: the submission it was protected at, 0 not
+static uint32_t cow_sub, cow_done;  // the newest submission; the newest the replay finished recording
+static uint16_t cow_reg_n[RT_ADDRESS_LIMIT >> FRZ_SHIFT];        // protected blocks per region
+static uint32_t cow_reg_last[RT_ADDRESS_LIMIT >> FRZ_SHIFT];     // cow_sub at its last protect or fault
+static uint32_t *cow_regs;          // regions with protected blocks (possibly some with none left)
+static int ncow_regs, ccow_regs;
+typedef struct { uint64_t blk, t; uint32_t p, q; int next; } CowSave;   // valid for submissions p..q, taken at t ns
+static CowSave *cow_sv;
+static uint8_t *cow_arena;
+static int cow_free = -1, cow_hash[COW_HASH], *cow_live, ncow_live;
+static uint64_t cow_st[8];          // see mem_cow_stats
+static uint64_t cow_t[6];           // protect pass: lock wait, plat_mem_state, plat_mem_protect ns; protect calls;
+                                    // state calls; the longest pass ns
+static uint64_t cow_nprot;          // protected blocks now
+static uint64_t cow_arena_n;        // the arena's size in bytes
+static uint64_t cow_held;           // blocks left writable because their region is inside its thaw hold
+
+void mem_cow_init(int blk_shift, uint64_t arena_bytes) {
+    if (blk_shift < 12) blk_shift = 12;
+    if (blk_shift > FRZ_SHIFT) blk_shift = FRZ_SHIFT;
+    int n = (int)(arena_bytes >> blk_shift);
+    if (n <= 0) return;
+    cow_arena = plat_mem_alloc((uint64_t)n << blk_shift);
+    cow_sv = calloc((size_t)n, sizeof *cow_sv);
+    cow_live = calloc((size_t)n, sizeof *cow_live);
+    if (!cow_arena || !cow_sv || !cow_live) rt_fatal("memory: out of memory for copy-on-write blocks");
+    for (int i = 0; i < COW_HASH; i++) cow_hash[i] = -1;
+    for (int i = n - 1; i >= 0; i--) cow_sv[i].next = cow_free, cow_free = i;
+    cow_shift = blk_shift;
+    cow_arena_n = (uint64_t)n << blk_shift;
+}
+
+int mem_cow_on(void) { return cow_shift != 0; }
+uint64_t mem_cow_arena_bytes(void) { return cow_arena_n; }
+int mem_cow_blk_shift(void) { return cow_shift; }
+
+static uint32_t *cow_slot(uint64_t a, int create) {
+    uint64_t ci = a >> COW_CHUNK_SHIFT;
+    if (ci >= sizeof cow_tab / sizeof *cow_tab) return NULL;
+    if (!cow_tab[ci]) {
+        if (!create) return NULL;
+        cow_tab[ci] = calloc(1ull << (COW_CHUNK_SHIFT - cow_shift), sizeof(uint32_t));
+        if (!cow_tab[ci]) rt_fatal("memory: out of memory for copy-on-write blocks");
+    }
+    return &cow_tab[ci][(a >> cow_shift) & ((1ull << (COW_CHUNK_SHIFT - cow_shift)) - 1)];
+}
+
+static int cow_hidx(uint64_t blk) { return (int)((blk >> cow_shift) * 0x9E3779B1u >> 20) & (COW_HASH - 1); }
+
+// frz_lock: the block (protected since submission p) is about to change. Saves it when a submission from p on is not
+// recorded yet.
+static void cow_save_locked(uint64_t blk, uint32_t p) {
+    if (cow_sub == cow_done) return;   // the replay recorded every submission: nobody needs the old bytes
+    if (cow_free < 0) { cow_st[3]++; return; }   // arena full: read live, late, as without the snapshot
+    int i = cow_free;
+    cow_free = cow_sv[i].next;
+    memcpy(cow_arena + ((uint64_t)i << cow_shift), (const void *)(uintptr_t)blk, 1ull << cow_shift);
+    int h = cow_hidx(blk);
+    cow_sv[i] = (CowSave){blk, plat_now_ns(), p > cow_done ? p : cow_done + 1, cow_sub, cow_hash[h]};
+    cow_hash[h] = i;
+    cow_live[ncow_live++] = i;
+    cow_st[2]++;
+}
+
+// frz_lock: makes the protected block at blk writable again, saving it first.
+static void cow_unprotect_locked(uint64_t blk, uint32_t *s) {
+    cow_save_locked(blk, *s);
+    if (!plat_mem_protect(blk, 1ull << cow_shift, PLAT_PROT_RW))
+        rt_fatal("memory: unprotecting %#llx failed", (unsigned long long)blk);
+    *s = 0;
+    cow_reg_n[blk >> FRZ_SHIFT]--;
+    cow_nprot--;
+}
+
+// frz_lock: 1 when the write at a hit a protected block (now writable), 0 not one of ours.
+static int cow_fault_locked(uint64_t a) {
+    if (!cow_shift) return 0;
+    uint32_t *s = cow_slot(a, 0);
+    if (!s || !*s) return 0;
+    uint64_t t0 = plat_now_ns();
+    cow_unprotect_locked(a & ~((1ull << cow_shift) - 1), s);
+    cow_reg_last[a >> FRZ_SHIFT] = cow_sub;
+    cow_st[1]++;
+    cow_st[7] += plat_now_ns() - t0;
+    return 1;
+}
+
+// frz_lock: every protected block over [a, a+n) writable again (a mapping change, a file read, a pool's end).
+static void cow_release_range_locked(uint64_t a, uint64_t n) {
+    if (!cow_shift || !cow_nprot || !n) return;
+    uint64_t bsz = 1ull << cow_shift, end = a + n > a ? a + n : UINT64_MAX;
+    if (end > RT_ADDRESS_LIMIT) end = RT_ADDRESS_LIMIT;
+    for (uint64_t b = a & ~(bsz - 1); b < end;) {
+        if (!cow_reg_n[b >> FRZ_SHIFT]) { b = ((b >> FRZ_SHIFT) + 1) << FRZ_SHIFT; continue; }
+        uint32_t *s = cow_slot(b, 0);
+        if (s && *s) cow_unprotect_locked(b, s), cow_st[4]++;
+        b += bsz;
+    }
+}
+
+static uint64_t cow_pass_t0;
+
+uint32_t mem_cow_begin(void) {
+    uint64_t t0 = plat_now_ns();
+    plat_mutex_lock(&frz_lock);
+    cow_pass_t0 = plat_now_ns();
+    cow_t[0] += cow_pass_t0 - t0;
+    cow_sub = cow_sub + 1 ? cow_sub + 1 : 1;
+    return cow_sub;
+}
+
+// Per block, what plat_mem_state said: 0 not asked since the last mapping change, 1 committed read-write, 2 not (a
+// hole, another protection). Asking on every submit cost 5.8 ms a frame in a busy town (protected blocks split
+// the regions into many runs), so each block is asked once; commit, decommit and protect here reset the answer.
+static uint8_t *cow_kt[RT_ADDRESS_LIMIT >> COW_CHUNK_SHIFT];
+
+static uint8_t *cow_kind(uint64_t a) {
+    uint64_t ci = a >> COW_CHUNK_SHIFT;
+    if (!cow_kt[ci]) {
+        cow_kt[ci] = calloc(1ull << (COW_CHUNK_SHIFT - cow_shift), 1);
+        if (!cow_kt[ci]) rt_fatal("memory: out of memory for copy-on-write blocks");
+    }
+    return &cow_kt[ci][(a >> cow_shift) & ((1ull << (COW_CHUNK_SHIFT - cow_shift)) - 1)];
+}
+
+static void cow_kind_reset(uint64_t a, uint64_t n) {   // frz_lock: a mapping change over [a, a+n)
+    if (!cow_shift || !n) return;
+    uint64_t bsz = 1ull << cow_shift, end = a + n > a && a + n < RT_ADDRESS_LIMIT ? a + n : RT_ADDRESS_LIMIT;
+    for (uint64_t b = a & ~(bsz - 1); b < end;) {
+        uint64_t ci = b >> COW_CHUNK_SHIFT, ce = (ci + 1) << COW_CHUNK_SHIFT, e = end < ce ? end : ce;
+        if (cow_kt[ci]) {
+            uint64_t k0 = (b >> cow_shift) & ((1ull << (COW_CHUNK_SHIFT - cow_shift)) - 1);
+            uint64_t k1 = ((e - 1) >> cow_shift) & ((1ull << (COW_CHUNK_SHIFT - cow_shift)) - 1);
+            memset(cow_kt[ci] + k0, 0, k1 - k0 + 1);
+        }
+        b = ce;
+    }
+}
+
+// The block at b can be protected: committed read-write, not protected, not in a frozen region. One query answers
+// every block of the run it reports: VirtualQuery on write-watched memory walks the whole run of pages that share its
+// attributes, often hundreds of MiB, so asking per block cost seconds while loading (mapping changes reset the cache).
+static int cow_can(uint64_t b) {
+    uint64_t r = b >> FRZ_SHIFT;
+    if (*cow_slot(b, 1) || frz[r]) return 0;
+    // A region inside its thaw hold (mem_thaw, FRZ_HOLD_MS) may be the target of a file read in progress
+    // (fs_host.c host_read_at, romfs.c read_at): the kernel's write into a read-only page fails with ERROR_NOACCESS
+    // instead of faulting into thaw_fault, so the block is left writable, as mem_freeze leaves the region.
+    if (thaw_ms[r] && (int32_t)((uint32_t)plat_now_ms() - thaw_ms[r]) < (int32_t)FRZ_HOLD_MS) {
+        cow_held++;
+        return 0;
+    }
+    uint8_t *k = cow_kind(b);
+    if (!*k) {
+        uint64_t bsz = 1ull << cow_shift, lim = ((b >> COW_CHUNK_SHIFT) + 1) << COW_CHUNK_SHIFT, end, t0 = plat_now_ns();
+        int st = plat_mem_state(b, lim, &end);
+        cow_t[1] += plat_now_ns() - t0, cow_t[4]++;
+        if (end <= b) end = b + 1;
+        if (st == PLAT_PROT_RW) {   // whole blocks of the run: 1; a block the run ends inside: not
+            uint64_t y = b;
+            for (; y + bsz <= end; y += bsz) *cow_kind(y) = 1;
+            if (y < end) *cow_kind(y) = 2;
+        } else {
+            for (uint64_t y = b; y < end; y += bsz) *cow_kind(y) = 2;
+        }
+    }
+    return *k == 1;
+}
+
+void mem_cow_protect(uint64_t lo, uint64_t hi) {
+    if (!cow_shift || hi > RT_ADDRESS_LIMIT) return;
+    uint64_t bsz = 1ull << cow_shift, b = (lo + bsz - 1) & ~(bsz - 1), lim = hi & ~(bsz - 1);
+    if (b >= lim || !watched(b, lim - b)) return;
+    // Runs of blocks that can be protected, one call per run; a run stays in a region.
+    while (b < lim) {
+        if (!cow_can(b)) { b += bsz; continue; }
+        uint64_t c = b + bsz;
+        while (c < lim && (c & (FRZ_SIZE - 1)) && cow_can(c)) c += bsz;
+        uint64_t t1 = plat_now_ns();
+        int ok = plat_mem_protect(b, c - b, PLAT_PROT_READ);
+        cow_t[2] += plat_now_ns() - t1, cow_t[3]++;
+        if (!ok) {   // the mapping changed under a stale answer: ask again next time
+            for (uint64_t y = b; y < c; y += bsz) *cow_kind(y) = 0;
+            b = c;
+            continue;
+        }
+        uint64_t r = b >> FRZ_SHIFT;
+        if (!cow_reg_n[r]) {
+            if (ncow_regs == ccow_regs) {
+                ccow_regs = ccow_regs ? ccow_regs * 2 : 256;
+                cow_regs = realloc(cow_regs, (size_t)ccow_regs * sizeof *cow_regs);
+                if (!cow_regs) rt_fatal("memory: out of memory for copy-on-write blocks");
+            }
+            int dup = 0;
+            for (int i = 0; i < ncow_regs && !dup; i++) dup = cow_regs[i] == r;
+            if (!dup) cow_regs[ncow_regs++] = (uint32_t)r;
+        }
+        for (uint64_t y = b; y < c; y += bsz) *cow_slot(y, 1) = cow_sub, cow_reg_n[r]++, cow_nprot++, cow_st[0]++;
+        cow_reg_last[r] = cow_sub;
+        b = c;
+    }
+}
+
+void mem_cow_end(void) {
+    for (int i = 0; i < ncow_regs;) {
+        uint32_t r = cow_regs[i];
+        if (cow_reg_n[r] && cow_sub - cow_reg_last[r] >= COW_IDLE)
+            cow_release_range_locked((uint64_t)r << FRZ_SHIFT, FRZ_SIZE);   // lets it freeze
+        if (!cow_reg_n[r]) cow_regs[i] = cow_regs[--ncow_regs];
+        else i++;
+    }
+    uint64_t d = plat_now_ns() - cow_pass_t0;
+    if (d > cow_t[5]) cow_t[5] = d;
+    plat_mutex_unlock(&frz_lock);
+}
+
+void mem_cow_done(uint32_t s) {
+    if (!cow_shift) return;
+    plat_mutex_lock(&frz_lock);
+    cow_done = s;
+    for (int k = 0; k < ncow_live;) {
+        int i = cow_live[k];
+        if (cow_sv[i].q - s - 1 < 0x80000000u) { k++; continue; }   // q > s: still needed
+        int *pp = &cow_hash[cow_hidx(cow_sv[i].blk)];
+        while (*pp != i) pp = &cow_sv[*pp].next;
+        *pp = cow_sv[i].next;
+        cow_sv[i].next = cow_free, cow_free = i;
+        cow_live[k] = cow_live[--ncow_live];
+    }
+    plat_mutex_unlock(&frz_lock);
+}
+
+int mem_cow_read(uint64_t a, uint64_t n, uint32_t s, void *dst, uint64_t *when) {
+    uint64_t blk = a & ~((1ull << cow_shift) - 1);
+    int ret = 0;
+    const void *src = (const void *)(uintptr_t)a;
+    plat_mutex_lock(&frz_lock);
+    *when = plat_now_ns();
+    for (int i = cow_hash[cow_hidx(blk)]; i >= 0; i = cow_sv[i].next)
+        if (cow_sv[i].blk == blk && s - cow_sv[i].p < 0x80000000u && cow_sv[i].q - s < 0x80000000u) {
+            src = cow_arena + ((uint64_t)i << cow_shift) + (a - blk), ret = 2, *when = cow_sv[i].t;
+            break;
+        }
+    if (!ret) {
+        uint32_t *p = cow_slot(blk, 0);
+        if (p && *p && s - *p < 0x80000000u) ret = 1;
+    }
+    memcpy(dst, src, n);
+    plat_mutex_unlock(&frz_lock);
+    return ret;
+}
+
+uint64_t mem_cow_oldest(void) {
+    plat_mutex_lock(&frz_lock);
+    uint64_t t = plat_now_ns();
+    for (int k = 0; k < ncow_live; k++)
+        if (cow_sv[cow_live[k]].t < t) t = cow_sv[cow_live[k]].t;
+    plat_mutex_unlock(&frz_lock);
+    return t;
+}
+
+void mem_cow_stats(uint64_t out[15]) {
+    plat_mutex_lock(&frz_lock);
+    for (int i = 0; i < 8; i++) out[i] = cow_st[i], cow_st[i] = 0;
+    for (int i = 0; i < 6; i++) out[8 + i] = cow_t[i], cow_t[i] = 0;
+    out[5] = cow_nprot, out[6] = (uint64_t)ncow_live;
+    out[14] = cow_held, cow_held = 0;
+    plat_mutex_unlock(&frz_lock);
+}
+
 // frz_lock held exclusively.
 static void thaw_range_locked(uint64_t a, uint64_t n, int why) {
     if (!n || a >= RT_ADDRESS_LIMIT) return;
+    cow_release_range_locked(a, n);
+    if (why == 3) cow_kind_reset(a, n);
     uint64_t r0 = a >> FRZ_SHIFT, r1 = (a + n - 1 < RT_ADDRESS_LIMIT ? a + n - 1 : RT_ADDRESS_LIMIT - 1) >> FRZ_SHIFT;
     for (uint64_t r = r0; r <= r1; r++) thaw_locked(r, why);
 }
@@ -163,6 +448,10 @@ void mem_freeze_stats(uint64_t *frozen, uint64_t *freezes, uint64_t *fault_thaws
 static int thaw_fault(uint64_t a) {
     if (a >= RT_ADDRESS_LIMIT || !watched(a, 1)) return 0;
     plat_mutex_lock(&frz_lock);
+    if (cow_fault_locked(a)) {
+        plat_mutex_unlock(&frz_lock);
+        return 1;
+    }
     int was = frz[a >> FRZ_SHIFT];
     thaw_locked(a >> FRZ_SHIFT, 1);
     plat_mutex_unlock(&frz_lock);

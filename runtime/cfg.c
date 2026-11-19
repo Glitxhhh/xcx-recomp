@@ -35,12 +35,12 @@ static const char *const known[] = {
     "BIND_LSTICK_RIGHT", "BIND_LSTICK_UP", "BIND_MINUS",
     "BIND_PLUS", "BIND_R", "BIND_RCLICK", "BIND_RIGHT", "BIND_RSTICK_DOWN", "BIND_RSTICK_LEFT", "BIND_RSTICK_RIGHT", "BIND_RSTICK_UP",
     "BIND_SKIP", "BIND_STATS", "BIND_UP", "BIND_X", "BIND_Y",
-    "BIND_ZL", "BIND_ZR", "BLOCK_VIEWS_3D", "BRIGHTNESS", "BUG_REPORT_TEST", "CHEATS", "CLOTH_REALTIME", "CORE_DIAG", "CRASH_TEST", "CRIT", "CRIT_OUT", "CUTSCENE_30", "DESC_TEMPLATE", "DEVICE_PROFILE", "DLSS_JITTER", "DLSS_MASK", "DLSS_MASK_PX", "DLSS_MIPBIAS", "DLSS_MV", "DLSS_MVDEBUG", "DLSS_OBJMV", "DLSS_PRESET", "DUMP", "DUMP_BUF", "DUMP_DIR", "DUMP_LOG", "DUMP_ONLY",
+    "BIND_ZL", "BIND_ZR", "BLOCK_VIEWS_3D", "BRIGHTNESS", "BUG_REPORT_TEST", "CHEATS", "CLOTH_REALTIME", "CORE_DIAG", "CRASH_TEST", "CRIT", "CRIT_OUT", "CROWD_DISTANCE", "CROWD_PATCH", "CUTSCENE_30", "DESC_TEMPLATE", "DEVICE_PROFILE", "DLSS_JITTER", "DLSS_MASK", "DLSS_MASK_PX", "DLSS_MIPBIAS", "DLSS_MV", "DLSS_MVDEBUG", "DLSS_OBJMV", "DLSS_PRESET", "DUMP", "DUMP_BUF", "DUMP_DIR", "DUMP_LOG", "DUMP_ONLY",
     "EXEFS", "FAST_CORES", "FEEDBACK", "FIX_C0", "FIX_ZERO", "FLIGHT", "FLIGHT_AT", "FLIGHT_DIR", "FLIGHT_FRAMES", "FLIGHT_SPIKE_MS",
     "FLIGHT_THUMBS", "FPS60", "FPS_LIMIT", "FREEZE_IDLE", "FREE_CORES", "FULLSCREEN", "GATHER_BIAS", "GPL", "GPL_DRAW_BUILD", "GPU",
     "GPU_INDEX", "GPU_NAME", "GRASS_DISTANCE", "GRASS_PATCH", "GRASS_POOL", "HDR", "HDR_GAME_NITS", "HDR_HUE", "HDR_PEAK_NITS", "HDR_UI_NITS", "HIGHFPS_FIX", "INPUT", "INPUT_RECORD", "INPUT_SCRIPT", "LANG", "LIB_PREBUILD",
     "LIB_PREBUILD_KEEP", "LIB_PREBUILD_THREADS", "LOCALE", "LOD_GUARD", "MEMORY", "MENU_LANG", "MENU_TEST",
-    "MENU_TEST_DIR", "MENU_TEST_SET", "MINIMAL_LAYOUT", "MIRROR_GAP", "MOTION", "MOUSE_SENS", "MOVIE_HOST", "MOVIE_PACE",
+    "MENU_TEST_DIR", "MENU_TEST_SET", "MINIMAL_LAYOUT", "MIRROR_COW", "MIRROR_COW_BLOCK", "MIRROR_COW_MIB", "MIRROR_GAP", "MOTION", "MOUSE_SENS", "MOVIE_HOST", "MOVIE_PACE",
     "MVOBJ_ALL", "MVOBJ_BANKS", "MVOBJ_CAMCUR", "MVOBJ_EQUAL", "MVOBJ_EXACT", "MVOBJ_EXEC", "MVOBJ_NOC4", "MVOBJ_ONLY", "MVOBJ_PALCUR", "MVOBJ_PALETTE", "MVOBJ_TIMES", "MVPREV_CHECK", "MVPREV_GROW", "MVPREV_SKIP", "MVPREV_TRUST", "MV_CHECK", "MV_SURVEY", "OBJECT_LOD_MODE", "OBJECT_LOD_RANGE", "ONE_PER_CORE", "OPERATION_MODE", "OUTPUT_RES", "GLYPH_STYLE", "GLYPH_APPEARANCE", "PAD_LAYOUT", "PATCH_OUTPUT", "PATCH_SCENE", "PAUSE_IN_BACKGROUND", "PERF_OVERLAY", "PERF_SLOW_MS", "PICTURE_FIT", "PIPELINE_CACHE", "PIPE_MEMO", "PIPE_PREBUILD", "PIPE_SKIP", "PIPE_SYNC", "PIPE_WAIT", "PRESENT_WAIT",
     "PREWARM_XLATE", "PROBE_MOVIE", "PROBE_MOVIE_SHOT", "PROFILE", "PROFILE_CHAINS", "PROFILE_DIR", "PROFILE_FRAMES",
     "PROFILE_MAIN", "PROFILE_RENDER", "PUSH_SKIP", "PUSH_STAGE", "RDOC", "RDOC_DIR", "RDOC_DLL", "REALTIME", "REC_END", "REEXEC",
@@ -62,7 +62,7 @@ static const struct { const char *key, *section; } sections[] = {
     {"SHARPNESS", "display"}, {"BRIGHTNESS", "display"}, {"PICTURE_FIT", "display"},
     {"HDR", "display"}, {"HDR_PEAK_NITS", "display"}, {"HDR_GAME_NITS", "display"}, {"HDR_UI_NITS", "display"},
     {"HDR_HUE", "display"},
-    {"GRASS_DISTANCE", "display"}, {"OBJECT_LOD_RANGE", "display"}, {"OBJECT_LOD_MODE", "display"},
+    {"GRASS_DISTANCE", "display"}, {"CROWD_DISTANCE", "display"}, {"OBJECT_LOD_RANGE", "display"}, {"OBJECT_LOD_MODE", "display"},
     {"DEVICE_PROFILE", "display"},
     {"MENU_LANG", "language"}, {"LANG", "language"}, {"VOICE_LANG", "language"}, {"OPERATION_MODE", "language"},
     {"VOLUME", "audio"}, {"PAUSE_IN_BACKGROUND", "audio"}, {"CHEATS", "cheats"},
@@ -74,7 +74,7 @@ static const struct { const char *key, *section; } sections[] = {
     {"BIND_RIGHT", "input"}, {"BIND_DOWN", "input"}, {"BIND_LSTICK_LEFT", "input"}, {"BIND_LSTICK_UP", "input"},
     {"BIND_LSTICK_RIGHT", "input"}, {"BIND_LSTICK_DOWN", "input"}, {"BIND_RSTICK_LEFT", "input"},
     {"BIND_RSTICK_UP", "input"}, {"BIND_RSTICK_RIGHT", "input"}, {"BIND_RSTICK_DOWN", "input"},
-    {"ASYNC_PREEMPT", "performance"}, {"REPLAY_ASYNC", "performance"}, {"FREE_CORES", "performance"},
+    {"ASYNC_PREEMPT", "performance"}, {"REPLAY_ASYNC", "performance"}, {"MIRROR_COW", "performance"}, {"FREE_CORES", "performance"},
     {"TIMER_1MS", "performance"}, {"FAST_CORES", "performance"}, {"PIPE_WAIT", "performance"}, {"PIPE_SKIP", "performance"},
     {"LIB_PREBUILD", "performance"}, {"LIB_PREBUILD_THREADS", "performance"}, {"PIPE_PREBUILD", "performance"},
     {"PREWARM_XLATE", "performance"}, {"GPL", "performance"}, {"ASTC", "performance"}, {"MEMORY", "performance"},
@@ -102,6 +102,7 @@ static const CfgMeta metas[] = {
     {"GRASS_DISTANCE", "1", "1|1.5|2|3", LIVE},
     {"OBJECT_LOD_RANGE", "0", "0|10|20|30|50|75|100|150|200|300|500|750|1000", LIVE},
     {"OBJECT_LOD_MODE", "auto", "auto|fixed", LIVE},
+    {"CROWD_DISTANCE", "1", "1|1.5|2|3|4", LIVE},
     // HDR output (vk_hdr.c): on at start (the tonemap shader is swapped as shaders load); the nits apply at once
     {"HDR", "0", "0|1", RESTART}, {"HDR_PEAK_NITS", "1000", "400..10000", LIVE}, {"HDR_GAME_NITS", "203", "80..500", LIVE},
     {"HDR_UI_NITS", "203", "80..500", LIVE}, {"HDR_HUE", "50", "0..100", LIVE},
@@ -125,6 +126,7 @@ static const CfgMeta metas[] = {
     {"MENU_LANG", "", "en|ru", LIVE},
     // Advanced: scheduling
     {"ASYNC_PREEMPT", "1", "0|1|2", RESTART}, {"REPLAY_ASYNC", "0", "0|1", RESTART},
+    {"MIRROR_COW", "0", "0|1", RESTART},   // with REPLAY_ASYNC only (vk_memory.c copy-on-write snapshot)
     {"FREE_CORES", "0", "0|1", RESTART}, {"TIMER_1MS", "1", "0|1", RESTART}, {"FAST_CORES", "1", "0|1", RESTART},
     // shaders and pipelines
     {"PIPE_WAIT", "default", "default|draw", RESTART}, {"PIPE_SKIP", "fullscreen", "strict|any|fullscreen", RESTART},

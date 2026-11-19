@@ -228,6 +228,11 @@ void vk_mvprev_want(uint32_t index_mask);   // also keep these binding indices' 
 int vk_mvprev_find(int index, uint64_t addr, uint64_t size, uint64_t *prev, int *how);
 void vk_mvprev_frame(void);   // each present, beside vk_dlss_frame
 void vk_mem_mirror_begin(void);
+// XCX_REPLAY_ASYNC copy-on-write snapshot (vk_memory.c): the game thread protects the recently synced mirror blocks at
+// each submit (returns its number, 0 off); the replay names the submission it records and says when it is done.
+uint32_t vk_mem_cow_submit(void);
+void vk_mem_cow_use(uint32_t s);
+void vk_mem_cow_done(uint32_t s);
 int vk_mem_mirror_end(VkCommandBuffer cb, uint64_t fence);
 int vk_mem_mirror_pending(void);
 void vk_mem_mirror_prologue(VkCommandBuffer cb);

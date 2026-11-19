@@ -26,6 +26,9 @@
 # async_preempt = 1
 # Replay NVN submissions on their own thread, at most one frame behind the game (1 = on). Adds up to a frame of latency.
 # replay_async = 0
+# With replay_async = 1: the mirrored vertex and storage data of each frame is read as of the game's submit
+# (copy-on-write), so models do not stretch into spikes at the start of camera pans with large crowds (1 = on).
+# mirror_cow = 0
 # 1 lifts the virtual core gate: guest threads run without the console's limit of one thread per core.
 # free_cores = 0
 # Windows timer resolution of 1 ms for steadier frame pacing (0 = the Windows default).
@@ -150,6 +153,10 @@
 # take longer than the frame limit allows (the display's refresh rate without a limit), raising it again when there is
 # time to spare; fixed always uses object_lod_range as set. Changes take effect at once.
 # object_lod_mode = auto
+# How far from you the crowd people (the walkers in NLA) appear and fade out: 1 (the game's distances, about 25 m),
+# 1.5, 2, 3 or 4. Turn on replay_async = 1 before raising it: without it the extra people slow busy places a lot (in
+# the Commercial District at 4x, about 66 instead of 90 fps). Changes take effect at once.
+# crowd_distance = 1
 
 # HDR output: hdr = 1 sends the picture as HDR10 (needs HDR on in Windows, "Use HDR", or a Wayland compositor with
 # colour management; without it the picture stays SDR). The game's tonemap keeps highlights up to hdr_peak_nits (your
