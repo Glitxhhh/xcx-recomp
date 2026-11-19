@@ -319,6 +319,18 @@ site grasspool main 9bae30 91479509 91579509
 site grasspool main 9bae44 91479d08 91579d08
 site grasspool main 9bae70 52a00389 52a00b89
 
+# Crowd distance (runtime/crowd.c, XCX_CROWD_DISTANCE): the crowd people (the walkers of NLA and the other "mob"
+# groups, FLD_MobList<map>) spawn while the player is within a group's gene_dist (25 m in NLA) and fade out past its
+# del_dist_pc (also 25 m). The group readers (main+0x397cb0 and main+0x398494) store both, plus a developer offset,
+# as halfwords at +0x114 and +0x118 of the group. Each update, the spawn check (main+0x3982d8) and the fade check
+# (main+0x39773c) load the halfword, skip on 0 (no limit), convert it (ucvtf s0, w8) and compare it with the player's
+# distance at +0x190 (ldr s1, then fcmp). These sites, at that ldr, first multiply s0 by the float at page +0x120, so
+# a change applies to every group at its next check, the ones made before it included. x8 holds the halfword, which is
+# dead once converted: both checks' targets load x8 again or call first; s0 is not read after the fcmp.
+set crowd XCX_CROWD_PATCH 0
+site crowd main 3982e4 bd419261 @page:x8 bd412101 1e210800 bd419261
+site crowd main 397748 bd419261 @page:x8 bd412101 1e210800 bd419261
+
 # Voice language (runtime/voice_lang.c, XCX_VOICE_LANG, #58). The game keeps its voice choice as bit 1 of an option
 # word in the game data object (+0xa9f84) and hands it to the sound manager's setter (main+0x252c0, 1 Japanese,
 # 2 English) in three places. Making its options, at boot and again on starting a New Game (main+0x3473f0), it takes

@@ -307,6 +307,9 @@ void *rt_patch_page(void);                                 // the page the patch
 void rt_grass_init(void);                                  // after rt_patches_init: XCX_GRASS_DISTANCE (grass.c)
 void rt_grass_update(void);                                // at every present: applies a changed grass distance
 int rt_grass_available(void);                              // the grass patch set exists (the 2.0.0 update)
+void rt_crowd_init(void);                                  // after rt_patches_init: XCX_CROWD_DISTANCE (crowd.c)
+void rt_crowd_update(void);                                // at every present: applies a changed crowd distance
+int rt_crowd_available(void);                              // the crowd patch set exists (the 2.0.0 update)
 void frame_step_init(void);                                // after rt_patches_init: the real-time step's first value
 int frame_step_realtime(void);                             // the real-time step is on: presents ignore the interval
 int frame_rate_paced(void);                                // XCX: the game runs at the frame limit (frame_rate.c)

@@ -152,6 +152,13 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                            "per grass layer); higher values multiply them, so grass appears further away and its denser "
                            "layers fill in sooner. Applies at once.",
     [UI_MENU_GRASS_ORIGINAL] = "Original", [UI_MENU_GRASS_15] = "1.5x", [UI_MENU_GRASS_2] = "2x", [UI_MENU_GRASS_3] = "3x",
+    [UI_MENU_CROWD] = "Crowd distance",
+    [UI_MENU_CROWD_DESC] = "How far from you the crowd people (the walkers in NLA) appear and fade out. Original "
+                           "keeps the game's distances (about 25 m); higher values multiply them. Turn on GPU "
+                           "frame prep on its own thread (Advanced tab) before raising it: without it the extra "
+                           "people slow busy places a lot (in the Commercial District at 4x, about 66 instead of "
+                           "90 fps). Applies at once.",
+    [UI_MENU_CROWD_ORIGINAL] = "Original", [UI_MENU_CROWD_STEP] = "%sx",
     [UI_MENU_SHARPNESS] = "FSR sharpness",
     [UI_MENU_SHARPNESS_DESC] = "Sharpening after FSR scaling; 0 turns it off.",
     [UI_MENU_BRIGHTNESS] = "Brightness",
@@ -514,6 +521,12 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
                            "дальше, а плотные слои заполняются раньше. Применяется сразу.",
     [UI_MENU_GRASS_ORIGINAL] = "Как в игре", [UI_MENU_GRASS_15] = "1.5x", [UI_MENU_GRASS_2] = "2x",
     [UI_MENU_GRASS_3] = "3x",
+    [UI_MENU_CROWD] = "Дальность толпы",
+    [UI_MENU_CROWD_DESC] = "Как далеко от вас появляются и исчезают прохожие (в NLA). «Как в игре» — расстояния "
+                           "игры (около 25 м); большие значения умножают их. Сначала включите «Подготовка кадра "
+                           "для GPU в отдельном потоке» («Дополнительно»): без неё людные места сильно тормозят. "
+                           "Применяется сразу.",
+    [UI_MENU_CROWD_ORIGINAL] = "Как в игре", [UI_MENU_CROWD_STEP] = "%sx",
     [UI_MENU_SHARPNESS] = "Резкость FSR",
     [UI_MENU_SHARPNESS_DESC] = "Повышение резкости после масштабирования FSR; 0 выключает его.",
     [UI_MENU_BRIGHTNESS] = "Яркость",
