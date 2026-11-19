@@ -29,7 +29,7 @@ int vk_appendage_capture_source(uint64_t handle);
 // Inline atlas and icon_button sheet: the art choice of a signature (an art id per symbol, -1 keeps the native cell) and the
 // layout it applies to (INLINE_LAYOUT_*), and its source identity. Both copy scalars under the module lock; the texture lock may
 // be held.
-enum { INLINE_LAYOUT_FONT, INLINE_LAYOUT_SHEET, INLINE_LAYOUT_STICKS, INLINE_LAYOUT_HINT, INLINE_LAYOUT_SOUL, INLINE_LAYOUT_HOLD, INLINE_LAYOUTS };
+enum { INLINE_LAYOUT_FONT, INLINE_LAYOUT_SHEET, INLINE_LAYOUT_STICKS, INLINE_LAYOUT_MASK, INLINE_LAYOUT_HINT, INLINE_LAYOUT_SOUL, INLINE_LAYOUT_HOLD, INLINE_LAYOUTS };
 // The signature (1-based) the current style gives a single baked image recognized by content (INLINE_LAYOUT_HINT: the mini-map hint;
 // INLINE_LAYOUT_SOUL: the Soul Challenge button; INLINE_LAYOUT_HOLD: the field-action button while it is held), or 0 when it stays native (Original, nothing replaced).
 unsigned appendage_plain_signature(int layout);

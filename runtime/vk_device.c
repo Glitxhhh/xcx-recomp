@@ -66,6 +66,8 @@ static int instance_ext_present(const char *name) {
     return found;
 }
 
+static int g_surface_caps2;   // VK_KHR_get_surface_capabilities2 is enabled on the instance
+
 static int create_instance(void) {
     mesa_cache_beside_exe();
     const char *ext[24];
@@ -79,6 +81,14 @@ static int create_instance(void) {
     if (validate) ext[n_ext++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
     if (vk_hdr_wanted() && instance_ext_present(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME))   // HDR10 surface formats
         ext[n_ext++] = VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME;
+#ifdef _WIN32
+    // VK_EXT_full_screen_exclusive (create_device) needs it: Borderless and Fullscreen tell the driver whether it may
+    // take the monitor for the swapchain (gfx_present.c create_swapchain)
+    if (instance_ext_present(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME)) {
+        ext[n_ext++] = VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME;
+        g_surface_caps2 = 1;
+    }
+#endif
     vk_dlss_instance_exts(ext, &n_ext, 24);   // NGX's, with upscaler = dlss (vk_dlss.c)
     VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .pApplicationName = "XCX Recomp",
                              .pEngineName = "XCX Recomp", .apiVersion = VK_API_VERSION_1_3};
@@ -264,7 +274,7 @@ static int create_device(void) {
     vkEnumerateDeviceExtensionProperties(g_vk.phys, NULL, &ne, NULL);
     VkExtensionProperties *ep = calloc(ne ? ne : 1, sizeof *ep);
     vkEnumerateDeviceExtensionProperties(g_vk.phys, NULL, &ne, ep);
-    const char *ext[48];
+    const char *ext[49];
     uint32_t n_ext = 0;
     for (size_t i = 0; i < sizeof k_required_ext / sizeof *k_required_ext; i++) ext[n_ext++] = k_required_ext[i];
 
@@ -308,7 +318,13 @@ static int create_device(void) {
     }
     // GPU breadcrumbs for a lost device (vk_crumbs.c): AMD's drivers and RADV report it.
     if (has_ext(ep, ne, VK_AMD_BUFFER_MARKER_EXTENSION_NAME)) { g_vk.has_buffer_marker = 1; ext[n_ext++] = VK_AMD_BUFFER_MARKER_EXTENSION_NAME; }
-    vk_dlss_device_exts(ep, ne, ext, &n_ext, 46);   // NGX's (vk_dlss.c); the two slots after them stay for the library
+#ifdef _WIN32
+    if (g_surface_caps2 && has_ext(ep, ne, "VK_EXT_full_screen_exclusive")) {
+        g_vk.has_full_screen_exclusive = 1;
+        ext[n_ext++] = "VK_EXT_full_screen_exclusive";   // the name lives in vulkan_win32.h
+    }
+#endif
+    vk_dlss_device_exts(ep, ne, ext, &n_ext, 47);   // NGX's (vk_dlss.c); the two slots after them stay for the library
     // Graphics pipeline library: chained last so it can be dropped again when vk_caps_gpl declines it.
     void **gpl_link = NULL;
     if (has_ext(ep, ne, VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME) && has_ext(ep, ne, VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME)) {

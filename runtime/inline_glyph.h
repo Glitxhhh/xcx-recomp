@@ -71,6 +71,19 @@ static const InlineBox inline_sheet_boxes[24] = {
                              0xa1,0x3d,0x54,0xc0,0x5f,0xbb,0xa5,0x39,0xff,0xf7,0x2c,0x12,0xe4,0xe8,0x7d,0x38}
 static const InlineBox inline_stick_boxes[4] = {{16, 4, 55, 81}, {4, 16, 80, 56}, {16, 4, 55, 81}, {4, 16, 79, 56}};   // L-V, L-H, R-V, R-H
 
+// icon_button03: a white-mask copy of the 24 symbols (white glyph, letter cut out; the layout tints it) in a 368x150 BC7 image (NVN
+// format 77), 8 columns x 3 rows of 46x50 cells: the grid of the text atlas's standard cells. Its consumer is the field HUD's guide line at
+// the bottom right (`R + X  Follow Ball`, issue #102): two panes drawing cells 14 (R) and 5 (X) through the type-1 bind. The 24-record table
+// is a closed form, read from the live resource:
+//   {1, 1, 45/368, 149/450, (col*46+0.5)/368, (row*50+0.5)/150, u16 46, u16 50}.
+// The glyph boxes are those of the text atlas's standard cells (inline_font_boxes[0]), the same drawings on the same grid. Replaced cells
+// hold the style's tiles as they are, not masks: the layout's tint is near white, so the Colored faces keep their colors like every
+// other PlayStation, Xbox or Steam prompt (a masked tile lost them, issue #102).
+enum { MASK_W = 368, MASK_H = 150, MASK_RECORDS = 24 };
+#define MASK_RECORDS_SHA256 {0x35,0x06,0xa7,0x4e,0x37,0xff,0xf6,0x2c,0x49,0x38,0x15,0x39,0xdc,0x23,0xc5,0x7d,                              0xbd,0x4e,0xc8,0xa2,0x67,0x85,0x17,0x0d,0xde,0x5e,0x0e,0xf2,0x71,0xd8,0xff,0xc4}
+// SHA-256 of the first 128 bytes of the image's resource object (the same guard the resource probe in appendage_glyph.c uses).
+#define MASK_GUARD_SHA256 {0xcd,0x32,0x01,0x49,0x62,0x2f,0xbd,0xd1,0x60,0x89,0xee,0x10,0x88,0xc7,0x83,0x13,                            0xbb,0x78,0x5a,0xc5,0xd3,0xd7,0xdd,0x55,0x6f,0xcd,0xf9,0x72,0xaf,0xd6,0x53,0x4e}
+
 // Power, home and capture have no host input: their cells always stay native.
 static inline int inline_symbol_replaceable(unsigned symbol) { return symbol != 1 && symbol != 2 && symbol != 23; }
 

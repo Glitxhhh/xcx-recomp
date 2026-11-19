@@ -60,7 +60,7 @@ extern "C" void menu_sdl_event(const SDL_Event *e) {
             menu_toggle();
             return;
         }
-        if (e->key.scancode == SDL_SCANCODE_F10) {
+        if (e->key.scancode == SDL_SCANCODE_F10 || (e->key.scancode == SDL_SCANCODE_F2 && input_overlay_f2())) {
             if (!e->key.repeat) menu_perf_cycle();
             return;
         }

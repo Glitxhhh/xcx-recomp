@@ -654,6 +654,14 @@ void vk_guest_written(uint64_t addr, uint64_t size) {
     plat_mutex_unlock(&gen_lock);
 }
 
+// A new generation: every page stamped before the call has an older one, every page a later query stamps a newer one.
+uint32_t vk_mem_gen_mark(void) {
+    plat_mutex_lock(&gen_lock);
+    uint32_t g = ++gen_now;
+    plat_mutex_unlock(&gen_lock);
+    return g;
+}
+
 int vk_mem_changed(uint64_t addr, uint64_t size, uint32_t since, uint32_t *now) {
     if (!size) { *now = since; return 0; }
     uint64_t lo = addr & ~0xfffull, hi = (addr + size + 0xfff) & ~0xfffull;

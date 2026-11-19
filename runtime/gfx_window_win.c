@@ -1,6 +1,6 @@
 // The Win32 back end of the window (gfx_wsys.h): the window and its message loop on a thread of their own, F11
-// fullscreen, the settings XCX_WINDOW_SIZE and XCX_FULLSCREEN, the monitor's refresh rate, focus, the screen saver, the
-// Vulkan surface.
+// fullscreen, the settings XCX_WINDOW_SIZE and XCX_FULLSCREEN (window, borderless or fullscreen), the monitor's refresh
+// rate, focus, the screen saver, the Vulkan surface.
 // The swapchain and the present are gfx_present.c's. The in-game menu's keyboard and mouse come from the window
 // procedure (ui/menu_win.cpp), and so do the game's (input_win.c).
 #include <stdio.h>
@@ -27,6 +27,8 @@ static PlatEvent g_wnd_ready;   // manual-reset: the window thread made the wind
 static int g_wnd_failed;
 static int g_background;                   // XCX_BACKGROUND_WINDOW: the window stays behind the user's windows
 static int g_fs_pending;                   // window thread: XCX_FULLSCREEN waits for the first activation
+static volatile int32_t g_mode;            // the GFX_ mode the window is in (the window thread writes, presents read)
+static int g_last_full = GFX_BORDERLESS;   // window thread: the mode F11 goes to from a window
 
 HWND gfx_window_handle(void) { return g_hwnd; }
 
@@ -45,30 +47,54 @@ int gfx_window_vk_presentable(VkInstance inst, VkPhysicalDevice pd, uint32_t fam
 // ---- window thread
 #define WND_STYLE WS_OVERLAPPEDWINDOW
 #define WM_APP_SETTINGS (WM_APP + 1)
-#define WM_APP_FULLSCREEN (WM_APP + 2)   // the fullscreen setting, held back until the window is first activated
+#define WM_APP_FULLSCREEN (WM_APP + 2)   // a full mode setting, held back until the window is first activated
 #define WM_APP_PROBE_DISPLAY (WM_APP + 3)   // --probe-window: the window thread's own execution state request
 
 static WINDOWPLACEMENT g_saved_place = {sizeof g_saved_place};   // the window behind fullscreen (window thread)
 
-static int is_fullscreen(HWND h) { return !(GetWindowLongW(h, GWL_STYLE) & WS_OVERLAPPEDWINDOW); }
+// The full modes drop the frame's caption, borders and maximise box. They keep WS_SYSMENU and WS_MINIMIZEBOX, which
+// draw nothing without a caption, so a click on the taskbar button and Win+Down still minimise the game.
+#define FRAME_BITS (WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZEBOX)
+static int is_fullscreen(HWND h) { return !(GetWindowLongW(h, GWL_STYLE) & WS_CAPTION); }
 
-#define cfg_fullscreen gfx_cfg_fullscreen
 #define cfg_window_size gfx_cfg_window_size
 
-// F11: borderless window over the whole monitor, and back to the saved window. The swapchain follows through WM_SIZE.
-// Not Alt+Enter: Enter is the Plus button (input_win.c). A background window (test runs) keeps its place behind the
-// user's windows and takes no focus.
-static void toggle_fullscreen(HWND h) {
+// The swapchain's VK_EXT_full_screen_exclusive request for the mode the window is in. Borderless disallows exclusive
+// fullscreen, so the desktop keeps composing the window and the taskbar, Alt+Tab and notifications come up over it.
+// Fullscreen allows it: the driver may hand the monitor to the swapchain, at the desktop's mode. A window leaves the
+// choice to the driver, as before the modes existed.
+static VkSurfaceFullScreenExclusiveInfoEXT g_fse = {.sType = VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT};
+
+const void *wsys_swapchain_next(void) {
+    VkCtx *c = vk_ctx();
+    int mode = plat_cas32(&g_mode, 0, 0);
+    if (!c || !c->has_full_screen_exclusive || mode == GFX_WINDOWED) return NULL;
+    g_fse.fullScreenExclusive =
+        mode == GFX_BORDERLESS ? VK_FULL_SCREEN_EXCLUSIVE_DISALLOWED_EXT : VK_FULL_SCREEN_EXCLUSIVE_ALLOWED_EXT;
+    return &g_fse;
+}
+
+int gfx_window_mode(void) { return plat_cas32(&g_mode, 0, 0); }
+
+// Window thread: the window takes mode. Borderless and Fullscreen are a frameless window over the whole monitor, Window
+// the saved window. Between the two full modes only the swapchain changes (the dirty mark); a size change reaches it
+// through WM_SIZE. A background window (test runs) keeps its place behind the user's windows and takes no focus.
+static void set_mode(HWND h, int mode) {
     LONG style = GetWindowLongW(h, GWL_STYLE);
-    if (style & WS_OVERLAPPEDWINDOW) {
+    int was = gfx_window_mode();
+    input_cursor_suspend(1);
+    if (mode != GFX_WINDOWED && !is_fullscreen(h)) {
         MONITORINFO mi = {sizeof mi};
-        if (!GetWindowPlacement(h, &g_saved_place) || !GetMonitorInfoW(MonitorFromWindow(h, MONITOR_DEFAULTTOPRIMARY), &mi))
+        if (!GetWindowPlacement(h, &g_saved_place) ||
+            !GetMonitorInfoW(MonitorFromWindow(h, MONITOR_DEFAULTTOPRIMARY), &mi)) {
+            input_cursor_suspend(0);
             return;
-        SetWindowLongW(h, GWL_STYLE, (style & ~WS_OVERLAPPEDWINDOW) | WS_POPUP);
+        }
+        SetWindowLongW(h, GWL_STYLE, (style & ~FRAME_BITS) | WS_POPUP);
         SetWindowPos(h, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
                      mi.rcMonitor.bottom - mi.rcMonitor.top,
                      SWP_NOOWNERZORDER | SWP_FRAMECHANGED | (g_background ? SWP_NOZORDER | SWP_NOACTIVATE : 0));
-    } else {
+    } else if (mode == GFX_WINDOWED && is_fullscreen(h)) {
         SetWindowLongW(h, GWL_STYLE, (style & ~WS_POPUP) | WND_STYLE);
         if (g_background) g_saved_place.showCmd = SW_SHOWNOACTIVATE;
         SetWindowPlacement(h, &g_saved_place);
@@ -76,22 +102,31 @@ static void toggle_fullscreen(HWND h) {
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED |
                          (g_background ? SWP_NOACTIVATE : 0));
     }
+    input_cursor_suspend(0);
+    plat_xchg32(&g_mode, mode);
+    if (mode != GFX_WINDOWED) g_last_full = mode;
+    if (mode != was) {
+        gfx_window_mark_dirty();   // the next swapchain carries the mode's request, also when the size stayed
+        rt_log("gfx: window mode %s",
+               mode == GFX_BORDERLESS ? "borderless" : mode == GFX_FULLSCREEN ? "fullscreen" : "window");
+    }
 }
 
-// The window size and fullscreen state last taken from the settings (window thread). apply_settings acts on a change of
-// either value only, so a window resized by hand keeps its size when another setting changes.
+// The window size and mode last taken from the settings (window thread). apply_settings acts on a change of either
+// value only, so a window resized by hand keeps its size when another setting changes.
 static char g_applied_size[32];
-static int g_applied_fs;
+static int g_applied_mode;
 
 static void note_applied(void) {
     snprintf(g_applied_size, sizeof g_applied_size, "%s", cfg_value("XCX_WINDOW_SIZE"));
-    g_applied_fs = cfg_fullscreen();
+    g_applied_mode = gfx_cfg_window_mode();
 }
 
-// Window thread: the window takes the size and fullscreen state of the settings when they changed. In fullscreen the
-// size goes into the placement restored when fullscreen ends.
+// Window thread: the window takes the size and mode of the settings when they changed. In a full mode the size goes
+// into the placement restored when the window comes back.
 static void apply_settings(HWND h) {
-    int size_changed = strcmp(cfg_value("XCX_WINDOW_SIZE"), g_applied_size) != 0, fs = cfg_fullscreen(), fs_changed = fs != g_applied_fs;
+    int size_changed = strcmp(cfg_value("XCX_WINDOW_SIZE"), g_applied_size) != 0, mode = gfx_cfg_window_mode(),
+        mode_changed = mode != g_applied_mode;
     note_applied();
     if (size_changed) {
         int cw, ch;
@@ -111,11 +146,7 @@ static void apply_settings(HWND h) {
             }
         }
     }
-    if (fs_changed && fs != is_fullscreen(h)) {
-        input_cursor_suspend(1);
-        toggle_fullscreen(h);
-        input_cursor_suspend(0);
-    }
+    if (mode_changed && mode != gfx_window_mode()) set_mode(h, mode);
 }
 
 void gfx_window_apply_settings(void) {
@@ -191,11 +222,12 @@ static LRESULT CALLBACK wnd_proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     if (menu_window_msg(h, m, w, l, &input_res)) return input_res;
     switch (m) {
     case WM_KEYDOWN:
+        // F11: a window goes to the full mode it was last in (Borderless at first), a full mode back to the window.
+        // Not Alt+Enter: Enter is the Plus button (input_win.c).
         if (w == VK_F11 && !(l & (1 << 30))) {   // bit 30: auto-repeat
-            input_cursor_suspend(1);
-            toggle_fullscreen(h);
-            input_cursor_suspend(0);
-            cfg_set("XCX_FULLSCREEN", is_fullscreen(h) ? "1" : "0");   // the menu shows it; the next start keeps it
+            set_mode(h, gfx_window_mode() == GFX_WINDOWED ? g_last_full : GFX_WINDOWED);
+            // the menu shows it; the next start keeps it
+            cfg_set("XCX_FULLSCREEN", gfx_window_mode_value(gfx_window_mode()));
             cfg_save();
             note_applied();   // what cfg_get reads now (the environment may still override it)
         }
@@ -209,11 +241,7 @@ static LRESULT CALLBACK wnd_proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         return s;
     }
     case WM_APP_FULLSCREEN:
-        if (cfg_fullscreen() && !is_fullscreen(h)) {
-            input_cursor_suspend(1);
-            toggle_fullscreen(h);
-            input_cursor_suspend(0);
-        }
+        if (gfx_cfg_window_mode() != GFX_WINDOWED && gfx_window_mode() == GFX_WINDOWED) set_mode(h, gfx_cfg_window_mode());
         return 0;
     case WM_SIZE:
         if (w != SIZE_MINIMIZED) gfx_window_mark_dirty();
@@ -285,7 +313,8 @@ static void window_main(void *arg) {
         if (background) {
             SetWindowPos(g_hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
         } else {
-            g_fs_pending = cfg_fullscreen();   // before the activation below posts its first WM_ACTIVATEAPP
+            g_fs_pending = gfx_cfg_window_mode() != GFX_WINDOWED;   // before the first WM_ACTIVATEAPP below
+            if (g_fs_pending) g_last_full = gfx_cfg_window_mode();
             // SetWindowPos, not ShowWindow: the first ShowWindow of a process may take the show command of its
             // STARTUPINFO instead, and a console program's is the console's (minimized for a shortcut set so).
             SetWindowPos(g_hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);

@@ -80,6 +80,15 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_CHEATS_UNSUPPORTED] = "Changes the game's code in a way the setup cannot build into the recompiled game yet.",
     [UI_CHEATS_NOTE_SETUP] = "needs the setup again",
     [UI_CHEATS_BUTTONS] = "\n\nActs only while its buttons are held (button mask %X).",
+    [UI_CHEATS_LIST] = "Show",
+    [UI_CHEATS_LIST_DESC] = "Switches between the cheats that come with the recomp and the ones from cheat files in the "
+                            "mods folder. Cheats of both lists can be on at the same time.",
+    [UI_CHEATS_LIST_BUILTIN] = "Built-in cheats (%d)", [UI_CHEATS_LIST_FILES] = "Cheat files (%d)",
+    [UI_CHEATS_WARNING_MARK] = "(warning)",
+    [UI_CHEATS_CHEST_WARN] = "\n\nWarning: use it only in free play, against enemies whose chest holds nothing a story "
+                             "or side mission needs. During a mission it can turn the chest that holds the mission's "
+                             "key item (a door key, say) into another one, and the mission then cannot be finished on "
+                             "that save.",
     [UI_SWKBD_GRID_HINT] = "Controller: %s selects a key, %s confirms, %s cancels. D-pad or left stick moves. %s: Backspace. %s: Delete. Hold %s: Shift. %s: Caps Lock. %s / %s: text cursor.",
     [UI_SWKBD_SHIFT] = "Caps Lock", [UI_SWKBD_MOMENTARY_SHIFT] = "Shift",
     [UI_SWKBD_PALETTE] = "Controller keyboard: Latin letters, digits and space. You can also type with your keyboard.",
@@ -90,12 +99,18 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_TAB_SCREEN] = "Screen", [UI_MENU_TAB_GAME] = "Game", [UI_MENU_TAB_SOUND] = "Sound",
     [UI_MENU_TAB_CONTROLS] = "Controls", [UI_MENU_TAB_MENU] = "Menu", [UI_MENU_TAB_ADVANCED] = "Advanced",
     [UI_MENU_CONTINUE] = "Continue", [UI_MENU_QUIT] = "Quit game",
+    [UI_QUIT_CONFIRM] = "Quit the game? Progress since the last save is lost.", [UI_QUIT_YES] = "Yes", [UI_QUIT_NO] = "No",
     [UI_MENU_ON] = "On", [UI_MENU_OFF] = "Off", [UI_MENU_AUTO] = "Automatic", [UI_MENU_DEFAULT_MARK] = "default",
     [UI_MENU_AFTER_RESTART] = "after restart", [UI_MENU_SET_BY_ENV] = "set by environment variable",
     [UI_MENU_SAVE_FAILED] = "could not save settings",
     [UI_MENU_VERSION] = "XCX Recomp %s, game %s",
 
-    [UI_MENU_FULLSCREEN] = "Fullscreen", [UI_MENU_FULLSCREEN_DESC] = "Fills the screen with the game; F11 toggles it.",
+    [UI_MENU_FULLSCREEN] = "Display mode",
+    [UI_MENU_FULLSCREEN_DESC] = "Window: a window of the size below. Borderless: a window without a frame over the "
+                                "whole monitor; the taskbar and Alt+Tab work over it. Fullscreen: the game may take the "
+                                "monitor for itself, at the desktop's resolution. F11 switches between the window and "
+                                "the last full mode.",
+    [UI_MENU_MODE_WINDOW] = "Window", [UI_MENU_MODE_BORDERLESS] = "Borderless", [UI_MENU_MODE_FULLSCREEN] = "Fullscreen",
     [UI_MENU_WINDOW_SIZE] = "Window size", [UI_MENU_WINDOW_SIZE_DESC] = "Size of the game window when not fullscreen.",
     [UI_MENU_WINDOW_SIZE_CUSTOM] = "Custom",
     [UI_MENU_PRESENT] = "Presentation", [UI_MENU_PRESENT_DESC] = "How finished frames reach the screen.",
@@ -105,7 +120,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_GPU_AUTO] = "Automatic",
     [UI_MENU_PERF_OVERLAY] = "Performance overlay",
     [UI_MENU_PERF_OVERLAY_DESC] = "Frame rate in the top right corner. Full adds frame times with a graph, CPU, GPU and "
-                                  "memory load, temperatures and the render thread's waits. F10 cycles the modes.",
+                                  "memory load, temperatures and the render thread's waits. F2 or F10 cycles the modes.",
     [UI_MENU_PERF_OFF] = "Off", [UI_MENU_PERF_FPS] = "FPS", [UI_MENU_PERF_FULL] = "Full",
     // printf format of the overlay line in FPS mode: the frame rate
     [UI_PERF_LINE_FPS] = "%.0f fps",
@@ -182,8 +197,15 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_CLOTH_REALTIME_DESC] = "Steps cloth and hair by real time as well.",
     [UI_MENU_HIGHFPS_FIX] = "High frame rate physics fix",
     [UI_MENU_HIGHFPS_FIX_DESC] = "Corrects physics that misbehave above 30 frames per second.",
-    [UI_MENU_GAME_LANG] = "Game language", [UI_MENU_GAME_LANG_DESC] = "Language of the game's text and voices.",
+    [UI_MENU_GAME_LANG] = "Game language",
+    [UI_MENU_GAME_LANG_DESC] = "Language of the game's text, and of its voices unless Voice language picks them.",
     [UI_MENU_GAME_LANG_AUTO] = "Automatic",
+    [UI_MENU_VOICE_LANG] = "Voice language",
+    [UI_MENU_VOICE_LANG_DESC] = "Japanese or English voices with matching lip sync, whatever the text language. "
+                                "Automatic leaves it to the game: Japanese voices with Japanese or Chinese text, "
+                                "English otherwise. A change takes effect when the game next applies its options, "
+                                "as on loading a save.",
+    [UI_MENU_VOICE_JA] = "Japanese", [UI_MENU_VOICE_EN] = "English",
     [UI_MENU_OPERATION_MODE] = "Console mode",
     [UI_MENU_OPERATION_MODE_DESC] = "Whether the game thinks it runs docked or handheld.",
     [UI_MENU_MODE_DOCKED] = "Docked", [UI_MENU_MODE_HANDHELD] = "Handheld",
@@ -353,6 +375,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_OV_TEMP] = "Temperature", [UI_MENU_OV_POWER] = "Power", [UI_MENU_OV_CLOCK] = "Clock",
     [UI_MENU_OV_NONE] = "-",
     [UI_MENU_OV_REPLAY] = "GPU frame prep", [UI_MENU_OV_GPU_TIME] = "GPU busy per frame",
+    [UI_MENU_OV_PRESENT_TIME] = "GPU present per frame", [UI_MENU_OV_GPU_GAME] = "GPU use by the game",
     [UI_MENU_OV_PIPE_WAIT] = "Pipeline waits",
     [UI_MENU_OV_SHADER_WAIT] = "Shader waits", [UI_MENU_OV_TEX_UPLOADS] = "Texture uploads",
     [UI_MENU_OV_FMT_PCT] = "%.0f%%", [UI_MENU_OV_FMT_TEMP] = "%.0f °C", [UI_MENU_OV_FMT_POWER] = "%.0f W",
@@ -421,6 +444,15 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_CHEATS_UNSUPPORTED] = "Меняет код игры так, что установщик пока не может встроить это в рекомпилированную игру.",
     [UI_CHEATS_NOTE_SETUP] = "нужен повторный запуск установщика",
     [UI_CHEATS_BUTTONS] = "\n\nДействует, только пока зажаты его кнопки (маска кнопок %X).",
+    [UI_CHEATS_LIST] = "Показать",
+    [UI_CHEATS_LIST_DESC] = "Переключает между читами, которые идут с рекомпом, и читами из файлов в папке модов. Читы "
+                            "из обоих списков можно включать одновременно.",
+    [UI_CHEATS_LIST_BUILTIN] = "Встроенные читы (%d)", [UI_CHEATS_LIST_FILES] = "Файлы читов (%d)",
+    [UI_CHEATS_WARNING_MARK] = "(осторожно)",
+    [UI_CHEATS_CHEST_WARN] = "\n\nОсторожно: включайте его только в свободной игре и только против врагов, в сундуке "
+                             "которых нет ничего нужного для сюжетной или побочной миссии. Во время миссии он может "
+                             "заменить сундук с ключевым предметом миссии (например, ключом от двери) другим, и тогда "
+                             "миссию на этом сохранении уже не пройти.",
     [UI_SWKBD_GRID_HINT] = "Контроллер: %s — выбрать клавишу, %s — подтвердить, %s — отменить. Крестовина или левый стик — перемещение. %s — назад удалить. %s — удалить вперёд. Удерживать %s — Shift. %s — Caps Lock. %s / %s — курсор.",
     [UI_SWKBD_SHIFT] = "Caps Lock", [UI_SWKBD_MOMENTARY_SHIFT] = "Shift",
     [UI_SWKBD_PALETTE] = "Клавиатура контроллера: латинские буквы, цифры и пробел. Можно вводить текст и с обычной клавиатуры.",
@@ -431,13 +463,20 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_TAB_SCREEN] = "Экран", [UI_MENU_TAB_GAME] = "Игра", [UI_MENU_TAB_SOUND] = "Звук",
     [UI_MENU_TAB_CONTROLS] = "Управление", [UI_MENU_TAB_MENU] = "Меню", [UI_MENU_TAB_ADVANCED] = "Дополнительно",
     [UI_MENU_CONTINUE] = "Продолжить", [UI_MENU_QUIT] = "Выйти из игры",
+    [UI_QUIT_CONFIRM] = "Выйти из игры? Прогресс после последнего сохранения будет потерян.", [UI_QUIT_YES] = "Да",
+    [UI_QUIT_NO] = "Нет",
     [UI_MENU_ON] = "Вкл.", [UI_MENU_OFF] = "Выкл.", [UI_MENU_AUTO] = "Автоматически",
     [UI_MENU_DEFAULT_MARK] = "по умолчанию",
     [UI_MENU_AFTER_RESTART] = "после перезапуска", [UI_MENU_SET_BY_ENV] = "задано переменной окружения",
     [UI_MENU_SAVE_FAILED] = "не удалось сохранить настройки",
     [UI_MENU_VERSION] = "XCX Recomp %s, игра %s",
 
-    [UI_MENU_FULLSCREEN] = "Полный экран", [UI_MENU_FULLSCREEN_DESC] = "Игра на весь экран; F11 переключает режим.",
+    [UI_MENU_FULLSCREEN] = "Режим экрана",
+    [UI_MENU_FULLSCREEN_DESC] = "Окно: окно размера ниже. Без рамки: окно без рамки на весь монитор; панель задач и "
+                                "Alt+Tab работают поверх него. Полный экран: игра может занять монитор целиком, в "
+                                "разрешении рабочего стола. F11 переключает между окном и последним полноэкранным "
+                                "режимом.",
+    [UI_MENU_MODE_WINDOW] = "Окно", [UI_MENU_MODE_BORDERLESS] = "Без рамки", [UI_MENU_MODE_FULLSCREEN] = "Полный экран",
     [UI_MENU_WINDOW_SIZE] = "Размер окна", [UI_MENU_WINDOW_SIZE_DESC] = "Размер окна игры вне полноэкранного режима.",
     [UI_MENU_WINDOW_SIZE_CUSTOM] = "Другой",
     [UI_MENU_PRESENT] = "Вывод кадров", [UI_MENU_PRESENT_DESC] = "Как готовые кадры попадают на экран.",
@@ -448,7 +487,7 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_GPU_AUTO] = "Автоматически",
     [UI_MENU_PERF_OVERLAY] = "Индикатор производительности",
     [UI_MENU_PERF_OVERLAY_DESC] = "Частота кадров в правом верхнем углу. «Полный» добавляет время кадров с графиком, "
-                                  "загрузку ЦП, GPU и памяти, температуры и ожидания потока отрисовки. F10 переключает "
+                                  "загрузку ЦП, GPU и памяти, температуры и ожидания потока отрисовки. F2 или F10 переключают "
                                   "режимы.",
     [UI_MENU_PERF_OFF] = "Выкл.", [UI_MENU_PERF_FPS] = "FPS", [UI_MENU_PERF_FULL] = "Полный",
     [UI_PERF_LINE_FPS] = "%.0f к/с",
@@ -523,8 +562,15 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_CLOTH_REALTIME_DESC] = "Ткань и волосы тоже идут по реальному времени.",
     [UI_MENU_HIGHFPS_FIX] = "Исправление физики на высоком FPS",
     [UI_MENU_HIGHFPS_FIX_DESC] = "Исправляет физику, которая ломается при частоте выше 30 кадров в секунду.",
-    [UI_MENU_GAME_LANG] = "Язык игры", [UI_MENU_GAME_LANG_DESC] = "Язык текста и озвучки игры.",
+    [UI_MENU_GAME_LANG] = "Язык игры",
+    [UI_MENU_GAME_LANG_DESC] = "Язык текста игры, а также озвучки, если её не задаёт «Язык озвучки».",
     [UI_MENU_GAME_LANG_AUTO] = "Автоматически",
+    [UI_MENU_VOICE_LANG] = "Язык озвучки",
+    [UI_MENU_VOICE_LANG_DESC] = "Японская или английская озвучка с подходящей синхронизацией губ, при любом языке "
+                                "текста. «Автоматически» оставляет выбор игре: японская озвучка при японском или "
+                                "китайском тексте, иначе английская. Изменение вступает в силу, когда игра снова "
+                                "применяет настройки, например при загрузке сохранения.",
+    [UI_MENU_VOICE_JA] = "Японский", [UI_MENU_VOICE_EN] = "Английский",
     [UI_MENU_OPERATION_MODE] = "Режим консоли",
     [UI_MENU_OPERATION_MODE_DESC] = "Игра считает, что консоль в док-станции или в портативном режиме.",
     [UI_MENU_MODE_DOCKED] = "В док-станции", [UI_MENU_MODE_HANDHELD] = "Портативный",
@@ -693,6 +739,8 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_OV_TEMP] = "Температура", [UI_MENU_OV_POWER] = "Мощность", [UI_MENU_OV_CLOCK] = "Частота",
     [UI_MENU_OV_NONE] = "-",
     [UI_MENU_OV_REPLAY] = "Подготовка кадра для GPU", [UI_MENU_OV_GPU_TIME] = "Занятость GPU за кадр",
+    [UI_MENU_OV_PRESENT_TIME] = "Вывод на GPU за кадр",
+    [UI_MENU_OV_GPU_GAME] = "Загрузка GPU игрой",
     [UI_MENU_OV_PIPE_WAIT] = "Ожидания конвейеров",
     [UI_MENU_OV_SHADER_WAIT] = "Ожидания шейдеров", [UI_MENU_OV_TEX_UPLOADS] = "Загрузки текстур",
     [UI_MENU_OV_FMT_PCT] = "%.0f%%", [UI_MENU_OV_FMT_TEMP] = "%.0f °C", [UI_MENU_OV_FMT_POWER] = "%.0f Вт",

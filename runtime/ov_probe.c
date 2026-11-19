@@ -265,7 +265,8 @@ static void probe_oe(void) {
         {NULL, "en-US", "en-US"}, {NULL, "be-BY", "en-US"}, {NULL, "xx", "en-US"},     {NULL, "ja-JP", "ja"},
         {NULL, "fr-CA", "fr-CA"}, {NULL, "es-MX", "es-419"}, {NULL, "es_ES", "es"},     {NULL, "zh-Hant-TW", "zh-Hant"},
         {NULL, "zh-CN", "zh-Hans"}, {NULL, "en-GB", "en-GB"}, {NULL, "ru", "en-US"},    {"ja", "fr-FR", "ja"},
-        {"en-US", NULL, "en-US"}, {"ru", NULL, "en-US"}, {NULL, "ru-RU", "en-US"}, {NULL, "nl-NL", "nl"}};   // ru: issue #58
+        {"en-US", NULL, "en-US"}, {"ru", NULL, "en-US"}, {NULL, "ru-RU", "en-US"}, {NULL, "nl-NL", "nl"},
+        {"zh-CN", NULL, "zh-Hans"}, {"zh-TW", NULL, "zh-Hant"}, {"zh-Hans", NULL, "zh-Hans"}};   // ru: #58, zh: #172
     int bad = 0;
     for (size_t i = 0; i < sizeof cases / sizeof *cases; i++) {
         set_env("XCX_LANG", cases[i].lang);
@@ -804,6 +805,42 @@ static void probe_menu_gate(void) {
     printf("menu gate: Minus alone passes, Minus+Plus is consumed and toggles once per hold, an open menu gives a neutral pad\n");
 }
 
+// ---- the Quit Game prompt's gate: L+R+ZL+ZR held for a second fires once, the game sees none of the four meanwhile
+static void probe_quit_gate(void) {
+    const uint64_t l = 1ull << 6, r = 1ull << 7, zl = 1ull << 8, zr = 1ull << 9, a = 1ull, all = l | r | zl | zr;
+    const uint64_t s = 1000000000ull;
+    InputQuitHold q = {0};
+    uint64_t b = l | r | zl | a;   // three of them: they reach the game
+    CHECK(!input_quit_gate(&q, 0, &b) && b == (l | r | zl | a), "three shoulder buttons changed: buttons %#llx",
+          (unsigned long long)b);
+    b = all | a;                   // the fourth goes down: consumed, nothing fires yet
+    CHECK(!input_quit_gate(&q, s / 10, &b) && b == a, "all four down: buttons %#llx", (unsigned long long)b);
+    b = all;
+    CHECK(!input_quit_gate(&q, s / 10 + s - 1, &b) && b == 0, "fired before a second");
+    b = all;
+    CHECK(input_quit_gate(&q, s / 10 + s, &b) == 1 && b == 0, "a second's hold did not fire");
+    b = all;
+    CHECK(!input_quit_gate(&q, 5 * s, &b) && b == 0, "the same hold fired twice");
+    b = l;                         // one left of the four: still consumed until all are up
+    CHECK(!input_quit_gate(&q, 6 * s, &b) && b == 0, "L leaked while the latch held");
+    b = 0;
+    input_quit_gate(&q, 6 * s, &b);
+    b = all;                       // a short hold, one let go, then all four again without a release: no fire
+    input_quit_gate(&q, 7 * s, &b);
+    b = all & ~zr;
+    input_quit_gate(&q, 7 * s + s / 2, &b);
+    b = all;
+    CHECK(!input_quit_gate(&q, 9 * s, &b), "a broken hold fired");
+    b = 0;
+    input_quit_gate(&q, 9 * s, &b);
+    b = all;
+    input_quit_gate(&q, 10 * s, &b);
+    b = all;
+    CHECK(input_quit_gate(&q, 11 * s, &b) == 1, "a new hold after the release did not fire");
+    printf("quit gate: L+R+ZL+ZR held a second fires once, the four never reach the game while latched, a broken hold "
+           "waits for a new press\n");
+}
+
 // ---- shared fonts: the extracted files when present (the missing case is a fatal child)
 static void probe_fonts(void) {
     char dir[PLAT_PATH_MAX], path[PLAT_PATH_MAX + 32];
@@ -874,6 +911,7 @@ static void probe_main(Cpu *c) {
     probe_swkbd();
     probe_menu_text();
     probe_menu_gate();
+    probe_quit_gate();
     probe_fonts();
 }
 

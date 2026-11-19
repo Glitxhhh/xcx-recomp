@@ -276,6 +276,32 @@ class EventsTest(unittest.TestCase):
         self.assertEqual(sorted(i for i in used if i not in catalog), [])
 
 
+class KeysTest(unittest.TestCase):
+    """#158: a title.keys picked for prod.keys is named as such. The keys here are made up."""
+
+    def inputs_error(self, text):
+        from installer import steps
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            for name in ('base.nsp', 'update.nsp'):
+                (d / name).write_bytes(b'')
+            (d / 'keys.txt').write_text(text, encoding='utf-8')
+            options = SimpleNamespace(base=d / 'base.nsp', update=d / 'update.nsp', keys=d / 'keys.txt')
+            with self.assertRaises(runner.InstallError) as e:
+                steps.Check().inputs(SimpleNamespace(options=options))
+            return e.exception.args[0]
+
+    def test_title_keys_is_named(self):
+        title = ''.join(f'{i:032x} = {i * 7:032X}\n' for i in range(1, 4))
+        self.assertEqual(self.inputs_error(title), 'check.keys_title_keys')
+        self.assertEqual(self.inputs_error('\ufeff' + title.replace('\n', '\r\n')), 'check.keys_title_keys')
+
+    def test_other_keys_without_header_key(self):
+        self.assertEqual(self.inputs_error('key_area_key_application_00 = ' + '0' * 32 + '\n'),
+                         'check.keys_no_header_key')
+        self.assertEqual(self.inputs_error(''), 'check.keys_no_header_key')
+
+
 class CliTest(unittest.TestCase):
     def test_auto_language_keeps_the_one_in_the_ini(self):
         from installer.cli import auto_language
@@ -299,11 +325,157 @@ class CliTest(unittest.TestCase):
         self.assertNotIn('ru', ini.PLAYABLE)
         self.assertEqual(ini.playable('nl'), 'nl')
 
+    def test_old_chinese_codes_become_the_ones_the_game_knows(self):
+        # issue #172: the game stops before the title with zh-CN or zh-TW
+        from installer import ini
+        from installer.cli import auto_language
+        self.assertEqual(ini.playable('zh-CN'), 'zh-Hans')
+        self.assertEqual(ini.playable('zh-TW'), 'zh-Hant')
+        self.assertEqual(ini.playable('zh-Hans'), 'zh-Hans')
+        self.assertNotIn('zh-CN', ini.PLAYABLE)
+        self.assertNotIn('zh-TW', ini.PLAYABLE)
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'xcx.ini').write_text('[language]\nlang = zh-CN\n', encoding='utf-8')
+            self.assertEqual(auto_language(Path(d), None), 'zh-Hans')
+
     def test_auto_language_on_a_fresh_folder_is_a_game_language(self):
         from installer import ini
         from installer.cli import auto_language
         with tempfile.TemporaryDirectory() as d:
             self.assertIn(auto_language(Path(d), None), ini.LANGUAGES)
+
+
+class RecentTest(unittest.TestCase):
+    """installer/recent.py: the paths of the last install, filled in by the next setup window (issue #155)."""
+
+    def setUp(self):
+        import os
+        import shutil
+        from unittest import mock
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.file = self.tmp / 'cfg' / 'setup.json'
+        patch = mock.patch.dict(os.environ, {'XCX_SETUP_RECENT': str(self.file)})
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.dest = self.tmp / 'XCX'
+        self.dest.mkdir()
+        self.src = {}
+        for name in ('base', 'update', 'dlc', 'keys'):
+            f = self.tmp / f'{name}.bin'
+            f.write_text('x', encoding='utf-8')
+            self.src[name] = str(f)
+
+    def installed(self, paths=None):
+        data = state.empty('test')
+        if paths is not None:
+            data['paths'] = paths
+        state.save(self.dest, data)
+
+    def test_default_location_is_per_user(self):
+        import os
+        from unittest import mock
+        from installer import recent
+        with mock.patch.dict(os.environ, {'XCX_SETUP_RECENT': '', 'APPDATA': 'C:/Users/p/AppData/Roaming',
+                                          'XDG_CONFIG_HOME': '/home/p/.config'}):
+            want = (Path('C:/Users/p/AppData/Roaming/XCX Recomp/setup.json') if os.name == 'nt'
+                    else Path('/home/p/.config/xcx-recomp/setup.json'))
+            self.assertEqual(recent.path(), want)
+
+    def test_nothing_recorded(self):
+        from installer import recent
+        self.assertEqual(recent.load(), {})
+
+    def test_round_trip(self):
+        from installer import recent
+        self.installed()
+        recent.save(str(self.dest), self.src)
+        stored = json.loads(self.file.read_text(encoding='utf-8'))
+        self.assertEqual(stored['format'], 1)
+        self.assertEqual(recent.load(), {'dest': str(self.dest), **self.src})
+        self.assertFalse(self.file.with_name('setup.json.tmp').exists())
+
+    def test_keys_contents_never_stored(self):
+        from installer import recent
+        Path(self.src['keys']).write_text('header_key = 00112233' + chr(10), encoding='utf-8')
+        recent.save(str(self.dest), self.src)
+        self.assertNotIn('00112233', self.file.read_text(encoding='utf-8'))
+
+    def test_empty_field_keeps_saved_value(self):
+        from installer import recent
+        self.installed()
+        recent.save(str(self.dest), self.src)
+        recent.save(str(self.dest), {'base': '', 'update': '  ', 'dlc': '', 'keys': self.src['keys']})
+        self.assertEqual(recent.load()['base'], self.src['base'])
+
+    def test_gone_paths_stay_empty(self):
+        import os
+        from installer import recent
+        self.installed()
+        recent.save(str(self.dest), self.src)
+        os.remove(self.src['update'])
+        loaded = recent.load()
+        self.assertNotIn('update', loaded)
+        self.assertEqual(loaded['base'], self.src['base'])
+
+    def test_folder_without_state_is_not_filled(self):
+        from installer import recent
+        recent.save(str(self.dest), self.src)
+        loaded = recent.load()
+        self.assertNotIn('dest', loaded)
+        self.assertEqual(loaded['keys'], self.src['keys'])   # the paths of a run that stopped before its first save
+
+    def test_folder_record_wins(self):
+        from installer import recent
+        other = self.tmp / 'other-update.nsp'
+        other.write_text('y', encoding='utf-8')
+        self.installed({'update': str(other), 'dlc': [str(self.tmp / 'gone.nsp'), self.src['dlc']]})
+        recent.save(str(self.dest), self.src)
+        loaded = recent.load()
+        self.assertEqual(loaded['update'], str(other))
+        self.assertEqual(loaded['dlc'], self.src['dlc'])
+        self.assertEqual(loaded['base'], self.src['base'])   # not in the folder's record: from the per-user file
+
+    def test_from_folder(self):
+        from installer import recent
+        self.installed({'base': self.src['base'], 'keys': str(self.tmp / 'moved.keys')})
+        self.assertEqual(recent.from_folder(str(self.dest)), {'base': self.src['base']})
+        self.assertEqual(recent.from_folder(str(self.tmp / 'nothing')), {})
+
+    def test_bad_values_dropped(self):
+        from installer import recent
+        self.installed()
+        self.file.parent.mkdir(parents=True)
+        for record in ({'dest': str(self.dest), 'base': 5, 'update': 'rel/x.nsp', 'keys': [1], 'dlc': None},
+                       {'dest': str(self.dest), 'base': self.src['base'] + chr(0) + 'x', 'keys': str(self.tmp)}):
+            self.file.write_text(json.dumps(record), encoding='utf-8')
+            self.assertEqual(recent.load(), {'dest': str(self.dest)})
+        for text in ('', 'not json', '[1, 2]', '{"dest": "relative"}'):
+            self.file.write_text(text, encoding='utf-8')
+            self.assertEqual(recent.load(), {}, text)
+
+    def test_blocked_load_fills_nothing(self):
+        import time
+        from unittest import mock
+        from installer import recent
+        with mock.patch.object(recent, 'load', side_effect=lambda: time.sleep(3) or {'dest': 'x'}):
+            t0 = time.monotonic()
+            self.assertEqual(recent.load_bounded(0.2), {})
+            self.assertLess(time.monotonic() - t0, 2)
+        with mock.patch.object(recent, 'load', return_value={'dest': 'x'}):
+            self.assertEqual(recent.load_bounded(), {'dest': 'x'})
+
+    def test_merge_paths(self):
+        from installer import recent
+        given = SimpleNamespace(game=None, base=Path(self.src['base']), update=Path(self.src['update']),
+                                dlc=[Path(self.src['dlc'])], keys=Path(self.src['keys']))
+        paths = recent.merge_paths(None, given)
+        self.assertEqual(paths, {**self.src, 'dlc': [self.src['dlc']]})
+        # an update given only --dest keeps them; a file that does not exist is not recorded
+        only_dest = SimpleNamespace(game=None, base=None, update=self.tmp / 'gone.nsp', dlc=None, keys=None)
+        self.assertEqual(recent.merge_paths(paths, only_dest), paths)
+        folder = SimpleNamespace(game=self.tmp, base=None, update=None, dlc=None, keys=None)
+        self.assertEqual(recent.merge_paths(paths, folder)['base'], str(self.tmp))
 
 
 if __name__ == '__main__':
