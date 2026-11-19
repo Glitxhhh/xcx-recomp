@@ -21,19 +21,30 @@ Emission runs in worker processes, one chunk per task. Each worker loads the mod
 time and resolves its jump tables (recomp/jumptables.py), so memory per worker does not grow with the module.
 Chunks are sized from a per-instruction estimate of the C they produce, so their names and contents only depend on
 the input; a chunk whose text did not change is not rewritten and keeps its mtime.
-"""
-import mod_menu
-import argparse
-import json
-import multiprocessing as mp
-import os
-import re
-import sys
-import time
-from collections import Counter
-from pathlib import Path
 
-import numpy as np
+Workers default to one per core, at most as many as fit the memory a new process can commit (worker_budget()). A
+worker that runs out of memory makes the run retry the chunks left with half the workers; out of memory with one
+worker, the run exits with EXIT_MEMORY.
+"""
+import os
+
+# numpy's OpenBLAS commits about 32 MiB of thread buffers per core (up to its 24 threads) as soon as numpy loads. The
+# lifter does no linear algebra, and with one worker per core that commit grew with the square of the core count
+# (#197). Spawned workers inherit the setting.
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+
+import mod_menu  # noqa: E402
+import argparse  # noqa: E402
+import ctypes  # noqa: E402
+import json  # noqa: E402
+import multiprocessing as mp  # noqa: E402
+import re  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from collections import Counter  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import numpy as np  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
@@ -51,6 +62,15 @@ from lifter import hx  # noqa: E402
 from module import Module  # noqa: E402
 
 TERMINATORS = ('b', 'br', 'ret', 'trap')
+
+
+class Local:
+    """A lifted b / b.cond / cbz / tbz of a patch replacement that goes to word `to` of the same replacement
+    (recomp/patches.py, <word>@<index>); its own target is meaningless there."""
+    __slots__ = ('kind', 'code', 'target', 'cond', 'to')
+
+    def __init__(self, ins, to):
+        self.kind, self.code, self.target, self.cond, self.to = ins.kind, ins.code, None, ins.cond, to
 MUSTTAIL = '__attribute__((musttail)) return'
 
 # Estimated bytes of C per instruction, by class, for chunking (estimate_sizes()).
@@ -79,8 +99,9 @@ def _sext(v, n):
     return np.where(v & (1 << (n - 1)), v - (1 << n), v)
 
 
-def discover(mod):
-    """Function starts of mod as a sorted int64 array of word indices into mod.words, plus discovery statistics."""
+def discover(mod, extra=()):
+    """Function starts of mod as a sorted int64 array of word indices into mod.words, plus discovery statistics.
+    extra: more function starts (absolute addresses), the targets of the calls in patch replacements."""
     w = mod.words
     n = len(w)
 
@@ -146,7 +167,8 @@ def discover(mod):
     mat = (mat - pc0) >> 2
 
     bl_tgt = bl_tgt[(bl_tgt >= 0) & (bl_tgt < n)]
-    starts = np.unique(np.concatenate([seeds, bl_tgt, mat]))
+    more = np.array([(a - pc0) >> 2 for a in extra if mod.lo <= a < mod.hi and a % 4 == 0], dtype=np.int64)
+    starts = np.unique(np.concatenate([seeds, bl_tgt, mat, more]))
     stats = {'seeds': int(len(seeds)), 'bl_targets': int(len(np.unique(bl_tgt))),
              'materialised_targets': int(len(np.unique(mat))), 'initial_starts': int(len(starts))}
 
@@ -259,22 +281,46 @@ class Emitter:
             if entry <= a < end:
                 for words in self.replacements(a):
                     r = words[-1]
-                    if r.kind in ('b', 'bcond') and entry <= r.target < end:
+                    if r.kind in ('b', 'bcond') and not isinstance(r, Local) and entry <= r.target < end:
                         labels.add(r.target)
         return labels, tables
 
     def replacements(self, a):
         """The lifted words of each alternative of the patched site a, in set order. Only the last word of an
-        alternative may branch (bl, b, b.cond / cbz / tbz, ret)."""
+        alternative may branch out of it (bl, b, b.cond / cbz / tbz, ret); a word with @<index> (recomp/patches.py)
+        branches inside it and lifts as a Local."""
         out = []
         for _, words in self.patched[a]:
-            lifted = [self.mod.lifter.lift(w, a) for w in words]
+            lifted = []
+            for w in words:
+                if isinstance(w, tuple):   # ('to', word, index)
+                    r = self.mod.lifter.lift(w[1], a)
+                    if r.kind not in ('b', 'bcond'):
+                        raise patches.PatchError(f'{a:#x}: replacement word {w[1]:08x}@{w[2]} is a {r.kind}')
+                    lifted.append(Local(r, w[2]))
+                else:
+                    lifted.append(self.mod.lifter.lift(w, a))
             for j, r in enumerate(lifted):
                 last = j == len(lifted) - 1
-                if r.kind != 'op' and not (last and r.kind in ('bl', 'b', 'bcond', 'ret')):
-                    raise patches.PatchError(f'{a:#x}: replacement word {words[j]:08x} is a {r.kind}')
+                if r.kind != 'op' and not isinstance(r, Local) and not (last and r.kind in ('bl', 'b', 'bcond', 'ret')):
+                    w = words[j]
+                    raise patches.PatchError(f'{a:#x}: replacement word {w:08x} is a {r.kind}')
             out.append(lifted)
         return out
+
+    def packed(self, ins, a):
+        """Whether the site a carries its flags through c->nzcv: it has a self-contained alternative (a code cave with
+        its own branches, lifted on c->nzcv as the guest keeps flags) and the flags matter across it, as the original
+        instruction or the alternative's last word uses them. patch() then copies the function's flags into c->nzcv
+        before the alternatives and back into F.nz after them, and the site counts as reading and writing packed
+        flags (patched_effect)."""
+        alts = self.replacements(a)
+        if not any(isinstance(r, Local) for words in alts for r in words):
+            return False
+        own = flags.effect(ins.cond) if ins.kind == 'bcond' else flags.effect(ins.code or '')
+        last = [w[-1] for w in alts if any(isinstance(r, Local) for r in w)]
+        return bool(own[0] or own[1] or any(r.kind == 'bcond' and not isinstance(r, Local) and flags.effect(r.cond)[0]
+                                            for r in last))
 
     def flow(self, insns, entry, end, tables):
         """Successors of each instruction inside the function [entry, end). Index len(insns) stands for falling
@@ -284,7 +330,7 @@ class Emitter:
 
         def of(ins, i):
             k = ins.kind
-            if k in ('op', 'bl', 'blr'):
+            if k in ('op', 'bl', 'blr') or isinstance(ins, Local):   # a Local leaves its site only to the next word
                 return [i + 1]
             if k == 'b':
                 return idx(ins.target)
@@ -324,7 +370,7 @@ class Emitter:
                     r = words[-1]
                     if r.kind == 'bl':
                         calls.add(i)
-                    elif r.kind in ('b', 'bcond') and not entry <= r.target < end:
+                    elif r.kind in ('b', 'bcond') and not isinstance(r, Local) and not entry <= r.target < end:
                         exits.add(i)
             else:
                 effects.append(flags.effect(ins.cond if k == 'bcond' else ins.code or ''))
@@ -335,7 +381,15 @@ class Emitter:
         """Flag effect of a patched site: every alternative (the original and each replacement) must write the same
         flags, in at most one word each; the site reads flags when any alternative does (a b.cond reads them)."""
         alts = []
-        for words in [[ins]] + self.replacements(a):
+        if self.packed(ins, a):
+            # every alternative runs on c->nzcv, the flags copied in before and out after (patch()): one packed read
+            # and write. A call in the site would come between the cave's flags and the copy out.
+            if ins.kind == 'bl' or any(w[-1].kind == 'bl' for w in self.replacements(a)):
+                raise patches.PatchError(f'{a:#x}: a patched call whose site carries flags')
+            return True, 'nz'
+        # a self-contained alternative that is not packed keeps its flags in c->nzcv: the function's pass it untouched
+        mine = [w for w in self.replacements(a) if not any(isinstance(r, Local) for r in w)]
+        for words in [[ins]] + mine:
             fx = [flags.effect(w.code or '') if w.kind == 'op' else flags.effect(w.cond) for w in words
                   if w.kind in ('op', 'bcond')]
             fx = [e for e in fx if e[0] or e[1]]
@@ -345,7 +399,7 @@ class Emitter:
         if any(e[1] != alts[0][1] for e in alts):
             raise patches.PatchError(f'{a:#x}: the alternatives write different flags ({[e[1] for e in alts]})')
         reads = any(e[0] for e in alts)
-        if (alts[0][1] or reads) and (ins.kind == 'bl' or any(w[-1].kind == 'bl' for w in self.replacements(a))):
+        if (alts[0][1] or reads) and (ins.kind == 'bl' or any(w[-1].kind == 'bl' for w in mine)):
             raise patches.PatchError(f'{a:#x}: a patched call that uses flags')
         return reads, alts[0][1]
 
@@ -431,8 +485,30 @@ class Emitter:
             code = fx(i, code)
             return f'{spill}{code}{reload}' if regs.ESCAPE.search(code) else code
 
-        def one(i, r, a):
-            """C of one lifted word of a patched site."""
+        def raw(code):
+            """An op of a self-contained alternative: its flags in c->nzcv, as the guest keeps them."""
+            return f'{spill}{code}{reload}' if regs.ESCAPE.search(code) else code
+
+        def one(i, r, a, local=None, out=''):
+            """C of one lifted word of a patched site. local: the label prefix of a self-contained alternative. out: in
+            a packed site (Emitter.packed), the copy of c->nzcv into F before a branch out of it (' ' when the function
+            has no F); its words then all run on c->nzcv."""
+            if local is not None:
+                if isinstance(r, Local):
+                    to = f'goto {local}{r.to};'
+                    return to if r.kind == 'b' else f'if ({r.cond}) {{ {to} }}'
+                if r.kind == 'op':
+                    return raw(r.code)
+            if out:
+                if r.kind == 'op':
+                    return raw(r.code)
+                if r.kind == 'b':
+                    return f'{out} {jump(r.target, i)}'
+                if r.kind == 'bcond':
+                    return f'if ({r.cond}) {{ {out} {jump(r.target, i)} }}'
+                if r.kind == 'ret':
+                    return f'{spill}return;'
+                raise patches.PatchError(f'{a:#x}: packed site word is a {r.kind}')
             if r.kind == 'op':
                 return op(i, r.code)
             if r.kind == 'bl':
@@ -449,12 +525,32 @@ class Emitter:
             """if (switch) { replacement } else if ... else { original } for a patched site (recomp/patches.py)."""
             if ins.kind not in ('op', 'bl', 'b', 'bcond'):
                 raise patches.PatchError(f'{a:#x}: patched instruction is a {ins.kind}')
-            line = '   '
+            pack = self.packed(ins, a)
+            # a packed site: the function's flags into c->nzcv, every alternative on them, then back into F.nz (none of
+            # it when the function keeps its flags in c->nzcv anyway)
+            on_f = pack and fp and fp.used
+            out = 'F.nz = c->nzcv;' if on_f else ' ' if pack else ''
+            line = f'    c->nzcv = fnz_{fp.reader[i]}(&F);' if on_f and fp.reader[i] else '   '
             for (k, _), words in zip(self.patched[a], self.replacements(a)):
-                line += f' if (rt_patch_on[{k}]) {{ {" ".join(one(i, r, a) for r in words)} }} else'
+                if any(isinstance(r, Local) for r in words):   # labels P_<site>_<set>_<word>
+                    local = f'P_{a:x}_{k}_'
+                    to = {r.to for r in words if isinstance(r, Local)}
+                    text = ' '.join((f'{local}{j}:; ' if j in to else '') +
+                                    one(i, r, a, local, out)
+                                    for j, r in enumerate(words))
+                    if len(words) in to:
+                        text += f' {local}{len(words)}:;'
+                else:
+                    text = ' '.join(one(i, r, a, None, out) for r in words)
+                if on_f and words[-1].kind not in ('b', 'ret'):
+                    text += f' {out}'
+                line += f' if (rt_patch_on[{k}]) {{ {text} }} else'
             self.uses_patches = True
             self.stats['patched_sites'] += 1
-            return f'{line} {{ {one(i, ins, a)} }}'
+            orig = one(i, ins, a, None, out)
+            if on_f and ins.kind != 'b':
+                orig += f' {out}'
+            return f'{line} {{ {orig} }}'
 
         body = []   # (instruction index or None for a label, line); a line belongs to the instruction it lifts
 
@@ -613,10 +709,14 @@ def _emit_chunk(task):
     """Worker: write one chunk. Returns its statistics."""
     name, number, path, fns = task
     t0 = time.perf_counter()
-    e = _emitter(name)
-    e.stats.clear()
-    e.unsupported.clear()
-    text = chunk_text(name, number, e, fns)
+    try:
+        e = _emitter(name)
+        e.stats.clear()
+        e.unsupported.clear()
+        text = chunk_text(name, number, e, fns)
+    except MemoryError as ex:
+        # A plain MemoryError: numpy's subclass does not survive the pickling back to the parent.
+        raise MemoryError(f'{name} chunk {number}: {ex}') from None
     error = None
     try:
         written = write_if_changed(Path(path), text)
@@ -628,6 +728,67 @@ def _emit_chunk(task):
 
 
 # ------------------------------------------------------------------------------------------------ driver
+
+EXIT_MEMORY = 3            # out of memory with one worker (installer/steps.py Lift reports it as lift.memory)
+WORKER_MEM = 640 << 20     # peak commit of a worker that emits chunks of all three modules of 2.0.0
+MEMORY_SHARE = 0.8         # of the memory a new process can commit, for all workers together
+
+
+def commit_available():
+    """Bytes the system can still commit: free RAM plus free page file on Windows (GlobalMemoryStatusEx
+    ullAvailPageFile), MemAvailable elsewhere, never more than the RAM."""
+    if os.name == 'nt':
+        import ctypes.wintypes as wt
+
+        class MemStatus(ctypes.Structure):
+            _fields_ = [('dwLength', wt.DWORD), ('dwMemoryLoad', wt.DWORD)] + \
+                       [(n, ctypes.c_ulonglong) for n in ('total', 'avail', 'tpf', 'apf', 'tv', 'av', 'aev')]
+        s = MemStatus()
+        s.dwLength = ctypes.sizeof(s)
+        if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(s)):
+            return None
+        return min(s.total, s.apf)
+    try:
+        with open('/proc/meminfo') as f:
+            info = {k: int(v.split()[0]) << 10 for k, v in (line.split(':', 1) for line in f)}
+        return min(info['MemTotal'], info['MemAvailable'])
+    except (OSError, KeyError, ValueError):
+        return None
+
+
+def worker_budget():
+    """Workers for a run without --jobs: one per core, at most as many as WORKER_MEM each fits MEMORY_SHARE of
+    commit_available(). Many cores and modest memory ran the workers out of memory (#197)."""
+    cpus = os.cpu_count() or 4
+    avail = commit_available()
+    if avail is None:
+        return cpus
+    return max(1, min(cpus, int(avail * MEMORY_SHARE) // WORKER_MEM))
+
+
+def emit(tasks, jobs, init_args, on_result):
+    """Emit tasks in a pool of jobs workers, calling on_result for each result. A worker out of memory ends the pool;
+    the tasks without a result run again with half the workers. Returns the worker count that finished, or None when
+    one worker ran out of memory."""
+    pending = list(tasks)
+    ctx = mp.get_context('spawn')
+    while True:
+        done = set()
+        try:
+            with ctx.Pool(jobs, initializer=_worker_init, initargs=init_args) as pool:
+                for r in pool.imap_unordered(_emit_chunk, pending, chunksize=1):
+                    done.add((r['module'], r['number']))
+                    on_result(r)
+            return jobs
+        except MemoryError as ex:
+            pending = [t for t in pending if (t[0], t[1]) not in done]
+            if jobs == 1:
+                print(f'out of memory with 1 worker ({ex})', file=sys.stderr, flush=True)
+                return None
+            jobs = max(1, jobs // 2)
+            print(f'out of memory ({ex}); emitting the {len(pending)} chunks left with {jobs} '
+                  f'worker{"s" * (jobs > 1)}', file=sys.stderr, flush=True)
+
 
 def table_text(name, addrs):
     lines = [header(f'{name} function table'), '#include "cpu.h"\n\n']
@@ -660,7 +821,8 @@ def main():
     ap.add_argument('--exefs', type=Path, required=True)
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--modules', default='main,subsdk0,sdk')
-    ap.add_argument('--jobs', type=int, default=os.cpu_count() or 4)
+    ap.add_argument('--jobs', type=int, default=0,
+                    help='worker processes (default: one per core, as many as fit the memory; worker_budget())')
     ap.add_argument('--limit', type=int, default=0, help='emit only the first N functions of each module')
     ap.add_argument('--chunk-fns', type=int, default=3000, help='functions per chunk at most')
     ap.add_argument('--chunk-bytes', type=int, default=3000000, help='estimated bytes of C per chunk')
@@ -703,7 +865,7 @@ def main():
         path = args.exefs / name
         mod = Module(name, path, base, 'c')
         patches.check(table, mod, name)
-        starts, dstats = discover(mod)
+        starts, dstats = discover(mod, patches.call_targets(table, name, base))
         est = estimate_sizes(mod, starts)
         abs_starts = mod.lo + starts * 4
         n = len(starts) if not args.limit else min(args.limit, len(starts))
@@ -728,16 +890,22 @@ def main():
     results = {name: [] for name in info}
     done_at, errors = {}, []
     t_emit = time.perf_counter()
-    ctx = mp.get_context('spawn')
-    with ctx.Pool(max(1, args.jobs), initializer=_worker_init, initargs=(paths, starts_abs, table, opts)) as pool:
-        for i, r in enumerate(pool.imap_unordered(_emit_chunk, [t for _, t in tasks], chunksize=1)):
-            results[r['module']].append(r)
-            if r['error']:
-                errors.append(r['error'])
-            done_at[r['module']] = time.perf_counter() - t_emit
-            if (i + 1) % 200 == 0 or i + 1 == len(tasks):
-                print(f'emitted {i + 1}/{len(tasks)} chunks, {time.perf_counter() - t_emit:.0f}s', file=sys.stderr,
-                      flush=True)
+    jobs = max(1, args.jobs or worker_budget())
+    print(f'{jobs} worker{"s" * (jobs > 1)}', file=sys.stderr, flush=True)
+    count = [0]
+
+    def on_result(r):
+        results[r['module']].append(r)
+        if r['error']:
+            errors.append(r['error'])
+        done_at[r['module']] = time.perf_counter() - t_emit
+        count[0] += 1
+        if count[0] % 200 == 0 or count[0] == len(tasks):
+            print(f'emitted {count[0]}/{len(tasks)} chunks, {time.perf_counter() - t_emit:.0f}s', file=sys.stderr,
+                  flush=True)
+
+    if emit([t for _, t in tasks], jobs, (paths, starts_abs, table, opts), on_result) is None:
+        return EXIT_MEMORY
 
     for name, d in info.items():
         rs = sorted(results[name], key=lambda r: r['number'])
@@ -810,4 +978,8 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except MemoryError as ex:
+        print(f'out of memory ({ex})', file=sys.stderr)
+        sys.exit(EXIT_MEMORY)

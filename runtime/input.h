@@ -18,6 +18,12 @@ void input_menu(int open);
 // of the combo, sticks are lx, ly, rx, ry. Returns 1 in the poll where the combo goes down (toggle the menu once).
 int input_menu_gate(int *held, int menu_open, uint64_t *buttons, int32_t sticks[4]);
 int input_overlay_gate(int *held, uint64_t *buttons);   // L3+R3: 1 in the poll both go down
+int input_overlay_f2(void);   // F2 steps the overlay as F10 does: 1 while no button is bound to F2
+// L+R+ZL+ZR held for INPUT_QUIT_HOLD_NS: 1 once in the poll the hold is complete (the Quit Game prompt). The caller
+// keeps *q, zeroed at first.
+#define INPUT_QUIT_HOLD_NS 1000000000ull
+typedef struct { int held, fired; uint64_t since; } InputQuitHold;
+int input_quit_gate(InputQuitHold *q, uint64_t now_ns, uint64_t *buttons);
 int input_pad_read(uint64_t *buttons, int32_t *lx, int32_t *ly);
 // The Controls tab's stick view and calibration: the open gamepad's raw stick axes (lx, ly, rx, ry as SDL reports them,
 // y down) and the sticks the game sees after XCX_STICK_DEADZONE_* and XCX_STICK_CENTER_* (lx, ly, rx, ry, up +y).

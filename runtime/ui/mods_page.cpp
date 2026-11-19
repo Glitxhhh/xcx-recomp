@@ -39,6 +39,11 @@ static bool library(float scale,bool focus_first) {
         ImGui::TextWrapped("%s",v.message);
         if(v.message_error)ImGui::PopStyleColor();
     }
+    for(int i=0;i<v.nnotes;++i){   // folders put in mods/ by hand: moved to the layout the game reads, or skipped and why
+        if(v.notes[i].error)ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(1.0f,0.55f,0.5f,1));
+        ImGui::TextWrapped("%s",v.notes[i].text);
+        if(v.notes[i].error)ImGui::PopStyleColor();
+    }
     if(!v.count){
         ImGui::TextWrapped("%s",menu_text(UI_MODS_EMPTY));
         ImGui::BeginDisabled(!idle);if(ImGui::Button(menu_text(UI_MODS_REFRESH)))modlib_refresh();ImGui::EndDisabled();

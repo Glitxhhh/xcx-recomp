@@ -9,6 +9,10 @@ VkSurfaceKHR wsys_surface(VkInstance inst);   // a new Vulkan surface of the win
 void wsys_client_size(int *w, int *h);     // the drawable area in pixels
 int wsys_minimized(void);                  // nothing to present into
 void wsys_resize(int w, int h);            // gfx_window_resize: the drawable area becomes w x h
+// Chained into the next VkSwapchainCreateInfoKHR (NULL: nothing). The Win32 back end tells the driver whether the
+// window mode lets it take the monitor (VK_EXT_full_screen_exclusive); a change of mode marks the swapchain dirty.
+const void *wsys_swapchain_next(void);
+int gfx_window_mode(void);                 // the GFX_ mode the window is in now (F11 changes it too); any thread
 // --probe-window (gfx_window_probe.c): synthetic window events, handled on the window thread before these return.
 void wsys_probe_focus(int in);             // the window gains (1) or loses (0) the focus
 void wsys_probe_escape(void);              // Esc pressed
@@ -22,5 +26,7 @@ void gfx_window_mark_dirty(void);          // the window changed size: the next 
 void gfx_window_focus_changed(int in);     // the window gained (1) or lost (0) the focus
 void gfx_window_closed(void);              // the player closed the window: saves, then ends the process
 void gfx_window_set_refresh(double hz);    // the refresh rate of the window's monitor, 0 unknown
-int gfx_cfg_fullscreen(void);              // XCX_FULLSCREEN
+enum { GFX_WINDOWED, GFX_BORDERLESS, GFX_FULLSCREEN };
+int gfx_cfg_window_mode(void);             // XCX_FULLSCREEN as a GFX_ mode
+const char *gfx_window_mode_value(int mode);   // the XCX_FULLSCREEN value of a GFX_ mode
 void gfx_cfg_window_size(int *w, int *h);  // XCX_WINDOW_SIZE, the default when unparsable or out of range

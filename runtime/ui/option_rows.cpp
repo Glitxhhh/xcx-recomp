@@ -34,6 +34,11 @@ static bool g_held;                      // the last row's left / right has been
 static float g_bottom;                   // opt_reserve_bottom: kept free under the panes
 static bool g_disable_next;              // opt_disable_next: the next row is greyed out with g_disable_note
 static UiTextId g_disable_note;
+static bool g_indent_next;               // opt_indent_next: the next row is a sub-row
+// The rows of this frame's page: how many, which one has the controller / keyboard cursor (-1 none) and its id, and the
+// row that had it last frame (opt_end scrolls to the page's ends when the cursor arrives on its first or last row).
+static int g_rows, g_cursor_row;
+static ImGuiID g_cursor_id, g_cursor_last;
 
 // The description pane: this frame's hovered and selected rows, the page's first row, and the last one shown.
 struct Desc { char text[512]; };
@@ -64,12 +69,15 @@ void opt_disable_next(UiTextId note) {
     g_disable_note = note;
 }
 
+void opt_indent_next(void) { g_indent_next = true; }
+
 void opt_begin(const char *id, float scale) {
     g_scale = scale;
     g_take_first = g_focus_req;
     g_focus_req = false;
     if (g_take_first) ImGui::NavMoveRequestCancel();   // this frame's move goes to the first row instead
     g_hover.text[0] = g_focus.text[0] = g_first.text[0] = 0;
+    g_rows = 0, g_cursor_row = -1, g_cursor_id = 0;
     ImVec2 avail = ImGui::GetContentRegionAvail();
     avail.y -= g_bottom;
     ImGui::PushID(id);
@@ -79,6 +87,14 @@ void opt_begin(const char *id, float scale) {
 
 void opt_end(void) {
     ImGui::PopStyleVar();
+    // Moving the cursor scrolls just far enough to show the row, which leaves the text above the first row (a page's
+    // note, a heading) or under the last one (the Cheats tab's build id) out of view at the ends of the list: arriving on
+    // the first or last row scrolls the whole way. Only on arrival, so the mouse wheel still scrolls freely after it.
+    if (g_cursor_id && g_cursor_id != g_cursor_last) {
+        if (g_cursor_row == 0) ImGui::SetScrollY(0);
+        else if (g_cursor_row == g_rows - 1) ImGui::SetScrollY(ImGui::GetScrollMaxY());
+    }
+    g_cursor_last = g_cursor_id;
     ImGui::EndChild();
     // the hovered row (mouse) wins, else the selected one (controller), else the last shown, else the first row
     if (g_hover.text[0]) g_shown = g_hover;
@@ -117,6 +133,9 @@ static int row(const char *key, UiTextId label, UiTextId desc, const RowView &v)
     g_disable_next = false;
     bool off = disabled || cfg_from_env(key) != 0;
     ImGui::PushID(key);
+    float indent = g_indent_next ? 30 * g_scale : 0;   // a sub-row: inset, joined to the row above by a connector
+    g_indent_next = false;
+    if (indent) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
     ImVec2 p = ImGui::GetCursorScreenPos();
     // h whole pixels: ImGui truncates cursor positions, which rounds a fractional height the other way above the window's
     // top (negative y), so the page grew a pixel per row scrolled out and a row scrolled to the bottom was cut off
@@ -148,13 +167,23 @@ static int row(const char *key, UiTextId label, UiTextId desc, const RowView &v)
             ImGui::SetKeyOwner(k, ImGui::GetItemID());
         }
     }
-    if (foc) desc_set(g_focus, desc, key, m, disabled);
+    if (foc) {
+        desc_set(g_focus, desc, key, m, disabled);
+        g_cursor_row = g_rows, g_cursor_id = ImGui::GetItemID();
+    }
+    g_rows++;
     if (hov) desc_set(g_hover, desc, key, m, disabled);
     if (!g_first.text[0]) desc_set(g_first, desc, key, m, disabled);
 
     ImDrawList *dl = ImGui::GetWindowDrawList();
     ImFont *font = ImGui::GetFont();
     float r = 9 * g_scale, pad = 16 * g_scale, small = fs * 0.72f;
+    if (indent) {   // from under the row above (its bottom edge, the spacing above this row) to this row's left edge
+        float cx = p.x - indent * 0.5f, top = p.y - ImGui::GetStyle().ItemSpacing.y, mid = p.y + h * 0.5f;
+        ImU32 lc = IM_COL32(90, 220, 245, 150);
+        dl->AddLine(ImVec2(cx, top), ImVec2(cx, mid), lc, 1.5f * g_scale);
+        dl->AddLine(ImVec2(cx, mid), ImVec2(p.x, mid), lc, 1.5f * g_scale);
+    }
     dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), hov || foc ? IM_COL32(255, 255, 255, 22) : IM_COL32(0, 0, 0, 40), r);
     dl->AddRect(p, ImVec2(p.x + w, p.y + h),
                 hov || foc ? (off ? IM_COL32(90, 220, 245, 120) : kAccent) : IM_COL32(255, 255, 255, off ? 18 : 38), r, 0,

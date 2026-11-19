@@ -24,13 +24,14 @@ typedef struct {
     // memory, MB
     float ram_used_mb, ram_total_mb, ram_game_mb;
     // GPU: load and dedicated memory from the system's counters, temperature, power and clock from NVML (NVIDIA) or
-    // ADL (AMD)
+    // ADL (AMD). gpu_game_pct: this process's part of the load (Windows; -1 elsewhere)
     char gpu_name[96];
-    float gpu_pct, gpu_temp_c, gpu_power_w, gpu_clock_mhz, vram_used_mb, vram_total_mb;
+    float gpu_pct, gpu_game_pct, gpu_temp_c, gpu_power_w, gpu_clock_mhz, vram_used_mb, vram_total_mb;
     // per frame, averaged over the last half second: replay (NVN to Vulkan recording), GPU busy time (timestamps; -1
     // without them), the render thread's waits for pipeline builds, shader translation and texture uploads, and the
     // textures uploaded
     float replay_ms, gpu_ms, pipe_wait_ms, xlate_ms, tex_ms, tex_uploads;
+    float present_ms;   // GPU time of the present's command buffer (scaling, HDR encode, menu; -1 without timestamps)
 } PerfStats;
 
 // Overlay mode 0 off, 1 fps, 2 full (XCX_PERF_OVERLAY), from the present path when the setting changes. Full starts
