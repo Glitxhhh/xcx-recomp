@@ -2,12 +2,14 @@
 
     {"format": 1, "release": "...", "lang": "en-US",
      "inputs": {"base": {"name", "size", "sha256"}, "update": {...}},
+     "paths": {"base": "<absolute path>", "update": ..., "dlc": [...], "keys": ...},
      "steps": {"<step>": {"key": "<input fingerprint>", "release": "...", "finished": "<UTC time>", "seconds": 12.3,
                           ...the step's own fields}}}
 
 A step's key fingerprints everything its output depends on (runner.py), so a step whose recorded key equals the
 current one and whose output still checks out is not run again. The file is replaced atomically after each step.
-No key value or keys file content is ever stored.
+"paths" are the player's files as the last run named them (installer/recent.py, merge_paths), so the next setup
+window fills them in. No key value or keys file content is ever stored, only the keys file's path.
 """
 import json
 import os

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "cfg.h"
+#include "gfx_wsys.h"
 #include "host.h"
 #include "input.h"
 #include "input_map.h"
@@ -141,6 +142,25 @@ int probe_cfg(void) {
     CHECK(m && EQ(m->def, "130") && EQ(m->values, "0..300"), "meta: rumble strength 130 in 0..300");
     m = cfg_meta("PERF_OVERLAY");
     CHECK(m && EQ(m->def, "off") && EQ(m->values, "off|fps|full") && m->live, "meta: perf_overlay is live, off by default");
+    m = cfg_meta("VOICE_LANG");
+    CHECK(m && EQ(m->def, "") && EQ(m->values, "ja|en") && m->live, "meta: voice_lang is automatic (unset) by default, ja|en, live");
+    // the display mode: the menu's Window, Borderless and Fullscreen; 0 and 1 of older files keep their meaning
+    m = cfg_meta("FULLSCREEN");
+    CHECK(m && EQ(m->def, "0") && EQ(m->values, "0|borderless|1") && m->live, "meta: fullscreen takes 0|borderless|1");
+    {
+        char keep[64];
+        int had = plat_getenv("XCX_FULLSCREEN", keep, sizeof keep);
+        static const struct { const char *v, *back; int mode; } modes[] = {
+            {"0", "0", GFX_WINDOWED}, {"borderless", "borderless", GFX_BORDERLESS}, {"1", "1", GFX_FULLSCREEN},
+            {"yes", "1", GFX_FULLSCREEN}};
+        int ok = 1;
+        for (size_t i = 0; i < sizeof modes / sizeof *modes; i++) {
+            plat_setenv("XCX_FULLSCREEN", modes[i].v);
+            ok &= gfx_cfg_window_mode() == modes[i].mode && EQ(gfx_window_mode_value(modes[i].mode), modes[i].back);
+        }
+        plat_setenv("XCX_FULLSCREEN", had ? keep : NULL);
+        CHECK(ok, "window mode: 0 window, borderless, 1 and other values fullscreen, each written back as the menu does");
+    }
     CHECK(cfg_meta("BIND_A") == NULL && cfg_meta("FPS_COUNTER") == NULL && cfg_meta("NO_SUCH") == NULL,
           "meta: keys the menu does not show are NULL");
 

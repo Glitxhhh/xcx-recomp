@@ -658,6 +658,17 @@ int main(int argc, char **argv) {
           probe_kind=-1;
           #undef BIND3
         }
+        // ---- the Soul Challenge button is a white mask: a colored face is drawn from its standard tile (#58: the Xbox red B came out
+        // half transparent). The held field-action button keeps the colored tile (it is drawn in color).
+        { const char *keep_appearance=appearance_preference;
+          preference="xbox"; appearance_preference="colored"; family=GLYPH_PAD_XBOX; source=GLYPH_SOURCE_PAD; pad_layout=PAD_LAYOUT_XBOX;
+          input_map_reset(); mapping=input_map; inline_enabled=1; inline_sig_count=0; memset(inline_sigs,0,sizeof inline_sigs);
+          int16_t got[GLYPH_SYMBOLS]; int lay=-1;
+          assert(appendage_inline_signature(appendage_plain_signature(INLINE_LAYOUT_SOUL),got,&lay)&&lay==INLINE_LAYOUT_SOUL);
+          assert(!strcmp(glyph_art_name((unsigned)got[SYM_B]),"audune_xbox_east.png"));
+          assert(appendage_inline_signature(appendage_plain_signature(INLINE_LAYOUT_HOLD),got,&lay)&&lay==INLINE_LAYOUT_HOLD);
+          assert(!strcmp(glyph_art_name((unsigned)got[SYM_A]),"audune_xbox_south_colored.png"));
+          appearance_preference=keep_appearance; }
         puts("Inline atlas: policy by layout/binding/appearance, tile fitting, source identity, arming, handle scope, signatures and fallbacks passed");
         return 0;
     }
