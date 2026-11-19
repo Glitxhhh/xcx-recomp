@@ -73,6 +73,17 @@ Mouse motion (raw input) becomes right-stick deflection. Each presented frame ta
 
 The stick direction bits (`StickLLeft` to `StickRDown`) are derived from the sticks at 50% deflection. A gamepad plugged in later is picked up within one second; with none connected the log says `input: no gamepad`.
 
+## Stick deadzone and calibration
+
+Each gamepad stick goes through `input_stick_shape` (`runtime/input_map.c`) before the game sees it. The resting offset `XCX_STICK_CENTER_L` / `_R` (`"x,y"` in raw SDL units, y down, -16384 to 16384 on each axis; unset is none) is taken off, and the deflection stretched so the edge still gives full deflection. Then the deadzone `XCX_STICK_DEADZONE_L` / `_R` (percent of full deflection, 0 to 40, default 7.63, which is 2500 of 32767; the menu steps in whole percents plus 7.63) applies in the shape `XCX_STICK_DEADZONE_SHAPE`:
+
+- `axis` (default, *Per axis*): each axis reads 0 while it is under the deadzone and passes unchanged above it. This is how the runtime always handled the sticks: at the defaults, with no calibration, the game gets exactly what it got before these settings existed.
+- `round` (*Round*): the stick reads center while its distance from the center is under the deadzone, in any direction, and the deflection past it is stretched to start from 0 and still reach full deflection at the edge. Diagonal drift is caught as well as drift along an axis, and a larger deadzone does not make the stick jump when it leaves it.
+
+All of them are live. The game's own stick curve and dead zone apply after this.
+
+The Controls tab has a row for each deadzone, *Deadzone shape* (both sticks), *Calibrate stick centers* (let go of both sticks: after a short wait it averages each stick for a second and saves the result, at most 16384 off center on each axis, the most a center can hold; a stick that moves more than about 12% during that second cancels it, and a stick that rests inside the default deadzone, or inside its own deadzone when that is set lower, gets no center and loses an earlier one; with *Round*, inside means its distance from the center) and *Clear stick calibration*. Under them a view shows each stick: the grey dot is the raw position (orange while the game sees a deflection), the cyan dot what the game sees, the cross the calibrated center and the ring or square the deadzone. A drifting stick whose dot rests outside it keeps the character walking: calibrate, raise that stick's deadzone until the dot rests inside, or try *Round*.
+
 ## Scripted input
 
 `XCX_INPUT_SCRIPT=<file>` replays presses. It is ORed with real input and still applies under `XCX_INPUT=none`. One event per line, `#` starts a comment:

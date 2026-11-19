@@ -230,6 +230,29 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_PAD_LAYOUT_XBOX] = "Flipped",
     [UI_MENU_MOUSE_SENS] = "Mouse camera sensitivity",
     [UI_MENU_MOUSE_SENS_DESC] = "How fast the mouse turns the camera.",
+    [UI_MENU_STICK_GROUP] = "Controller sticks",
+    [UI_MENU_STICK_DEAD_L] = "Left stick deadzone",
+    [UI_MENU_STICK_DEAD_L_DESC] = "How far the left stick has to move from its center before the game notices. Raise it if "
+                                  "your character keeps walking after you let go of the stick.",
+    [UI_MENU_STICK_DEAD_R] = "Right stick deadzone",
+    [UI_MENU_STICK_DEAD_R_DESC] = "How far the right stick has to move from its center before the camera turns. Raise it if "
+                                  "the camera keeps turning after you let go of the stick.",
+    [UI_MENU_STICK_SHAPE] = "Deadzone shape",
+    [UI_MENU_STICK_SHAPE_DESC] = "Per axis is the original: each direction of a stick is ignored on its own until it passes "
+                                 "the deadzone, then counts in full. Round ignores the stick until its distance from the "
+                                 "center passes the deadzone, in any direction, and starts from zero past it, which suits "
+                                 "a drifting stick.",
+    [UI_MENU_STICK_SHAPE_AXIS] = "Per axis", [UI_MENU_STICK_SHAPE_ROUND] = "Round",
+    [UI_MENU_STICK_CALIBRATE] = "Calibrate stick centers",
+    [UI_MENU_STICK_CALIBRATE_DESC] = "Let go of both sticks, then press: where each stick rests is measured for a second "
+                                     "and becomes its center. Helps a stick that always drifts the same way; the deadzone "
+                                     "covers the rest.",
+    [UI_MENU_STICK_CALIBRATING] = "let go of the sticks...", [UI_MENU_STICK_CALIBRATED] = "saved",
+    [UI_MENU_STICK_MOVED] = "a stick moved, try again", [UI_MENU_STICK_NO_PAD] = "no controller",
+    [UI_MENU_STICK_CLEAR] = "Clear stick calibration",
+    [UI_MENU_STICK_CLEAR_DESC] = "Forget the measured centers: each stick's center is where the controller reports it.",
+    [UI_MENU_STICK_LEGEND] = "Grey dot: the stick. Cyan dot: what the game sees. Ring or square: the deadzone. "
+                             "Cross: the calibrated center.",
 
     [UI_BINDS_HELP] = "Highlighted options can be cleared with the delete key.",
     [UI_BINDS_COL_KEY1] = "Key 1", [UI_BINDS_COL_KEY2] = "Key 2", [UI_BINDS_COL_PAD] = "Controller",
@@ -592,6 +615,28 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_PAD_LAYOUT_XBOX] = "Обратная",
     [UI_MENU_MOUSE_SENS] = "Чувствительность мыши",
     [UI_MENU_MOUSE_SENS_DESC] = "Как быстро мышь поворачивает камеру.",
+    [UI_MENU_STICK_GROUP] = "Стики контроллера",
+    [UI_MENU_STICK_DEAD_L] = "Мёртвая зона левого стика",
+    [UI_MENU_STICK_DEAD_L_DESC] = "Насколько нужно отклонить левый стик от центра, чтобы игра это заметила. Увеличьте, "
+                                  "если персонаж продолжает идти, когда вы отпустили стик.",
+    [UI_MENU_STICK_DEAD_R] = "Мёртвая зона правого стика",
+    [UI_MENU_STICK_DEAD_R_DESC] = "Насколько нужно отклонить правый стик от центра, чтобы камера повернулась. Увеличьте, "
+                                  "если камера продолжает поворачиваться, когда вы отпустили стик.",
+    [UI_MENU_STICK_SHAPE] = "Форма мёртвой зоны",
+    [UI_MENU_STICK_SHAPE_DESC] = "По осям — как изначально: каждое направление стика не учитывается, пока не выйдет за "
+                                 "мёртвую зону, затем учитывается полностью. Круглая не учитывает стик ближе к центру, "
+                                 "чем мёртвая зона, и начинает с нуля — лучше при дрейфе.",
+    [UI_MENU_STICK_SHAPE_AXIS] = "По осям", [UI_MENU_STICK_SHAPE_ROUND] = "Круглая",
+    [UI_MENU_STICK_CALIBRATE] = "Калибровать центр стиков",
+    [UI_MENU_STICK_CALIBRATE_DESC] = "Отпустите оба стика и нажмите: в течение секунды измеряется положение покоя каждого "
+                                     "стика, и оно становится его центром. Помогает, если стик всегда уводит в одну "
+                                     "сторону; остальное закрывает мёртвая зона.",
+    [UI_MENU_STICK_CALIBRATING] = "отпустите стики...", [UI_MENU_STICK_CALIBRATED] = "сохранено",
+    [UI_MENU_STICK_MOVED] = "стик сдвинулся, ещё раз", [UI_MENU_STICK_NO_PAD] = "нет контроллера",
+    [UI_MENU_STICK_CLEAR] = "Сбросить калибровку стиков",
+    [UI_MENU_STICK_CLEAR_DESC] = "Забыть измеренные центры: центр каждого стика там, где его сообщает контроллер.",
+    [UI_MENU_STICK_LEGEND] = "Серая точка: стик. Голубая: что видит игра. Кольцо или квадрат: мёртвая зона. "
+                             "Крест: откалиброванный центр.",
 
     [UI_BINDS_HELP] = "Выделенные пункты можно очистить клавишей Delete.",
     [UI_BINDS_COL_KEY1] = "Клавиша 1", [UI_BINDS_COL_KEY2] = "Клавиша 2", [UI_BINDS_COL_PAD] = "Контроллер",

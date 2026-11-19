@@ -647,6 +647,181 @@ static void tab_sound(float scale) {
     opt_end();
 }
 
+// ---- Controls: the stick rows. Calibration waits CAL_WAIT_NS (the press that started it lets go), then samples both
+// sticks' raw axes for CAL_RUN_NS; the mean of each stick becomes its XCX_STICK_CENTER_*. A spread over CAL_SPREAD on
+// any axis means a stick was touched, and nothing is saved.
+enum { CAL_IDLE, CAL_WAIT, CAL_RUN };
+static const uint64_t CAL_WAIT_NS = 400000000ull, CAL_RUN_NS = 1000000000ull, CAL_NOTE_NS = 3000000000ull;
+static const int CAL_SPREAD = 4000;
+static struct {
+    int state;
+    uint64_t start, note_until;
+    int64_t sum[4];
+    int lo[4], hi[4], n;
+    UiTextId note;
+} g_cal;
+
+static void cal_finish(UiTextId note) {
+    g_cal.state = CAL_IDLE;
+    g_cal.note = note;
+    g_cal.note_until = plat_now_ns() + CAL_NOTE_NS;
+}
+
+// One step per laid-out frame while calibrating; returns the value the button shows.
+static const char *cal_tick(void) {
+    uint64_t now = plat_now_ns();
+    if (g_cal.state == CAL_IDLE)
+        return g_cal.note_until && now < g_cal.note_until ? menu_text(g_cal.note) : "";
+    int16_t raw[4];
+    int32_t shaped[4];
+    if (!input_pad_sticks(raw, shaped)) {
+        cal_finish(UI_MENU_STICK_NO_PAD);
+        return menu_text(g_cal.note);
+    }
+    if (g_cal.state == CAL_WAIT) {
+        if (now - g_cal.start < CAL_WAIT_NS) return menu_text(UI_MENU_STICK_CALIBRATING);
+        g_cal.state = CAL_RUN;
+        g_cal.start = now;
+        g_cal.n = 0;
+        for (int i = 0; i < 4; i++) g_cal.sum[i] = 0, g_cal.lo[i] = 32767, g_cal.hi[i] = -32768;
+    }
+    for (int i = 0; i < 4; i++) {
+        g_cal.sum[i] += raw[i];
+        if (raw[i] < g_cal.lo[i]) g_cal.lo[i] = raw[i];
+        if (raw[i] > g_cal.hi[i]) g_cal.hi[i] = raw[i];
+    }
+    g_cal.n++;
+    if (now - g_cal.start < CAL_RUN_NS) return menu_text(UI_MENU_STICK_CALIBRATING);
+    for (int i = 0; i < 4; i++)
+        if (g_cal.hi[i] - g_cal.lo[i] > CAL_SPREAD) {
+            cal_finish(UI_MENU_STICK_MOVED);
+            return menu_text(g_cal.note);
+        }
+    // A center inside the default deadzone (2500 of 32767) changes nothing a player can feel, so it is not saved, and an
+    // earlier center of that stick is cleared; a stick whose deadzone is set lower keeps any offset larger than its own
+    // deadzone. Inside means what the shape tests: each axis for Per axis, the distance from the center for Round (a
+    // stick resting at 2400,2400 is past a round 2500 deadzone and needs its center). A center is saved at most
+    // INPUT_STICK_CENTER_MAX off on each axis, the most input_stick_center_parse (input_map.c) applies, so xcx.ini holds
+    // what is applied.
+    bool round = !strcmp(cfg_value("XCX_STICK_DEADZONE_SHAPE"), "round");
+    static const char *const keys[2] = {"XCX_STICK_CENTER_L", "XCX_STICK_CENTER_R"};
+    static const char *const reset_keys[2] = {"STICK_CENTER_L", "STICK_CENTER_R"};   // cfg_reset takes them without XCX_
+    static const char *const dead_keys[2] = {"XCX_STICK_DEADZONE_L", "XCX_STICK_DEADZONE_R"};
+    for (int st = 0; st < 2; st++) {
+        int cx = (int)lrint((double)g_cal.sum[st * 2] / g_cal.n), cy = (int)lrint((double)g_cal.sum[st * 2 + 1] / g_cal.n);
+        double dead = cfg_double(dead_keys[st]) / 100 * 32767;
+        double keep = dead < 2500 ? (dead < 0 ? 0 : dead) : 2500;
+        bool outside = round ? hypot((double)cx, (double)cy) > keep : abs(cx) > keep || abs(cy) > keep;
+        if (outside) {
+            const int m = INPUT_STICK_CENTER_MAX;
+            cx = cx < -m ? -m : cx > m ? m : cx;
+            cy = cy < -m ? -m : cy > m ? m : cy;
+            char v[32];
+            snprintf(v, sizeof v, "%d,%d", cx, cy);
+            cfg_set(keys[st], v);
+        } else if (cfg_is_set(keys[st])) {
+            cfg_reset(&reset_keys[st], 1);
+        }
+    }
+    opt_save_soon();
+    rt_log("menu: stick centers calibrated over %d samples: left %s, right %s", g_cal.n,
+           cfg_is_set(keys[0]) ? cfg_value(keys[0]) : "none (inside the deadzone)",
+           cfg_is_set(keys[1]) ? cfg_value(keys[1]) : "none (inside the deadzone)");
+    cal_finish(UI_MENU_STICK_CALIBRATED);
+    return menu_text(g_cal.note);
+}
+
+// Both sticks as the controller reports them and as the game sees them, side by side; nothing without a gamepad.
+static void stick_view(float scale) {
+    int16_t raw[4];
+    int32_t shaped[4];
+    if (!input_pad_sticks(raw, shaped)) return;
+    float r = 52 * scale, gap = 40 * scale, pad = 8 * scale;
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    ImDrawList *dl = ImGui::GetWindowDrawList();
+    static const char *const dead_keys[2] = {"XCX_STICK_DEADZONE_L", "XCX_STICK_DEADZONE_R"};
+    static const char *const center_keys[2] = {"XCX_STICK_CENTER_L", "XCX_STICK_CENTER_R"};
+    bool round = !strcmp(cfg_value("XCX_STICK_DEADZONE_SHAPE"), "round");
+    const ImU32 ring = IM_COL32(90, 220, 245, 110), grey = IM_COL32(170, 175, 185, 255), cyan = IM_COL32(90, 220, 245, 255),
+                warn = IM_COL32(242, 168, 102, 255);
+    for (int st = 0; st < 2; st++) {
+        ImVec2 c(p.x + pad + r + st * (2 * r + gap), p.y + pad + r);
+        float k = r / 32767.0f;
+        int32_t cx, cy;
+        input_stick_center_parse(cfg_get(center_keys[st]), &cx, &cy);
+        double dead = cfg_double(dead_keys[st]) / 100;
+        float full = 32767.0f - (float)(abs(cx) > abs(cy) ? abs(cx) : abs(cy));
+        ImVec2 cc(c.x + cx * k, c.y + cy * k);
+        dl->AddCircle(c, r, ring, 48, 1.5f * scale);
+        if (round) {
+            dl->AddCircleFilled(cc, (float)(dead * full * k), IM_COL32(90, 220, 245, 28), 48);
+            dl->AddCircle(cc, (float)(dead * full * k), ring, 48, 1.0f * scale);
+        } else {   // per axis: center while both axes are under it (input_map.c stick_axis)
+            float hx = (float)(dead * (32767 - abs(cx)) * k), hy = (float)(dead * (32767 - abs(cy)) * k);
+            dl->AddRectFilled(ImVec2(cc.x - hx, cc.y - hy), ImVec2(cc.x + hx, cc.y + hy), IM_COL32(90, 220, 245, 28));
+            dl->AddRect(ImVec2(cc.x - hx, cc.y - hy), ImVec2(cc.x + hx, cc.y + hy), ring, 0, 0, 1.0f * scale);
+        }
+        float t = 5 * scale;
+        dl->AddLine(ImVec2(cc.x - t, cc.y), ImVec2(cc.x + t, cc.y), grey, 1.0f * scale);
+        dl->AddLine(ImVec2(cc.x, cc.y - t), ImVec2(cc.x, cc.y + t), grey, 1.0f * scale);
+        bool live = shaped[st * 2] || shaped[st * 2 + 1];
+        dl->AddCircleFilled(ImVec2(c.x + raw[st * 2] * k, c.y + raw[st * 2 + 1] * k), 4.5f * scale, live ? warn : grey);
+        if (live)
+            dl->AddCircleFilled(ImVec2(c.x + shaped[st * 2] * k, c.y - shaped[st * 2 + 1] * k), 4.5f * scale, cyan);
+        dl->AddText(ImVec2(c.x - r, c.y - r), grey, st ? "R" : "L");
+    }
+    ImGui::Dummy(ImVec2(2 * (2 * r + pad) + gap, 2 * (r + pad)));
+    opt_text(UI_MENU_STICK_LEGEND);
+}
+
+// The deadzone steps: whole percents 0..40 and 7.63, the default (2500 of 32767, the runtime's original deadzone).
+enum { DEAD_STEPS = 42 };
+static const char *const *dead_list(bool names) {
+    static char text[2][DEAD_STEPS][12];
+    static const char *ptr[2][DEAD_STEPS];
+    if (!ptr[0][0])
+        for (int i = 0, pct = 0; i < DEAD_STEPS; i++) {
+            const char *v = i == 8 ? "7.63" : nullptr;
+            if (v) snprintf(text[0][i], sizeof text[0][i], "%s", v);
+            else snprintf(text[0][i], sizeof text[0][i], "%d", pct++);
+            snprintf(text[1][i], sizeof text[1][i], "%s %%", text[0][i]);
+            ptr[0][i] = text[0][i], ptr[1][i] = text[1][i];
+        }
+    return ptr[names];
+}
+
+// A deadzone row: "8" and "8.0" read as the same step; a value off the list (an edited xcx.ini) shows as it is.
+static void dead_row(const char *key, UiTextId label, UiTextId desc) {
+    const char *const *values = dead_list(false);
+    double v = cfg_double(key);
+    int cur = -1;
+    for (int i = 0; i < DEAD_STEPS; i++)
+        if (fabs(strtod(values[i], nullptr) - v) < 0.001) cur = i;
+    opt_choice_list(key, label, values, dead_list(true), DEAD_STEPS, desc, cur);
+}
+
+static void stick_rows(float scale) {
+    opt_group(UI_MENU_STICK_GROUP);
+    dead_row("XCX_STICK_DEADZONE_L", UI_MENU_STICK_DEAD_L, UI_MENU_STICK_DEAD_L_DESC);
+    dead_row("XCX_STICK_DEADZONE_R", UI_MENU_STICK_DEAD_R, UI_MENU_STICK_DEAD_R_DESC);
+    static const UiTextId shapes[] = {UI_MENU_STICK_SHAPE_AXIS, UI_MENU_STICK_SHAPE_ROUND};
+    opt_choice("XCX_STICK_DEADZONE_SHAPE", UI_MENU_STICK_SHAPE, shapes, 2, UI_MENU_STICK_SHAPE_DESC);
+    if (opt_button("##stick_calibrate", UI_MENU_STICK_CALIBRATE, UI_MENU_STICK_CALIBRATE_DESC, cal_tick()) &&
+        g_cal.state == CAL_IDLE) {
+        g_cal.state = CAL_WAIT;
+        g_cal.start = plat_now_ns();
+        g_cal.note_until = 0;
+    }
+    if (cfg_is_set("XCX_STICK_CENTER_L") || cfg_is_set("XCX_STICK_CENTER_R")) {
+        if (opt_button("##stick_clear", UI_MENU_STICK_CLEAR, UI_MENU_STICK_CLEAR_DESC)) {
+            static const char *const keys[] = {"STICK_CENTER_L", "STICK_CENTER_R"};   // cfg_reset takes them without XCX_
+            cfg_reset(keys, 2);
+            opt_save_soon();
+        }
+    }
+    stick_view(scale);
+}
+
 static void tab_controls(float scale) {
     opt_begin("##controls", scale);
     static const char *const glyph_values[] = {"auto","original","playstation","xbox","steam","keyboard"};
@@ -666,6 +841,7 @@ static void tab_controls(float scale) {
     opt_slider("XCX_RUMBLE_CURVE", UI_MENU_RUMBLE_CURVE, 0.2f, 1.5f, UI_MENU_RUMBLE_CURVE_DESC, 0.05f, "%.2f");
     opt_toggle("XCX_RUMBLE_TRIGGERS", UI_MENU_RUMBLE_TRIGGERS, UI_MENU_RUMBLE_TRIGGERS_DESC);
     opt_slider("XCX_MOUSE_SENS", UI_MENU_MOUSE_SENS, 0, 10, UI_MENU_MOUSE_SENS_DESC, 0.1f, "%.1f");
+    stick_rows(scale);
     binds_rows(scale);
     opt_end();
     binds_after_page();

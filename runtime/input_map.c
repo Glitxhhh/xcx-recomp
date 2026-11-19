@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cfg.h"
@@ -331,6 +332,44 @@ void input_mouse_stick(int32_t dx, int32_t dy, double dt_s, float sens, int32_t 
     if (len > STICK_MAX) { x *= STICK_MAX / len; y *= STICK_MAX / len; }
     out[0] = (int32_t)lrint(x);
     out[1] = (int32_t)lrint(y);
+}
+
+// One axis per axis: the offset taken off and stretched back to full (the edge on the side the offset leans to is that
+// much closer), clamped, then zeroed under d.
+static int32_t stick_axis(int32_t v, int32_t c, int32_t d) {
+    double a = (double)v - c;
+    if (c) a = a * STICK_MAX / (STICK_MAX - abs(c));
+    int32_t r = (int32_t)lrint(a < -STICK_MAX ? -STICK_MAX : a > STICK_MAX ? STICK_MAX : a);
+    return r > -d && r < d ? 0 : r;
+}
+
+void input_stick_shape(int32_t x, int32_t y, int32_t cx, int32_t cy, float dead, int round, int32_t out[2]) {
+    out[0] = out[1] = 0;
+    double dz = !(dead > 0) ? 0 : dead > 0.9f ? 0.9 : dead;
+    if (!round) {
+        int32_t d = (int32_t)lrint(dz * STICK_MAX);
+        out[0] = stick_axis(x, cx, d);
+        out[1] = -stick_axis(y, cy, d);
+        return;
+    }
+    double dx = (double)x - cx, dy = -((double)y - cy), len = sqrt(dx * dx + dy * dy);
+    double full = STICK_MAX - (abs(cx) > abs(cy) ? abs(cx) : abs(cy));
+    double d = dz * full;
+    if (len <= d || full <= d) return;
+    double m = (len - d) / (full - d);
+    if (m > 1) m = 1;
+    out[0] = (int32_t)lrint(dx / len * m * STICK_MAX);
+    out[1] = (int32_t)lrint(dy / len * m * STICK_MAX);
+}
+
+int input_stick_center_parse(const char *s, int32_t *cx, int32_t *cy) {
+    *cx = *cy = 0;
+    int x, y;
+    char tail;
+    if (!s || sscanf(s, " %d , %d %c", &x, &y, &tail) != 2) return 0;
+    *cx = x < -INPUT_STICK_CENTER_MAX ? -INPUT_STICK_CENTER_MAX : x > INPUT_STICK_CENTER_MAX ? INPUT_STICK_CENTER_MAX : x;
+    *cy = y < -INPUT_STICK_CENTER_MAX ? -INPUT_STICK_CENTER_MAX : y > INPUT_STICK_CENTER_MAX ? INPUT_STICK_CENTER_MAX : y;
+    return 1;
 }
 
 // Minus and Plus held together open or close the menu. *held: latched from the poll where both go down until neither is
