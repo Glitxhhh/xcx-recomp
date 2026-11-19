@@ -143,6 +143,11 @@ int probe_cfg(void) {
     CHECK(m && EQ(m->def, "") && m->live, "meta: stick center has no default and is live");
     m = cfg_meta("GRASS_DISTANCE");
     CHECK(m && EQ(m->def, "1") && EQ(m->values, "1|1.5|2|3") && m->live, "meta: grass distance is 1 by default, up to 3, live");
+    m = cfg_meta("OBJECT_LOD_RANGE");
+    CHECK(m && EQ(m->def, "0") && !strncmp(m->values, "0|10|", 5) && strstr(m->values, "|1000") && m->live,
+          "meta: object lod range is 0 by default, up to 1000, live");
+    m = cfg_meta("OBJECT_LOD_MODE");
+    CHECK(m && EQ(m->def, "auto") && EQ(m->values, "auto|fixed") && m->live, "meta: object lod mode is auto by default, live");
     m = cfg_meta("CROWD_DISTANCE");
     CHECK(m && EQ(m->def, "1") && EQ(m->values, "1|1.5|2|3|4") && m->live, "meta: crowd distance is 1 by default, up to 4, live");
     m = cfg_meta("xcx_vk_present");

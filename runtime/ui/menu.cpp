@@ -53,6 +53,8 @@ extern const int rt_game_version;
 extern const char rt_game_name[];   // the game version shown, "2.0.0" (tools/build_game.py)
 extern const char rt_port_version[];
 int rt_grass_available(void);
+int rt_objlod_available(void);
+int rt_objlod_status(float *now_m, float *max_m, float *busy_ms, float *budget_ms);
 int rt_crowd_available(void);
 }
 
@@ -606,6 +608,54 @@ static void tab_screen(float scale) {
     opt_end();
 }
 
+// Object detail range (objlod.c): metres added to every map object's LOD distance. The game's own distances run from
+// under 5 m to about 50 m, so the steps are fine at the low end and coarse above.
+static void row_object_lod() {
+    static const char *const steps[] = {"0", "10", "20", "30", "50", "75", "100", "150", "200", "300", "500", "750", "1000"};
+    enum { N = sizeof steps / sizeof *steps };
+    // a value set by hand in xcx.ini between two steps (objlod.c applies any 0..1000) joins the list in its place while
+    // it is set, so the row shows it and left / right step to the steps on either side of it
+    static char own[16], text[N + 1][24];
+    static const char *values[N + 1], *names[N + 1];
+    const char *now = cfg_value("XCX_OBJECT_LOD_RANGE");
+    char *end = NULL;
+    double v = now && *now ? strtod(now, &end) : 0;
+    bool between = end && !*end && v > 0 && v < 1000;
+    for (int i = 0; between && i < N; i++)
+        if (!strcmp(steps[i], now)) between = false;
+    int n = 0;
+    for (int i = 0; i < N; i++) {
+        if (between && atof(steps[i]) > v) {
+            snprintf(own, sizeof own, "%s", now);
+            values[n++] = own;
+            between = false;
+        }
+        values[n++] = steps[i];
+    }
+    for (int i = 0; i < n; i++) {
+        if (!strcmp(values[i], "0")) names[i] = menu_text(UI_MENU_OBJECT_LOD_ORIGINAL);
+        else {
+            snprintf(text[i], sizeof text[i], menu_text(UI_MENU_OBJECT_LOD_STEP), values[i]);
+            names[i] = text[i];
+        }
+    }
+    opt_choice_list("XCX_OBJECT_LOD_RANGE", UI_MENU_OBJECT_LOD, values, names, n, UI_MENU_OBJECT_LOD_DESC);
+    // Adjust range to frame rate (objlod.c): Auto or Fixed, a sub-row of the range shown only above Original; under
+    // Auto the value shows the range in effect
+    if (cfg_double("XCX_OBJECT_LOD_RANGE") > 0) {
+        static const UiTextId mode[] = {UI_MENU_OBJECT_LOD_AUTO, UI_MENU_OBJECT_LOD_FIXED};
+        float now = 0, max = 0, busy = 0, budget = 0;
+        static char note[32];
+        const char *shown = NULL;
+        if (rt_objlod_status(&now, &max, &busy, &budget) && now >= 0) {
+            snprintf(note, sizeof note, menu_text(UI_MENU_OBJECT_LOD_NOW), now);
+            shown = note;
+        }
+        opt_indent_next();
+        opt_choice("XCX_OBJECT_LOD_MODE", UI_MENU_OBJECT_LOD_MODE, mode, 2, UI_MENU_OBJECT_LOD_MODE_DESC, shown);
+    }
+}
+
 // Crowd distance (crowd.c): a multiplier on the crowd people's spawn and fade-out distances.
 static void row_crowd() {
     static const char *const values[] = {"1", "1.5", "2", "3", "4"};
@@ -631,12 +681,13 @@ static void tab_game(float scale) {
     static const UiTextId mode[] = {UI_MENU_MODE_DOCKED, UI_MENU_MODE_HANDHELD};
     opt_choice("XCX_OPERATION_MODE", UI_MENU_OPERATION_MODE, mode, 2, UI_MENU_OPERATION_MODE_DESC);
     opt_toggle("XCX_CHEATS", UI_MENU_CHEATS, UI_MENU_CHEATS_DESC);
-    int grass_ok = rt_grass_available(), crowd_ok = rt_crowd_available();   // the 2.0.0 update's (grass.c, crowd.c)
-    if (grass_ok || crowd_ok) opt_group(UI_MENU_WORLD_GROUP);
+    int grass_ok = rt_grass_available(), crowd_ok = rt_crowd_available(), objlod_ok = rt_objlod_available();   // the 2.0.0 update's (grass.c, crowd.c, objlod.c)
+    if (grass_ok || crowd_ok || objlod_ok) opt_group(UI_MENU_WORLD_GROUP);
     if (grass_ok) {
         static const UiTextId grass[] = {UI_MENU_GRASS_ORIGINAL, UI_MENU_GRASS_15, UI_MENU_GRASS_2, UI_MENU_GRASS_3};
         opt_choice("XCX_GRASS_DISTANCE", UI_MENU_GRASS, grass, 4, UI_MENU_GRASS_DESC);
     }
+    if (objlod_ok) row_object_lod();
     if (crowd_ok) row_crowd();
     opt_end();
 }

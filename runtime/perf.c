@@ -63,6 +63,16 @@ void prof_write(void) {
 // flight recorder (XCX_FLIGHT=1, flight.c) takes the same numbers per frame.
 static uint64_t wait_ns[PERF_N], frame_ns[PERF_N], worst_ns[PERF_N];   // window totals, this frame, the slowest frame
 
+static uint64_t last_interval_ns, last_pace_ns, last_frame_seq;   // perf_present: the frame just presented
+
+// The last presented frame: its interval and the time it waited for pacing; returns a count that grows by one per frame.
+uint64_t perf_last_frame(uint64_t *interval_ns, uint64_t *pace_ns) {
+    uint64_t seq = __atomic_load_n(&last_frame_seq, __ATOMIC_ACQUIRE);
+    *interval_ns = __atomic_load_n(&last_interval_ns, __ATOMIC_RELAXED);
+    *pace_ns = __atomic_load_n(&last_pace_ns, __ATOMIC_RELAXED);
+    return seq;
+}
+
 uint64_t perf_begin(void) { return kern_now_ns(); }
 
 void perf_replay_thread(void) { prof_replay_tid = plat_thread_id(); }
@@ -275,6 +285,10 @@ void perf_present(uint64_t frame) {
     uint64_t rep = ft_frame(frame, now, d);   // d is 0 on the first present: it only starts the period
     ab_b += rt_ab();
     cpu_placement();
+    // the last frame's interval and its wait for pacing (the frame limit / vsync), for objlod.c's automatic range
+    __atomic_store_n(&last_interval_ns, d, __ATOMIC_RELAXED);
+    __atomic_store_n(&last_pace_ns, frame_ns[PERF_PACE], __ATOMIC_RELAXED);
+    __atomic_fetch_add(&last_frame_seq, 1, __ATOMIC_RELEASE);
     if (__atomic_load_n(&overlay, __ATOMIC_RELAXED))   // the overlay's only cost while it is off: this branch
         perfmon_frame(now, d, frame_ns, rep, __atomic_load_n(&counts[PERF_CNT_TEX_UP], __ATOMIC_RELAXED));
     kern_core_diag_frame(frame, d);

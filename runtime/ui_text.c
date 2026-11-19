@@ -152,6 +152,20 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                            "per grass layer); higher values multiply them, so grass appears further away and its denser "
                            "layers fill in sooner. Applies at once.",
     [UI_MENU_GRASS_ORIGINAL] = "Original", [UI_MENU_GRASS_15] = "1.5x", [UI_MENU_GRASS_2] = "2x", [UI_MENU_GRASS_3] = "3x",
+    [UI_MENU_OBJECT_LOD] = "Object detail range",
+    [UI_MENU_OBJECT_LOD_DESC] = "How much further from the camera trees, bushes, rocks and other map objects switch to "
+                                "their detailed models. Original keeps the game's distances (under 5 to about 50 m, "
+                                "depending on the object); each step adds that many metres to all of them. Higher steps "
+                                "cost some CPU time per frame. Applies at once. With Adjust range to frame rate on "
+                                "Auto, this is the most it will use.",
+    [UI_MENU_OBJECT_LOD_ORIGINAL] = "Original", [UI_MENU_OBJECT_LOD_STEP] = "+%s m",
+    [UI_MENU_OBJECT_LOD_MODE] = "Adjust range to frame rate",
+    [UI_MENU_OBJECT_LOD_MODE_DESC] = "Auto lowers the object detail range above when frames take longer than the frame "
+                                     "limit allows (the display's refresh rate when there is no limit), and raises it "
+                                     "again, up to the range set above, when there is time to spare. Fixed always uses "
+                                     "the range as set. Applies at once.",
+    [UI_MENU_OBJECT_LOD_AUTO] = "Auto", [UI_MENU_OBJECT_LOD_FIXED] = "Fixed",
+    [UI_MENU_OBJECT_LOD_NOW] = "now +%.0f m",
     [UI_MENU_CROWD] = "Crowd distance",
     [UI_MENU_CROWD_DESC] = "How far from you the crowd people (the walkers in NLA) appear and fade out. Original "
                            "keeps the game's distances (about 25 m); higher values multiply them. Turn on GPU "
@@ -544,6 +558,17 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
                            "дальше, а плотные слои заполняются раньше. Применяется сразу.",
     [UI_MENU_GRASS_ORIGINAL] = "Как в игре", [UI_MENU_GRASS_15] = "1.5x", [UI_MENU_GRASS_2] = "2x",
     [UI_MENU_GRASS_3] = "3x",
+    [UI_MENU_OBJECT_LOD] = "Дальность детализации объектов",
+    [UI_MENU_OBJECT_LOD_DESC] = "Насколько дальше от камеры деревья, кусты и камни получают детальные модели. «Как в игре» — "
+                                "расстояния игры (до 50 м); шаг добавляет метры ко всем. Чем выше, тем больше нагрузка на процессор. "
+                                "При «Авто» это предел. Применяется сразу.",
+    [UI_MENU_OBJECT_LOD_ORIGINAL] = "Как в игре", [UI_MENU_OBJECT_LOD_STEP] = "+%s м",
+    [UI_MENU_OBJECT_LOD_MODE] = "Подстройка под частоту кадров",
+    [UI_MENU_OBJECT_LOD_MODE_DESC] = "«Авто» снижает дальность, когда кадр не укладывается в ограничение частоты кадров (без него — в частоту "
+                                     "экрана), и поднимает её до заданного значения, когда есть запас. «Фиксированная» — всегда заданное значение. "
+                                     "Применяется сразу.",
+    [UI_MENU_OBJECT_LOD_AUTO] = "Авто", [UI_MENU_OBJECT_LOD_FIXED] = "Фиксированная",
+    [UI_MENU_OBJECT_LOD_NOW] = "сейчас +%.0f м",
     [UI_MENU_CROWD] = "Дальность толпы",
     [UI_MENU_CROWD_DESC] = "Как далеко от вас появляются и исчезают прохожие (в NLA). «Как в игре» — расстояния "
                            "игры (около 25 м); большие значения умножают их. Сначала включите «Подготовка кадра "

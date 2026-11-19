@@ -39,6 +39,10 @@ typedef enum {
     UI_MENU_PICTURE_FIT, UI_MENU_PICTURE_FIT_DESC, UI_MENU_PICTURE_FIT_KEEP, UI_MENU_PICTURE_FIT_STRETCH,
     UI_MENU_WORLD_GROUP,      // group heading over the world detail rows of the Game tab
     UI_MENU_GRASS, UI_MENU_GRASS_DESC, UI_MENU_GRASS_ORIGINAL, UI_MENU_GRASS_15, UI_MENU_GRASS_2, UI_MENU_GRASS_3,
+    UI_MENU_OBJECT_LOD, UI_MENU_OBJECT_LOD_DESC, UI_MENU_OBJECT_LOD_ORIGINAL,
+    UI_MENU_OBJECT_LOD_STEP,   // "+%s m": one step of the object detail range, %s the metres
+    UI_MENU_OBJECT_LOD_MODE, UI_MENU_OBJECT_LOD_MODE_DESC, UI_MENU_OBJECT_LOD_AUTO, UI_MENU_OBJECT_LOD_FIXED,
+    UI_MENU_OBJECT_LOD_NOW,    // "now +%.0f m": the range Auto has in effect
     UI_MENU_CROWD, UI_MENU_CROWD_DESC, UI_MENU_CROWD_ORIGINAL,
     UI_MENU_CROWD_STEP,        // "%sx": one step of the crowd distance, %s the multiplier
     UI_MENU_SHARPNESS, UI_MENU_SHARPNESS_DESC,

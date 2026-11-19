@@ -307,6 +307,11 @@ void *rt_patch_page(void);                                 // the page the patch
 void rt_grass_init(void);                                  // after rt_patches_init: XCX_GRASS_DISTANCE (grass.c)
 void rt_grass_update(void);                                // at every present: applies a changed grass distance
 int rt_grass_available(void);                              // the grass patch set exists (the 2.0.0 update)
+void rt_objlod_update(void);                               // at every present: XCX_OBJECT_LOD_RANGE (objlod.c)
+int rt_objlod_available(void);                             // the 2.0.0 update's map object settings were found
+// the automatic object detail range (objlod.c): its state for the menu; 0 when Auto is not in effect
+int rt_objlod_status(float *now_m, float *max_m, float *busy_ms, float *budget_ms);
+uint64_t perf_last_frame(uint64_t *interval_ns, uint64_t *pace_ns);   // perf.c: the last frame's interval and pacing wait
 void rt_crowd_init(void);                                  // after rt_patches_init: XCX_CROWD_DISTANCE (crowd.c)
 void rt_crowd_update(void);                                // at every present: applies a changed crowd distance
 int rt_crowd_available(void);                              // the crowd patch set exists (the 2.0.0 update)

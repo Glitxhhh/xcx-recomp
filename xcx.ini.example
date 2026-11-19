@@ -144,6 +144,15 @@
 # How far from the camera grass loads and is drawn: 1 (the game's ranges, 10 to 90 m per grass layer), 1.5, 2 or 3.
 # Changes take effect at once.
 # grass_distance = 1
+# How many metres further from the camera trees, bushes, rocks and other map objects switch to their detailed models:
+# 0 (the game's distances, under 5 to about 50 m depending on the object), 10, 20, 30, 50, 75, 100, 150, 200, 300,
+# 500, 750 or 1000. Those are the menu's steps; here any value from 0 to 1000 works, and the menu then shows it in
+# its place between the two steps around it. Higher values cost some CPU time per frame. Changes take effect at once.
+# object_lod_range = 0
+# With object_lod_range above 0: auto (the default) treats it as the most to use and lowers the range whenever frames
+# take longer than the frame limit allows (the display's refresh rate without a limit), raising it again when there is
+# time to spare; fixed always uses object_lod_range as set. Changes take effect at once.
+# object_lod_mode = auto
 # How far from you the crowd people (the walkers in NLA) appear and fade out: 1 (the game's distances, about 25 m),
 # 1.5, 2, 3 or 4. Turn on replay_async = 1 before raising it: without it the extra people slow busy places a lot (in
 # the Commercial District at 4x, about 66 instead of 90 fps). Changes take effect at once.
