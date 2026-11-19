@@ -68,6 +68,9 @@ static const unsigned char roboto_ttf[] = {
 // ---- open state, any thread
 static std::atomic<int> g_open;     // the menu is open
 static std::atomic<int> g_reset;    // opened or closed since the last laid-out frame: drop stale input
+// The Quit Game prompt (menu_quit_prompt) is up in place of the menu: 1 it opened the menu state and closes it with No,
+// 2 it came up over the open menu and No returns there. Closing the menu ends it.
+static std::atomic<int> g_quit;
 
 // g_open, the input block and the log line change together under open_lock, so they cannot disagree when the window thread
 // (F1, Esc), the polling thread (combo) and the present path (Continue, B) race.
@@ -80,6 +83,7 @@ static int change_open(int want) {
     if (g_open.load() != open) {
         g_open.store(open);
         if(!open)mod_ui_interaction(0);
+        if (!open) g_quit.store(0);
         g_reset.store(1);
         input_menu(open);
         rt_log("menu: %s", open ? "open" : "closed");
@@ -96,6 +100,15 @@ extern "C" int menu_is_open(void) { return g_open.load(std::memory_order_relaxed
 extern "C" int menu_text_active(void) { return g_text.load(std::memory_order_relaxed); }
 extern "C" void menu_toggle(void) {   // not over a text entry: the game is waiting for its answer
     if (!g_failed_flag() && !menu_text_active()) change_open(-1);
+}
+
+// L+R+ZL+ZR held (input_quit_gate): the prompt blocks the game's input like the menu. Not over a text entry.
+extern "C" void menu_quit_prompt(void) {
+    if (g_failed_flag() || menu_text_active() || g_quit.load()) return;
+    g_quit.store(g_open.load() ? 2 : 1);
+    g_reset.store(1);   // the held combination does not press anything in the prompt
+    change_open(1);
+    rt_log("menu: quit prompt");
 }
 
 // ---- events from the window adapter, queued while the menu is open; the present path hands them to ImGui
@@ -503,12 +516,13 @@ static void row_gpu(void) {
 
 // The game language: one entry per language XCX ships (a Switch code that names it), each under its own name. The
 // Switch's Portuguese is not among them, nor Russian: the game stops before the title in it (ov_system.c playable).
+// Chinese takes the codes zh-Hans and zh-Hant, which the game knows; it stops the same way with zh-CN and zh-TW.
 static void row_game_lang(void) {
     static const struct { const char *code; UiTextId name; } langs[] = {
         {"en-US", UI_MENU_LANGNAME_EN}, {"ja", UI_MENU_LANGNAME_JA}, {"fr", UI_MENU_LANGNAME_FR},
         {"de", UI_MENU_LANGNAME_DE}, {"it", UI_MENU_LANGNAME_IT}, {"es", UI_MENU_LANGNAME_ES},
         {"nl", UI_MENU_LANGNAME_NL},
-        {"zh-CN", UI_MENU_LANGNAME_ZH_HANS}, {"zh-TW", UI_MENU_LANGNAME_ZH_HANT}, {"ko", UI_MENU_LANGNAME_KO},
+        {"zh-Hans", UI_MENU_LANGNAME_ZH_HANS}, {"zh-Hant", UI_MENU_LANGNAME_ZH_HANT}, {"ko", UI_MENU_LANGNAME_KO},
     };
     enum { N = sizeof langs / sizeof *langs + 1 };
     const char *vals[N], *names[N];
@@ -567,7 +581,8 @@ static const char *present_note(void) {
 // ---- the tabs
 static void tab_screen(float scale) {
     opt_begin("##screen", scale);
-    opt_toggle("XCX_FULLSCREEN", UI_MENU_FULLSCREEN, UI_MENU_FULLSCREEN_DESC);
+    static const UiTextId mode[] = {UI_MENU_MODE_WINDOW, UI_MENU_MODE_BORDERLESS, UI_MENU_MODE_FULLSCREEN};
+    opt_choice("XCX_FULLSCREEN", UI_MENU_FULLSCREEN, mode, 3, UI_MENU_FULLSCREEN_DESC);
     row_window_size();
     static const UiTextId present[] = {UI_MENU_PRESENT_MAILBOX, UI_MENU_PRESENT_VSYNC, UI_MENU_PRESENT_IMMEDIATE};
     opt_choice("XCX_VK_PRESENT", UI_MENU_PRESENT, present, 3, UI_MENU_PRESENT_DESC, present_note());
@@ -646,6 +661,8 @@ static void tab_game(float scale) {
     static const UiTextId cut[] = {UI_MENU_CUTSCENE_30, UI_MENU_CUTSCENE_MIXED, UI_MENU_CUTSCENE_LIMIT};
     opt_choice("XCX_CUTSCENE_30", UI_MENU_CUTSCENE_FPS, cut, 3, UI_MENU_CUTSCENE_FPS_DESC);
     row_game_lang();
+    static const UiTextId voice[] = {UI_MENU_GAME_LANG_AUTO, UI_MENU_VOICE_JA, UI_MENU_VOICE_EN};
+    opt_choice("XCX_VOICE_LANG", UI_MENU_VOICE_LANG, voice, 3, UI_MENU_VOICE_LANG_DESC);
     static const UiTextId mode[] = {UI_MENU_MODE_DOCKED, UI_MENU_MODE_HANDHELD};
     opt_choice("XCX_OPERATION_MODE", UI_MENU_OPERATION_MODE, mode, 2, UI_MENU_OPERATION_MODE_DESC);
     opt_toggle("XCX_CHEATS", UI_MENU_CHEATS, UI_MENU_CHEATS_DESC);
@@ -1418,6 +1435,32 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
     ImGui::End();
 }
 
+// The Quit Game prompt over the dimmed game: No has the cursor first, and B or Esc answer No as well. Yes ends the
+// process as the window's close button does (gfx_window_closed): nothing is saved, a save already being written
+// finishes first.
+static void layout_quit(uint32_t w, uint32_t h) {
+    ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0, 0), ImVec2((float)w, (float)h), IM_COL32(0, 0, 0, 120));
+    ImGui::SetNextWindowPos(ImVec2(w * 0.5f, h * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowFocus();
+    ImGui::Begin("##quit", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                                        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::TextUnformatted(menu_text(UI_QUIT_CONFIRM));
+    ImGui::Spacing();
+    const char *yes = menu_text(UI_QUIT_YES), *no = menu_text(UI_QUIT_NO);
+    const ImGuiStyle &st = ImGui::GetStyle();
+    float bw = fmaxf(ImGui::CalcTextSize(yes).x, ImGui::CalcTextSize(no).x) + st.FramePadding.x * 8;
+    bool back = ImGui::Button(no, ImVec2(bw, 0));
+    if (ImGui::IsWindowAppearing()) ImGui::SetItemDefaultFocus();
+    ImGui::SameLine();
+    if (ImGui::Button(yes, ImVec2(bw, 0))) {
+        rt_log("menu: quit prompt: yes");
+        gfx_window_request_close();
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false)) back = true;
+    if (back && g_quit.exchange(0) == 1) set_open(0);
+    ImGui::End();
+}
+
 static int g_save_pending;   // a changed setting still waits for its write to xcx.ini (opt_save_tick)
 
 // ---- the performance overlay (XCX_PERF_OVERLAY), in the top right corner. "fps": the frame rate over the presents of
@@ -1630,13 +1673,21 @@ static void perf_full_draw(const MenuTarget *t, float scale) {
     // per frame, averaged over the last half second; the labels' column stretches, so the numbers end at the panel's
     // right edge, and the table still asks for no more than its widest label and number
     if (ImGui::BeginTable("##perfw", 2, ImGuiTableFlags_SizingFixedFit)) {
-        static const PerfCol c1[] = {{UI_MENU_OV_FMT_MS, 888.88f}, {UI_MENU_OV_PER_FRAME, 888.8f}};
+        static const PerfCol c1[] = {{UI_MENU_OV_FMT_MS, 888.88f}, {UI_MENU_OV_PER_FRAME, 888.8f},
+                                     {UI_MENU_OV_FMT_PCT, 100}};
         ImGui::TableSetupColumn("##w0", ImGuiTableColumnFlags_WidthStretch);
-        perf_column("##w1", c1, 2);
+        perf_column("##w1", c1, 3);
         perf_label(UI_MENU_OV_REPLAY, wait_c);
         perf_cell(UI_MENU_OV_FMT_MS, s.replay_ms);
         perf_label(UI_MENU_OV_GPU_TIME, wait_c);
         perf_cell(UI_MENU_OV_FMT_MS, s.gpu_ms);
+        perf_label(UI_MENU_OV_PRESENT_TIME, wait_c);   // not in the row above: the present's own command buffer
+        perf_cell(UI_MENU_OV_FMT_MS, s.present_ms);
+        // the GPU row at the top counts every process; this is the game's own part, so work outside it shows apart
+        if (s.gpu_game_pct >= 0) {
+            perf_label(UI_MENU_OV_GPU_GAME, wait_c);
+            perf_cell(UI_MENU_OV_FMT_PCT, s.gpu_game_pct);
+        }
         perf_label(UI_MENU_OV_PIPE_WAIT, wait_c);
         perf_cell(UI_MENU_OV_FMT_MS, s.pipe_wait_ms);
         perf_label(UI_MENU_OV_SHADER_WAIT, wait_c);
@@ -1759,6 +1810,8 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
             }
         }
         plat_mutex_unlock(&text_lock);
+    } else if (open && g_quit.load()) {
+        layout_quit(t->width, t->height);
     } else if (open) {
         layout_menu(t->width, t->height, scale);
     }

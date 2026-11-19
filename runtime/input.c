@@ -456,6 +456,10 @@ static void poll_merged(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx
                glyph_family);
     script_apply(&b, sl, sr);
     rec_apply(b, sl, sr);
+    // L+R+ZL+ZR held for a second ask whether to quit, over the game or the open menu (before the menu's gate, which
+    // empties the pad while the menu is open)
+    static InputQuitHold quit_hold;
+    int quit = input_quit_gate(&quit_hold, plat_now_ns(), &b);
     // Minus and Plus held together (gamepad or keys) open or close the menu and never reach the game
     static int combo_held;
     int32_t st[4] = {sl[0], sl[1], sr[0], sr[1]};
@@ -466,6 +470,7 @@ static void poll_merged(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx
     plat_mutex_unlock(&lock);
     if (toggle) menu_toggle();
     if (overlay) menu_perf_cycle();
+    if (quit) menu_quit_prompt();
     stick_bits(&b, sl[0], sl[1], B_SL_LEFT);
     stick_bits(&b, sr[0], sr[1], B_SR_LEFT);
     *buttons = b; *lx = sl[0]; *ly = sl[1]; *rx = sr[0]; *ry = sr[1];

@@ -80,6 +80,8 @@ void perf_set_overlay(int mode);
 int perf_gpu_timing(void);                      // GPU timestamps wanted: XCX_TRACE=perf or the full overlay
 void perf_gpu_busy(uint64_t ns);                // GPU busy time of a timed submission part (vk_sync.c, any thread)
 uint64_t perf_gpu_busy_total(void);             // its running total (the overlay's GPU time per frame)
+void perf_present_gpu(uint64_t ns);             // GPU time of one present command buffer (gfx_present.c)
+uint64_t perf_present_gpu_total(void);          // its running total (the overlay's present time per frame)
 #define RT_RESULT(module, desc) ((uint32_t)(module) | ((uint32_t)(desc) << 9))
 void rt_sha256(const void *p, size_t n, uint8_t out[32]);   // BCrypt; fatal if the provider fails
 
@@ -261,6 +263,8 @@ void account_uid(uint64_t out[2]);                         // the local user's n
 void movie_tick(Cpu *c);                                   // at every present, on the presenting guest thread: hands
                                                            // decoded movie frames over when due, signals their events
 int movie_playing(void);                                   // a pre-rendered movie plays (ov_movie.c)
+void voice_lang_init(void);                               // after rt_patches_init: the voice patch sets of XCX_VOICE_LANG
+void voice_lang_tick(void);                               // at every present: XCX_VOICE_LANG sets the game's voice option
 // ---- game resolution (resolution.c): XCX_OUTPUT_RES, XCX_RENDER_SCALE
 uint64_t res_heap_extra_bytes(void);                       // added to the application pool (mem_init), 2 MiB steps
 uint64_t res_heap_extra_kib(void);                         // added to the HeapDef texture heap and its parent; 0 = none

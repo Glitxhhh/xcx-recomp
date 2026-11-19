@@ -276,6 +276,10 @@ static int layout_symbols(int layout, int16_t art[GLYPH_SYMBOLS]) {
         if (strncmp(name, "keyboard_", 9) && strncmp(name, "mouse_", 6)) art[SYM_CRS] = art[SYM_CRSD];
     }
     if (layout == INLINE_LAYOUT_HINT) { art[SYM_CRSD] = -1; any = art[SYM_R] >= 0 || art[SYM_CRS] >= 0; }
+    // The Soul Challenge button is a white mask (glyph_art_to_mask: alpha from brightness) that the game tints orange, so the
+    // tile's own color is lost anyway. A colored face (the Xbox red B is luma 107) came out half transparent, a dim disc where
+    // the native one is opaque (#58): the standard tile, a white disc with a dark letter, gives the native solid disc.
+    if (layout == INLINE_LAYOUT_SOUL && art[SYM_B] >= 0) art[SYM_B] = (int16_t)glyph_art_variant(art[SYM_B], GLYPH_STANDARD);
     // The page-turn circles (left and right chevrons around a right-stick cell) draw the arrow keys with only left and right lit.
     if (layout == INLINE_LAYOUT_SHEET && art[SYM_ANAR] >= 0 && art[SYM_ANAR] == glyph_art_find(GLYPH_KEYBOARD, GLYPH_IN_KB_ARROWS)) {
         int lit = glyph_art_find(GLYPH_KEYBOARD, GLYPH_IN_KB_ARROWS_LIT_H);

@@ -1638,8 +1638,8 @@ void plat_cpu_load(PlatLoad *l, float *total_pct, float *proc_pct, float *temp_c
     if (l->temp[0] && read_u64_file(l->temp, &mc)) *temp_c = (float)mc / 1000.0f;
 }
 
-void plat_gpu_load(PlatLoad *l, float *load_pct, float *vram_used_mb) {
-    *load_pct = *vram_used_mb = -1;
+void plat_gpu_load(PlatLoad *l, float *load_pct, float *game_pct, float *vram_used_mb) {
+    *load_pct = *game_pct = *vram_used_mb = -1;   // gpu_busy_percent is the whole GPU's: no share per process
     if (!l || !l->gpu[0]) return;
     char path[300];
     uint64_t v;

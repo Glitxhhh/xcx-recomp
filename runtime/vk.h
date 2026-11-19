@@ -34,7 +34,8 @@ typedef struct VkCtx {
         has_conditional_rendering, has_transform_feedback, has_provoking_vertex, has_device_fault, has_memory_budget,
         has_robustness2, has_buffer_device_address, has_fragment_shader_interlock, has_buffer_marker,
         has_astc_ldr,                       // textureCompressionASTC_LDR (enabled when reported)
-        has_hdr_metadata;                   // VK_EXT_hdr_metadata (vk_hdr.c vk_hdr_metadata)
+        has_hdr_metadata,                   // VK_EXT_hdr_metadata (vk_hdr.c vk_hdr_metadata)
+        has_full_screen_exclusive;          // VK_EXT_full_screen_exclusive, Windows (gfx_present.c create_swapchain)
     // Feedback loops (maxwell.md 1.9, vk_exec_draw.c feedback_prepare): a draw samples a target of its open pass that
     // an earlier draw of the pass wrote. XCX_FEEDBACK=0: VK_FEEDBACK_OFF (sampled in GENERAL without a barrier, the
     // old behaviour); VK_FEEDBACK_LAYOUT with VK_EXT_attachment_feedback_loop_layout and dynamicRenderingLocalRead
@@ -258,6 +259,7 @@ uint64_t vk_mem_gen(void);
 // range was written after generation `since`, 0 when not, -1 when the range is not write-watched (treat as written);
 // *now is the generation to pass next time.
 int vk_mem_changed(uint64_t addr, uint64_t size, uint32_t since, uint32_t *now);
+uint32_t vk_mem_gen_mark(void);   // a fresh page write generation, newer than every stamp so far
 // The same answer from per-epoch write-watch snapshots of 2 MiB regions: no system call once the regions were queried in
 // this epoch (a guest submission). For checks that may see writes made during the epoch one epoch late.
 int vk_mem_changed_snap(uint64_t addr, uint64_t size, uint32_t since, uint32_t epoch, uint32_t *now);
@@ -384,6 +386,8 @@ typedef struct { uint64_t live, released, own_live, own_released, bytes_live, by
 void vk_texture_census(VkTexCensus *s);
 void vk_texture_shutdown(void);                     // vk_mem_shutdown calls it
 void vk_texture_new_submit(void);                   // a queue submit starts: draw bindings check storage again
+uint32_t vk_texture_submit_baseline(void);          // asynchronous replay, at the game's submit: see vk_texture.c
+void vk_texture_replay_base(uint32_t base);         // the replay thread: the baseline of the submission it replays
 uint32_t vk_texture_epoch(void);                    // the write-watch snapshot epoch vk_texture_new_submit started
 VkSampler vk_sampler_by_id(int id);                 // VK_NULL_HANDLE for an empty slot
 VkSampler vk_sampler_for(const samp_par *s);        // cached by content

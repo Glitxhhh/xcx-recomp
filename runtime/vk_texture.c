@@ -54,6 +54,8 @@ typedef struct Tex {
     struct Tex *next_at;          // other entries at the same storage address
     uint8_t gpu_dirty;            // mirrored, and the GPU wrote the image after the last write-back to the storage
     uint32_t gpu_gen;             // page generation when the GPU write that set gpu_dirty was recorded
+    uint32_t cover_gen;           // asynchronous replay: the first submit baseline (vk_texture_submit_baseline) that
+                                  // covered its storage while in owned[]; 0: none since it was listed
     uint64_t gpu_seq;             // order of that GPU write among all of them (gpu_writes)
     uint64_t gpu_fence;           // fence of the submission that made that write (0: not recorded in one)
     uint64_t wr_fence;            // any entry: newest submission recorded to write its image (render, copy, clear,
@@ -121,6 +123,9 @@ static int nrbq, crbq;
 // of the ~13 write-backs per frame cut the city from 143 to about 80 fps (issue 37).
 static uint32_t map_epoch = 1;
 static uint64_t n_rb_copies, n_rb_used, n_rb_sync;   // readbacks recorded, write-backs from them, synchronous ones
+static uint64_t n_late;   // asynchronous replay: renders whose storage the game rewrote between submit and record
+static uint64_t n_base, n_base_checks;   // submit baselines since the last log line, and their storage checks
+
 
 static void rbq_remove(struct Tex *e);
 // Bumped whenever the entry a slot resolves to can change: an entry created or destroyed, released or taken back into
@@ -499,6 +504,7 @@ static void own_remove(Tex *e) {
             break;
         }
     e->listed = 0;
+    __atomic_store_n(&e->cover_gen, 0, __ATOMIC_RELAXED);
     plat_mutex_unlock(&owned_lock);
 }
 
@@ -938,6 +944,52 @@ static int rb_capable(const Tex *e) {
     return !e->f.astc_bw && !e->f.expand_rgb && !e->f.depth && !e->f.stencil && e->t.L.size;
 }
 
+// Asynchronous replay (vk_backend.c): the game submits and goes on, up to a frame ahead of the replay, and may write the
+// storage of a target the submission renders before the replay records that render. Dated at the record (gpu_written),
+// those CPU writes counted as older than the render, so the write-back after the game's next fence wait copied the
+// render's texels over them; with the synchronous replay the record is the submit and they count as newer. Since the
+// luminance meter (issue 37) about a dozen small targets go back to their storage after every fence wait. So at each
+// submit the game thread stamps the CPU writes so far into the small targets in owned[] (vk_texture_submit_baseline),
+// and the replay of that submission dates its renders into those targets to the submit (render_gen): the write-backs
+// then leave alone storage written after the submit, as the synchronous replay does. A target not in owned[] at the
+// submit keeps the generation of the record. replay_base: the baseline of the submission being replayed (0: none, or the
+// synchronous replay).
+static uint32_t replay_base;
+
+uint32_t vk_texture_submit_baseline(void) {
+    if (!__atomic_load_n(&nowned, __ATOMIC_ACQUIRE)) return vk_mem_gen_mark();
+    plat_mutex_lock_shared(&owned_lock);
+    uint64_t checks = 0;
+    for (int i = 0; i < nowned; i++) {
+        uint32_t now;
+        if (owned[i]->t.L.size <= WB_SMALL) storage_rewritten(owned[i], 0, &now), checks++;   // stamps the writes so far
+    }
+    __atomic_add_fetch(&n_base, 1, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&n_base_checks, checks, __ATOMIC_RELAXED);
+    uint32_t g = vk_mem_gen_mark();
+    for (int i = 0; i < nowned; i++) {
+        uint32_t z = 0;
+        if (owned[i]->t.L.size <= WB_SMALL)
+            __atomic_compare_exchange_n(&owned[i]->cover_gen, &z, g, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+    }
+    plat_mutex_unlock_shared(&owned_lock);
+    return g;
+}
+
+void vk_texture_replay_base(uint32_t base) { __atomic_store_n(&replay_base, base, __ATOMIC_RELEASE); }
+
+// tex_lock held: e->gpu_gen for a render the submission being recorded makes into mirrored e.
+static void render_gen(Tex *e) {
+    uint32_t base = __atomic_load_n(&replay_base, __ATOMIC_ACQUIRE), cov = __atomic_load_n(&e->cover_gen, __ATOMIC_RELAXED);
+    if (!base || !cov || cov > base || e->t.L.size > WB_SMALL) {
+        storage_rewritten(e, 0, &e->gpu_gen);   // CPU writes up to here are older than this render
+        return;
+    }
+    uint32_t now;
+    if (storage_rewritten(e, base, &now) == 1) n_late++;   // the write-back will leave the storage alone
+    e->gpu_gen = base;
+}
+
 void vk_texture_gpu_written(const tex_t *t) {
     if (!t || !t->mem) return;
     vk_exec_frame_written(t);
@@ -950,7 +1002,7 @@ void vk_texture_gpu_written(const tex_t *t) {
         if (f > e->wr_fence) e->wr_fence = f;
         if (e->pub.mirrored) {
             e->gpu_dirty = 1;
-            storage_rewritten(e, 0, &e->gpu_gen);   // CPU writes up to here are older than this render
+            render_gen(e);
             e->gpu_seq = ++gpu_writes;
             e->gpu_fence = vk_exec_recording_fence();
             if (e->t.L.size <= WB_SMALL) {
@@ -1454,8 +1506,11 @@ void vk_texture_new_submit(void) {
     if (f / 20 != wb_log_at && (n_rb_copies | n_rb_used | n_rb_sync)) {
         wb_log_at = f / 20;
         rt_log("vk: frame %llu: small targets copied to host memory at their submission %llu, written back from there "
-               "%llu, written back with a copy the CPU waited for %llu", (unsigned long long)f * 60,
-               (unsigned long long)n_rb_copies, (unsigned long long)n_rb_used, (unsigned long long)n_rb_sync);
+               "%llu, written back with a copy the CPU waited for %llu; rewritten between submit and record so far %llu; submit baselines %llu, %.1f checks each",
+               (unsigned long long)f * 60, (unsigned long long)n_rb_copies, (unsigned long long)n_rb_used,
+               (unsigned long long)n_rb_sync, (unsigned long long)n_late, (unsigned long long)n_base,
+               n_base ? (double)n_base_checks / (double)n_base : 0.0);
+        n_base = n_base_checks = 0;
         n_rb_copies = n_rb_used = n_rb_sync = 0;
     }
     if ((rt_trace & RT_TRACE_PERF) && f != log_at && tex_alias > 0) {

@@ -11,9 +11,10 @@ int glyph_art_find(int style, int physical) {
 }
 int glyph_art_variant(int art, int appearance) {
     if (art < 0 || (unsigned)art >= glyph_art_count()) return -1;
-    if (appearance == GLYPH_COLORED) for (unsigned i=0;i<glyph_art_count();i++)
+    // The tile of the same style and input in the other appearance, both ways: a colored face maps back to its standard tile.
+    if (glyph_arts[art].appearance != appearance) for (unsigned i=0;i<glyph_art_count();i++)
         if (glyph_arts[i].style == glyph_arts[art].style && glyph_arts[i].input == glyph_arts[art].input &&
-            glyph_arts[i].appearance == GLYPH_COLORED) return (int)i;
+            glyph_arts[i].appearance == appearance) return (int)i;
     return art;
 }
 const char *glyph_art_name(unsigned art) { return art < glyph_art_count() ? glyph_arts[art].name : "original"; }

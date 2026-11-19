@@ -99,12 +99,18 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_TAB_SCREEN] = "Screen", [UI_MENU_TAB_GAME] = "Game", [UI_MENU_TAB_SOUND] = "Sound",
     [UI_MENU_TAB_CONTROLS] = "Controls", [UI_MENU_TAB_MENU] = "Menu", [UI_MENU_TAB_ADVANCED] = "Advanced",
     [UI_MENU_CONTINUE] = "Continue", [UI_MENU_QUIT] = "Quit game",
+    [UI_QUIT_CONFIRM] = "Quit the game? Progress since the last save is lost.", [UI_QUIT_YES] = "Yes", [UI_QUIT_NO] = "No",
     [UI_MENU_ON] = "On", [UI_MENU_OFF] = "Off", [UI_MENU_AUTO] = "Automatic", [UI_MENU_DEFAULT_MARK] = "default",
     [UI_MENU_AFTER_RESTART] = "after restart", [UI_MENU_SET_BY_ENV] = "set by environment variable",
     [UI_MENU_SAVE_FAILED] = "could not save settings",
     [UI_MENU_VERSION] = "XCX Recomp %s, game %s",
 
-    [UI_MENU_FULLSCREEN] = "Fullscreen", [UI_MENU_FULLSCREEN_DESC] = "Fills the screen with the game; F11 toggles it.",
+    [UI_MENU_FULLSCREEN] = "Display mode",
+    [UI_MENU_FULLSCREEN_DESC] = "Window: a window of the size below. Borderless: a window without a frame over the "
+                                "whole monitor; the taskbar and Alt+Tab work over it. Fullscreen: the game may take the "
+                                "monitor for itself, at the desktop's resolution. F11 switches between the window and "
+                                "the last full mode.",
+    [UI_MENU_MODE_WINDOW] = "Window", [UI_MENU_MODE_BORDERLESS] = "Borderless", [UI_MENU_MODE_FULLSCREEN] = "Fullscreen",
     [UI_MENU_WINDOW_SIZE] = "Window size", [UI_MENU_WINDOW_SIZE_DESC] = "Size of the game window when not fullscreen.",
     [UI_MENU_WINDOW_SIZE_CUSTOM] = "Custom",
     [UI_MENU_PRESENT] = "Presentation", [UI_MENU_PRESENT_DESC] = "How finished frames reach the screen.",
@@ -114,7 +120,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_GPU_AUTO] = "Automatic",
     [UI_MENU_PERF_OVERLAY] = "Performance overlay",
     [UI_MENU_PERF_OVERLAY_DESC] = "Frame rate in the top right corner. Full adds frame times with a graph, CPU, GPU and "
-                                  "memory load, temperatures and the render thread's waits. F10 cycles the modes.",
+                                  "memory load, temperatures and the render thread's waits. F2 or F10 cycles the modes.",
     [UI_MENU_PERF_OFF] = "Off", [UI_MENU_PERF_FPS] = "FPS", [UI_MENU_PERF_FULL] = "Full",
     // printf format of the overlay line in FPS mode: the frame rate
     [UI_PERF_LINE_FPS] = "%.0f fps",
@@ -198,8 +204,15 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_CLOTH_REALTIME_DESC] = "Steps cloth and hair by real time as well.",
     [UI_MENU_HIGHFPS_FIX] = "High frame rate physics fix",
     [UI_MENU_HIGHFPS_FIX_DESC] = "Corrects physics that misbehave above 30 frames per second.",
-    [UI_MENU_GAME_LANG] = "Game language", [UI_MENU_GAME_LANG_DESC] = "Language of the game's text and voices.",
+    [UI_MENU_GAME_LANG] = "Game language",
+    [UI_MENU_GAME_LANG_DESC] = "Language of the game's text, and of its voices unless Voice language picks them.",
     [UI_MENU_GAME_LANG_AUTO] = "Automatic",
+    [UI_MENU_VOICE_LANG] = "Voice language",
+    [UI_MENU_VOICE_LANG_DESC] = "Japanese or English voices with matching lip sync, whatever the text language. "
+                                "Automatic leaves it to the game: Japanese voices with Japanese or Chinese text, "
+                                "English otherwise. A change takes effect when the game next applies its options, "
+                                "as on loading a save.",
+    [UI_MENU_VOICE_JA] = "Japanese", [UI_MENU_VOICE_EN] = "English",
     [UI_MENU_OPERATION_MODE] = "Console mode",
     [UI_MENU_OPERATION_MODE_DESC] = "Whether the game thinks it runs docked or handheld.",
     [UI_MENU_MODE_DOCKED] = "Docked", [UI_MENU_MODE_HANDHELD] = "Handheld",
@@ -369,6 +382,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_OV_TEMP] = "Temperature", [UI_MENU_OV_POWER] = "Power", [UI_MENU_OV_CLOCK] = "Clock",
     [UI_MENU_OV_NONE] = "-",
     [UI_MENU_OV_REPLAY] = "GPU frame prep", [UI_MENU_OV_GPU_TIME] = "GPU busy per frame",
+    [UI_MENU_OV_PRESENT_TIME] = "GPU present per frame", [UI_MENU_OV_GPU_GAME] = "GPU use by the game",
     [UI_MENU_OV_PIPE_WAIT] = "Pipeline waits",
     [UI_MENU_OV_SHADER_WAIT] = "Shader waits", [UI_MENU_OV_TEX_UPLOADS] = "Texture uploads",
     [UI_MENU_OV_FMT_PCT] = "%.0f%%", [UI_MENU_OV_FMT_TEMP] = "%.0f °C", [UI_MENU_OV_FMT_POWER] = "%.0f W",
@@ -456,13 +470,20 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_TAB_SCREEN] = "Экран", [UI_MENU_TAB_GAME] = "Игра", [UI_MENU_TAB_SOUND] = "Звук",
     [UI_MENU_TAB_CONTROLS] = "Управление", [UI_MENU_TAB_MENU] = "Меню", [UI_MENU_TAB_ADVANCED] = "Дополнительно",
     [UI_MENU_CONTINUE] = "Продолжить", [UI_MENU_QUIT] = "Выйти из игры",
+    [UI_QUIT_CONFIRM] = "Выйти из игры? Прогресс после последнего сохранения будет потерян.", [UI_QUIT_YES] = "Да",
+    [UI_QUIT_NO] = "Нет",
     [UI_MENU_ON] = "Вкл.", [UI_MENU_OFF] = "Выкл.", [UI_MENU_AUTO] = "Автоматически",
     [UI_MENU_DEFAULT_MARK] = "по умолчанию",
     [UI_MENU_AFTER_RESTART] = "после перезапуска", [UI_MENU_SET_BY_ENV] = "задано переменной окружения",
     [UI_MENU_SAVE_FAILED] = "не удалось сохранить настройки",
     [UI_MENU_VERSION] = "XCX Recomp %s, игра %s",
 
-    [UI_MENU_FULLSCREEN] = "Полный экран", [UI_MENU_FULLSCREEN_DESC] = "Игра на весь экран; F11 переключает режим.",
+    [UI_MENU_FULLSCREEN] = "Режим экрана",
+    [UI_MENU_FULLSCREEN_DESC] = "Окно: окно размера ниже. Без рамки: окно без рамки на весь монитор; панель задач и "
+                                "Alt+Tab работают поверх него. Полный экран: игра может занять монитор целиком, в "
+                                "разрешении рабочего стола. F11 переключает между окном и последним полноэкранным "
+                                "режимом.",
+    [UI_MENU_MODE_WINDOW] = "Окно", [UI_MENU_MODE_BORDERLESS] = "Без рамки", [UI_MENU_MODE_FULLSCREEN] = "Полный экран",
     [UI_MENU_WINDOW_SIZE] = "Размер окна", [UI_MENU_WINDOW_SIZE_DESC] = "Размер окна игры вне полноэкранного режима.",
     [UI_MENU_WINDOW_SIZE_CUSTOM] = "Другой",
     [UI_MENU_PRESENT] = "Вывод кадров", [UI_MENU_PRESENT_DESC] = "Как готовые кадры попадают на экран.",
@@ -473,7 +494,7 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_GPU_AUTO] = "Автоматически",
     [UI_MENU_PERF_OVERLAY] = "Индикатор производительности",
     [UI_MENU_PERF_OVERLAY_DESC] = "Частота кадров в правом верхнем углу. «Полный» добавляет время кадров с графиком, "
-                                  "загрузку ЦП, GPU и памяти, температуры и ожидания потока отрисовки. F10 переключает "
+                                  "загрузку ЦП, GPU и памяти, температуры и ожидания потока отрисовки. F2 или F10 переключают "
                                   "режимы.",
     [UI_MENU_PERF_OFF] = "Выкл.", [UI_MENU_PERF_FPS] = "FPS", [UI_MENU_PERF_FULL] = "Полный",
     [UI_PERF_LINE_FPS] = "%.0f к/с",
@@ -553,8 +574,15 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_CLOTH_REALTIME_DESC] = "Ткань и волосы тоже идут по реальному времени.",
     [UI_MENU_HIGHFPS_FIX] = "Исправление физики на высоком FPS",
     [UI_MENU_HIGHFPS_FIX_DESC] = "Исправляет физику, которая ломается при частоте выше 30 кадров в секунду.",
-    [UI_MENU_GAME_LANG] = "Язык игры", [UI_MENU_GAME_LANG_DESC] = "Язык текста и озвучки игры.",
+    [UI_MENU_GAME_LANG] = "Язык игры",
+    [UI_MENU_GAME_LANG_DESC] = "Язык текста игры, а также озвучки, если её не задаёт «Язык озвучки».",
     [UI_MENU_GAME_LANG_AUTO] = "Автоматически",
+    [UI_MENU_VOICE_LANG] = "Язык озвучки",
+    [UI_MENU_VOICE_LANG_DESC] = "Японская или английская озвучка с подходящей синхронизацией губ, при любом языке "
+                                "текста. «Автоматически» оставляет выбор игре: японская озвучка при японском или "
+                                "китайском тексте, иначе английская. Изменение вступает в силу, когда игра снова "
+                                "применяет настройки, например при загрузке сохранения.",
+    [UI_MENU_VOICE_JA] = "Японский", [UI_MENU_VOICE_EN] = "Английский",
     [UI_MENU_OPERATION_MODE] = "Режим консоли",
     [UI_MENU_OPERATION_MODE_DESC] = "Игра считает, что консоль в док-станции или в портативном режиме.",
     [UI_MENU_MODE_DOCKED] = "В док-станции", [UI_MENU_MODE_HANDHELD] = "Портативный",
@@ -723,6 +751,8 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_OV_TEMP] = "Температура", [UI_MENU_OV_POWER] = "Мощность", [UI_MENU_OV_CLOCK] = "Частота",
     [UI_MENU_OV_NONE] = "-",
     [UI_MENU_OV_REPLAY] = "Подготовка кадра для GPU", [UI_MENU_OV_GPU_TIME] = "Занятость GPU за кадр",
+    [UI_MENU_OV_PRESENT_TIME] = "Вывод на GPU за кадр",
+    [UI_MENU_OV_GPU_GAME] = "Загрузка GPU игрой",
     [UI_MENU_OV_PIPE_WAIT] = "Ожидания конвейеров",
     [UI_MENU_OV_SHADER_WAIT] = "Ожидания шейдеров", [UI_MENU_OV_TEX_UPLOADS] = "Загрузки текстур",
     [UI_MENU_OV_FMT_PCT] = "%.0f%%", [UI_MENU_OV_FMT_TEMP] = "%.0f °C", [UI_MENU_OV_FMT_POWER] = "%.0f Вт",

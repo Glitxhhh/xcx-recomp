@@ -80,9 +80,10 @@
     {
       "id": "window",
       "label": "Window",
-      "help": "Fullscreen fills your screen. Windowed uses the window size.",
+      "help": "Windowed uses the window size. Borderless covers your screen and keeps the taskbar and Alt+Tab working. Fullscreen lets the game take the screen.",
       "choices": [
         { "label": "Windowed", "set": { "display/fullscreen": "0" } },
+        { "label": "Borderless", "set": { "display/fullscreen": "borderless" } },
         { "label": "Fullscreen", "set": { "display/fullscreen": "1" } }
       ],
       "defaults": { "display/fullscreen": "0" }

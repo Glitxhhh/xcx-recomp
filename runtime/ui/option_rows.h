@@ -4,7 +4,7 @@
 // the setting is read at start, and is greyed out with a note when an environment variable fixes it.
 //
 //   opt_begin("##screen", scale);
-//   opt_toggle("XCX_FULLSCREEN", UI_MENU_FULLSCREEN, UI_MENU_FULLSCREEN_DESC);
+//   opt_toggle("XCX_MOTION", UI_MENU_MOTION, UI_MENU_MOTION_DESC);
 //   opt_end();
 //
 // key: the setting's XCX_ name, which must have a cfg_meta row. Present path only (ImGui).
