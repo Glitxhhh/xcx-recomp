@@ -180,6 +180,26 @@ void mem_thaw(uint64_t a, uint64_t n);                     // makes the frozen r
                                                            // before a kernel write (file read) into guest memory
 void mem_freeze_stats(uint64_t *frozen, uint64_t *freezes, uint64_t *fault_thaws, uint64_t *other_thaws);
                                                            // regions frozen now; freezes and thaws since the last call
+// Copy-on-write snapshots (memory.c, "copy-on-write blocks"): the async replay reads guest memory as of a submission.
+// Submissions are numbered by mem_cow_begin. A block protected at submission p and written at q keeps a copy of its
+// bytes valid for submissions p..q until the replay is done with q.
+void mem_cow_init(int blk_shift, uint64_t arena_bytes);   // 0 arena: off
+int mem_cow_on(void);
+int mem_cow_blk_shift(void);
+uint64_t mem_cow_arena_bytes(void);
+uint32_t mem_cow_begin(void);                              // game thread, at a submit: its number; holds the lock
+void mem_cow_protect(uint64_t lo, uint64_t hi);            // between begin and end: the whole blocks of [lo, hi)
+void mem_cow_end(void);                                    // releases idle regions, drops the lock
+void mem_cow_done(uint32_t s);                             // replay: submission s recorded; its copies may go
+// Replay, recording submission s: n bytes at a (inside one block) as of s into dst. Returns 2 when they came from a
+// saved copy, 1 from a block still protected since s or earlier, 0 live (not protected: as before, read late).
+// *when is the plat_now_ns time the bytes are from: the save's, else now.
+int mem_cow_read(uint64_t a, uint64_t n, uint32_t s, void *dst, uint64_t *when);
+uint64_t mem_cow_oldest(void);                             // the plat_now_ns time of the oldest saved copy held, else now
+void mem_cow_stats(uint64_t out[15]);                      // protects, faults, saves, overflows, releases, protected
+                                                           // blocks now, saves held now, fault ns; protect pass: lock
+                                                           // wait, state and protect ns, protect calls, state calls,
+                                                           // the longest pass ns; blocks skipped in a thaw hold; since the last call
 void mem_kernel_free(void *p, uint64_t size);              // TLR/TLS reuse after thread exit
 
 // ---- modules (loader.c)
