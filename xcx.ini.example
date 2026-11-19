@@ -138,6 +138,9 @@
 # Picture shape when the window's differs from the game resolution's (a 16:9 game on a 16:10 screen): keep (its
 # proportions, with black bars) or stretch (over the whole window). Changes take effect at once.
 # picture_fit = keep
+# How far from the camera grass loads and is drawn: 1 (the game's ranges, 10 to 90 m per grass layer), 1.5, 2 or 3.
+# Changes take effect at once.
+# grass_distance = 1
 
 # HDR output: hdr = 1 sends the picture as HDR10 (needs HDR on in Windows, "Use HDR", or a Wayland compositor with
 # colour management; without it the picture stays SDR). The game's tonemap keeps highlights up to hdr_peak_nits (your

@@ -284,6 +284,41 @@ site xcx60 main 5d9708 79005680 @page:x9 1e230000 bd404d21 1e211800 1e250000 790
 # frame rate. x9 is set here anyway and s0-s1 are free: calls come just before and the function returns after.
 site xcx60 main 7fc8d0 52802589 @page:x9 bd404d21 52802589 1e230120 1e211800 1e250009
 
+# Grass distance (runtime/grass.c, XCX_GRASS_DISTANCE). runtime/grass.c writes three floats to the patch page: +0x100
+# the scale, +0x104 the fine window (30 m x scale) and +0x108 the minimum range (30 m x scale).
+# - The cell loading range: main+0x9972c0 walks the layer table (12-byte entries, +8 the range) and loads, per layer,
+#   the grass cells within +-range of the camera (main+0x9953a0 or main+0x996150). Both range loads multiply by the
+#   scale and then raise the result to the minimum (fmaxnm), so the short fill-in layer (10 m in Primordia) reaches
+#   past the 30 m that the scale alone gives it. x3 and s1 are written again before they are read.
+# - The fine window: main+0x996150 (10 m cells: levels 6 and up with a range of 40 or more) loads its finest cells
+#   within a fixed 30 m of the camera (s10 = 30 at 0x996288, range - 30 at 0x9962bc, 30 again at 0x9966e8) and
+#   rebuilds them as the camera moves, which shows as a second, denser layer popping in at 30 m. These sites read the
+#   window from the page instead. x9 is written again right after both loads; 0x9962bc subtracts s10, which holds
+#   the window there, in place of adding the -30 in s0.
+# - The rings of the instance builders main+0x998688 and main+0x99a4c0: a per-type distance R (ldr s0/s1, [x9/x8,
+#   #8]) gives 1.7 R, 2.5 R and 3.3 R. x9 and s1 (first) and x8 and s0 (second) are written again before they are read.
+set grass XCX_GRASS_PATCH 0
+site grass main 997434 bd400900 bd400900 @page:x3 bd410061 1e210800 bd410861 1e216800
+site grass main 9976ac bd400900 bd400900 @page:x3 bd410061 1e210800 bd410861 1e216800
+site grass main 996288 1e27d00a @page:x9 bd41052a
+site grass main 9962bc 1e202828 1e2a3828
+site grass main 9966e8 1e27d000 @page:x9 bd410520
+site grass main 999bec bd400920 bd400920 @page:x9 bd410121 1e210800
+site grass main 99aa00 bd400901 bd400901 @page:x8 bd410100 1e200821
+
+# Grass cell memory (always on; XCX_GRASS_POOL=0 restores the game's size, read at start): the grass system's init
+# (main+0x9badc0) makes one allocation of 0x1e7070 bytes: +0x5200 the cell heap of 0x1c0000 bytes (main+0x9bb130
+# allocates from it, first fit, null when full), +0x1c5200 a 0x20000 bump arena (+0x3c68), +0x1e5200 a scratch area
+# (+0x3c70), +0x1e7000 the list headers ([x19+0x18], [x19+0x20]). The cells of 3x grass distance do not fit: these
+# sites give the cell heap 4 MiB more (0x5c0000) and move everything after it by the same amount.
+set grasspool XCX_GRASS_POOL 1
+site grasspool main 9badd0 72a003c1 72a00bc1
+site grasspool main 9bae18 91479d00 91579d00
+site grasspool main 9bae20 91471509 91571509
+site grasspool main 9bae30 91479509 91579509
+site grasspool main 9bae44 91479d08 91579d08
+site grasspool main 9bae70 52a00389 52a00b89
+
 # Voice language (runtime/voice_lang.c, XCX_VOICE_LANG, #58). The game keeps its voice choice as bit 1 of an option
 # word in the game data object (+0xa9f84) and hands it to the sound manager's setter (main+0x252c0, 1 Japanese,
 # 2 English) in three places. Making its options, at boot and again on starting a New Game (main+0x3473f0), it takes

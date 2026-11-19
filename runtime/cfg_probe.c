@@ -135,6 +135,8 @@ int probe_cfg(void) {
     CHECK(m && EQ(m->def, "1") && m->live, "meta: fps60 defaults to 1 and is live");
     m = cfg_meta("ASYNC_PREEMPT");
     CHECK(m && EQ(m->values, "0|1|2") && !m->live, "meta: async_preempt takes 0|1|2 and needs a restart");
+    m = cfg_meta("GRASS_DISTANCE");
+    CHECK(m && EQ(m->def, "1") && EQ(m->values, "1|1.5|2|3") && m->live, "meta: grass distance is 1 by default, up to 3, live");
     m = cfg_meta("xcx_vk_present");
     CHECK(m && EQ(m->key, "VK_PRESENT") && EQ(m->values, "mailbox|fifo|immediate") && m->live,
           "meta: prefix and case are accepted");

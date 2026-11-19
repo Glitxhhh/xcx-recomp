@@ -359,6 +359,7 @@ void rt_frame_presented(const tex_t *t, uint64_t n) {
     hang_note_present();
     crash_test(n);
     series_shot(t, n);
+    rt_grass_update();
     int64_t w = cfg->seconds ? frame_step_world_us() : -1;
     if (w < 0 || (double)w < cfg->seconds * 1e6) return;
     if (cfg->shot) save_shot(t, cfg->shot);
@@ -412,6 +413,7 @@ void rt_boot(void) {
     rt_patches_init();
     frame_step_init();
     res_init();
+    rt_grass_init();
     voice_lang_init();
     cheats_start();
     achievements_start();
