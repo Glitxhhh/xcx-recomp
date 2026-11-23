@@ -2140,12 +2140,36 @@ void vk_sampler_dlss_bias(float b) {
     unlock();
 }
 
+// Forced anisotropic filtering (XCX_ANISO, aniso.c): a mipmapped, linearly minified sampler takes this max anisotropy in
+// place of the game's. A compare sampler (a shadow map) gains nothing from it, a min/max reduction sampler ignores
+// filtering, and the point sampler a depth texture read without compare gets has no linear minification left; all of
+// those keep the game's value. 0 leaves every sampler as the game made it.
+static float aniso_force;
+
+static int aniso_applies(const samp_par *p) {
+    return !p->cmp_mode && !p->reduction &&
+           (p->minf == NVN_MIN_FILTER_LINEAR_MIPMAP_NEAREST || p->minf == NVN_MIN_FILTER_LINEAR_MIPMAP_LINEAR);
+}
+
+void vk_sampler_aniso(float level) {
+    lock();
+    if (level != aniso_force) {
+        aniso_force = level;
+        // The samplers made so far stay alive until shutdown, as after a DLSS bias change: a recorded submission may
+        // still name them. Only the slots' cached handles are dropped.
+        for (int i = 0; i < nsslots; i++) sslots[i].s = sslots[i].sp = VK_NULL_HANDLE;
+        samp_gen++;
+    }
+    unlock();
+}
+
 // Caller holds the lock.
 static VkSampler sampler_for(VkCtx *c, const samp_par *s) {
     samp_par k;
     memset(&k, 0, sizeof k);
     k = *s;
     if (dlss_bias != 0 && dlss_biased(&k)) k.lod_bias += dlss_bias;   // part of the key: samplers live until shutdown
+    if (aniso_force >= 2 && aniso_applies(&k)) k.aniso = aniso_force;
     VkSampler v = (VkSampler)nvn_hm_get(&samplers, &k);
     if (!v) {
         v = make_sampler(c, &k);

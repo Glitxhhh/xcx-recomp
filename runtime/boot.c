@@ -356,6 +356,7 @@ static void crash_test(uint64_t n) {
 // counted by the back end only.
 void rt_frame_presented(const tex_t *t, uint64_t n) {
     const RtConfig *cfg = rt_config();
+    rt_aniso_update();
     hang_note_present();
     crash_test(n);
     series_shot(t, n);
@@ -413,6 +414,7 @@ void rt_boot(void) {
     PlatThread *warm = plat_thread_new(prewarm_main, NULL, "prewarm");
     ldr_load(rt_config()->exefs);
     rt_patches_init();
+    rt_aniso_init();
     frame_step_init();
     res_init();
     rt_grass_init();

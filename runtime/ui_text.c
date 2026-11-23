@@ -134,6 +134,13 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                   "For supersampling, set the game resolution above the window's. Takes effect after "
                                   "a restart.",
     [UI_MENU_RENDER_SCALE_GAME] = "Game (dynamic)",
+    [UI_MENU_ANISO] = "Anisotropic filtering",
+    [UI_MENU_ANISO_DESC] = "Sharpens textures seen at a grazing angle, such as the ground ahead. Game keeps the game's "
+                           "own level; 2x to 16x force it on mipmapped textures with linear minification. Comparison "
+                           "and min/max reduction samplers keep the game's values. Higher is sharper and costs a little "
+                           "GPU time.",
+    [UI_MENU_ANISO_GAME] = "Game", [UI_MENU_ANISO_2X] = "2x", [UI_MENU_ANISO_4X] = "4x", [UI_MENU_ANISO_8X] = "8x",
+    [UI_MENU_ANISO_16X] = "16x",
     [UI_MENU_UPSCALER] = "Upscaler",
     [UI_MENU_UPSCALER_DESC] = "How the picture is scaled when the window is larger than the game resolution. FSR keeps "
                               "edges and detail sharper than bilinear. NVIDIA DLSS (RTX cards) also replaces the game's "
@@ -540,6 +547,12 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
                                   "Для суперсэмплинга задайте разрешение игры выше разрешения окна. Применяется после "
                                   "перезапуска.",
     [UI_MENU_RENDER_SCALE_GAME] = "Как в игре (динамически)",
+    [UI_MENU_ANISO] = "Анизотропная фильтрация",
+    [UI_MENU_ANISO_DESC] = "Делает чётче текстуры под углом, например землю впереди. «Как в игре» оставляет уровень "
+                           "игры; 2x–16x задают его для мипмап-текстур с линейной фильтрацией. Текстуры со "
+                           "сравнением и min/max — как в игре. Выше — чётче, но больше нагрузка на GPU.",
+    [UI_MENU_ANISO_GAME] = "Как в игре", [UI_MENU_ANISO_2X] = "2x", [UI_MENU_ANISO_4X] = "4x",
+    [UI_MENU_ANISO_8X] = "8x", [UI_MENU_ANISO_16X] = "16x",
     [UI_MENU_UPSCALER] = "Масштабирование",
     [UI_MENU_UPSCALER_DESC] = "Как картинка растягивается, когда окно больше разрешения игры. FSR сохраняет края и "
                               "детали чётче билинейного. NVIDIA DLSS (видеокарты RTX) также заменяет сглаживание игры: "

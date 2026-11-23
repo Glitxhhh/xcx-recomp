@@ -364,6 +364,9 @@ uint32_t vk_texture_slots_gen(void);
 // guards (a lookup may create an entry). 0 when the slot was never registered: nothing is kept under 0.
 uint64_t vk_texture_slot_token(int id);
 void vk_sampler_dlss_bias(float bias);              // texture LOD bias added for DLSS upscaling (material samplers)
+// Forced anisotropic filtering: the max anisotropy of a mipmapped, linearly minified sampler, 0 for the game's own.
+// The slots' cached samplers are looked up again, so the next draws use the new level.
+void vk_sampler_aniso(float level);
 uint32_t vk_sampler_gen(void);                      // changes whenever a sampler slot is registered
 void vk_texture_gpu_written(const tex_t *t);        // rendered or copied into by the GPU: no re-upload from storage
 void vk_texture_storage_bound_locked(const VkTexImage *img);   // bound as a storage image in the recording submission

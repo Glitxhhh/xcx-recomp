@@ -593,6 +593,9 @@ static void tab_screen(float scale) {
     opt_group(UI_MENU_GRAPHICS);
     row_output_res();
     row_render_scale();
+    static const UiTextId aniso[] = {UI_MENU_ANISO_GAME, UI_MENU_ANISO_2X, UI_MENU_ANISO_4X, UI_MENU_ANISO_8X,
+                                     UI_MENU_ANISO_16X};
+    opt_choice("XCX_ANISO", UI_MENU_ANISO, aniso, 5, UI_MENU_ANISO_DESC);
     static const UiTextId up[] = {UI_MENU_UPSCALER_FSR, UI_MENU_UPSCALER_BILINEAR, UI_MENU_UPSCALER_DLSS};
     opt_choice("XCX_UPSCALER", UI_MENU_UPSCALER, up, 3, UI_MENU_UPSCALER_DESC);
     static const UiTextId fit[] = {UI_MENU_PICTURE_FIT_KEEP, UI_MENU_PICTURE_FIT_STRETCH};

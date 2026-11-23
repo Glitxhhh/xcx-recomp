@@ -129,6 +129,9 @@
 # percentage from 25 to 100; a higher one counts as 100. For supersampling, set output_res above window_size. Read at
 # start.
 # render_scale = game
+# Anisotropic filtering: 0 keeps the game's own level; 2, 4, 8 or 16 force it on mipmapped textures with linear
+# minification. Comparison and min/max reduction samplers keep the game's own values. Menu changes apply immediately.
+# aniso = 0
 # Scaling to the window when it is larger than the game resolution: fsr (AMD FSR 1) or bilinear, and FSR's sharpening
 # from 0 (off) to 100. Changes while the game runs take effect at once. dlss (NVIDIA RTX cards, nvngx_dlss.dll next to
 # xcx.exe) also runs DLSS on the 3D scene in place of the game's FXAA: DLAA at render_scale game or 100, DLSS upscaling
