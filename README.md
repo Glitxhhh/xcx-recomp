@@ -60,7 +60,7 @@ XCX Recomp builds on the projects below. What was taken from each, with its lice
 - [deko3d](https://github.com/devkitPro/deko3d)
 - [hactool](https://github.com/SciresM/hactool)
 - [SDL 3](https://libsdl.org), [Dear ImGui](https://github.com/ocornut/imgui), [AMD FSR 1](https://github.com/GPUOpen-Effects/FidelityFX-FSR), [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator), [libopus](https://opus-codec.org), [libvpx](https://chromium.googlesource.com/webm/libvpx), [Zstandard](https://github.com/facebook/zstd)
-- [Audune Prompts](https://audune.itch.io/audune-prompts) by Audune, the Xbox and PlayStation button artwork of the button icon styles. It's licensed CC BY-SA 4.0, so those images keep that license and aren't covered by this project's MIT license: [assets/appendage-glyph/audune/NOTICE.txt](assets/appendage-glyph/audune/NOTICE.txt) has the credit line and what we changed
+- [Audune Prompts](https://audune.itch.io/audune-prompts) by Audune, the Xbox and PlayStation button artwork of the button icon styles. The adapted icons are credited under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). See the [asset notice](assets/appendage-glyph/audune/NOTICE.txt) for attribution and changes
 - [Kenney Input Prompts](https://kenney.nl/assets/input-prompts) by Kenney, the keyboard, mouse and Steam Controller button artwork of the button icon styles (CC0)
 - The [60FPS mod for XCX DE 1.0.1](https://github.com/Fl4sh9174/Switch-Emulator-Ultrawide-FPS-Mods) by Fl4sh_ and StevensND
 - [Switchbrew](https://switchbrew.org) and the Switch homebrew community

@@ -1479,10 +1479,10 @@
   "audune": {
     "name": "Audune Prompts",
     "version": "1.3.1",
-    "license": "CC-BY-SA-4.0",
+    "license": "CC-BY-4.0",
     "author": "Audune",
     "source": "https://audune.itch.io/audune-prompts",
-    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/",
     "package_sha256": "9b94d0cf744b73f2d43ca328d8ebf6ad14f382ec4d04f1a03543a074db4cf55c",
     "sheet_sha256": {
       "Audune Prompts Light.png": "83224e7973234e756f885a3839a51b1242aaf303bc0eaec2a615c2b51a2ca737",

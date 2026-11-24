@@ -1,6 +1,6 @@
 """Cut the Xbox and PlayStation tiles out of the Audune Prompts sprite sheets.
 
-Audune Prompts 1.3.1 (CC BY-SA 4.0, https://audune.itch.io/audune-prompts) ships two 768x1408 sheets of 64x64 cells. This tool reads
+Audune Prompts 1.3.1 ships two 768x1408 sheets of 64x64 cells. The adapted tiles are credited under CC BY 4.0. This tool reads
 the pinned package, cuts the cells the glyph styles need from the "Light" sheet (white glyphs, readable on the game's dark menus),
 and rewrites the Xbox and PlayStation rows of assets/appendage-glyph/styles/provenance.json in place, so every tile keeps its art
 id. Keyboard and Steam tiles stay Kenney (CC0).
@@ -167,8 +167,8 @@ def main():
         if stale.name not in used:
             stale.unlink()
     manifest['audune'] = {
-        'name': 'Audune Prompts', 'version': '1.3.1', 'license': 'CC-BY-SA-4.0', 'author': 'Audune',
-        'source': 'https://audune.itch.io/audune-prompts', 'license_url': 'https://creativecommons.org/licenses/by-sa/4.0/',
+        'name': 'Audune Prompts', 'version': '1.3.1', 'license': 'CC-BY-4.0', 'author': 'Audune',
+        'source': 'https://audune.itch.io/audune-prompts', 'license_url': 'https://creativecommons.org/licenses/by/4.0/',
         'package_sha256': PACKAGE_SHA256, 'sheet_sha256': sheet_hash, 'notice': 'assets/appendage-glyph/audune/NOTICE.txt',
         'folder': 'assets/appendage-glyph/audune'}
     manifest['assets'] = out
