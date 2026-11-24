@@ -1,6 +1,6 @@
 // Licensed glyph tiles. Reproduce with tools/make_glyph_styles.py. Provenance: assets/appendage-glyph/styles/provenance.json.
 // Keyboard and Steam tiles: Kenney Input Prompts 1.5A, CC0-1.0.
-// Xbox and PlayStation tiles: Audune Prompts 1.3.1 by Audune, licensed CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/),
+// Xbox and PlayStation tiles: adapted from Audune Prompts 1.3.1 by Audune, licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/),
 // https://audune.itch.io/audune-prompts, cut from the sprite sheets (the PlayStation colored faces are recolored);
 // see assets/appendage-glyph/audune/NOTICE.txt. No game pixels.
 static const struct { int style, input, appearance; unsigned offset, length; const char *name; } glyph_arts[] = {
