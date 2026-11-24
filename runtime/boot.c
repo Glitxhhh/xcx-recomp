@@ -356,9 +356,13 @@ static void crash_test(uint64_t n) {
 // counted by the back end only.
 void rt_frame_presented(const tex_t *t, uint64_t n) {
     const RtConfig *cfg = rt_config();
+    rt_aniso_update();
     hang_note_present();
     crash_test(n);
     series_shot(t, n);
+    rt_grass_update();
+    rt_objlod_update();
+    rt_crowd_update();
     int64_t w = cfg->seconds ? frame_step_world_us() : -1;
     if (w < 0 || (double)w < cfg->seconds * 1e6) return;
     if (cfg->shot) save_shot(t, cfg->shot);
@@ -410,8 +414,12 @@ void rt_boot(void) {
     PlatThread *warm = plat_thread_new(prewarm_main, NULL, "prewarm");
     ldr_load(rt_config()->exefs);
     rt_patches_init();
+    rt_aniso_init();
     frame_step_init();
     res_init();
+    rt_grass_init();
+    rt_crowd_init();
+    voice_lang_init();
     cheats_start();
     achievements_start();
     cb_addr[0] = hostfn_register("<rtld loader_ready>", cb_loader_ready);

@@ -99,12 +99,18 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_TAB_SCREEN] = "Screen", [UI_MENU_TAB_GAME] = "Game", [UI_MENU_TAB_SOUND] = "Sound",
     [UI_MENU_TAB_CONTROLS] = "Controls", [UI_MENU_TAB_MENU] = "Menu", [UI_MENU_TAB_ADVANCED] = "Advanced",
     [UI_MENU_CONTINUE] = "Continue", [UI_MENU_QUIT] = "Quit game",
+    [UI_QUIT_CONFIRM] = "Quit the game? Progress since the last save is lost.", [UI_QUIT_YES] = "Yes", [UI_QUIT_NO] = "No",
     [UI_MENU_ON] = "On", [UI_MENU_OFF] = "Off", [UI_MENU_AUTO] = "Automatic", [UI_MENU_DEFAULT_MARK] = "default",
     [UI_MENU_AFTER_RESTART] = "after restart", [UI_MENU_SET_BY_ENV] = "set by environment variable",
     [UI_MENU_SAVE_FAILED] = "could not save settings",
     [UI_MENU_VERSION] = "XCX Recomp %s, game %s",
 
-    [UI_MENU_FULLSCREEN] = "Fullscreen", [UI_MENU_FULLSCREEN_DESC] = "Fills the screen with the game; F11 toggles it.",
+    [UI_MENU_FULLSCREEN] = "Display mode",
+    [UI_MENU_FULLSCREEN_DESC] = "Window: a window of the size below. Borderless: a window without a frame over the "
+                                "whole monitor; the taskbar and Alt+Tab work over it. Fullscreen: the game may take the "
+                                "monitor for itself, at the desktop's resolution. F11 switches between the window and "
+                                "the last full mode.",
+    [UI_MENU_MODE_WINDOW] = "Window", [UI_MENU_MODE_BORDERLESS] = "Borderless", [UI_MENU_MODE_FULLSCREEN] = "Fullscreen",
     [UI_MENU_WINDOW_SIZE] = "Window size", [UI_MENU_WINDOW_SIZE_DESC] = "Size of the game window when not fullscreen.",
     [UI_MENU_WINDOW_SIZE_CUSTOM] = "Custom",
     [UI_MENU_PRESENT] = "Presentation", [UI_MENU_PRESENT_DESC] = "How finished frames reach the screen.",
@@ -114,7 +120,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_GPU_AUTO] = "Automatic",
     [UI_MENU_PERF_OVERLAY] = "Performance overlay",
     [UI_MENU_PERF_OVERLAY_DESC] = "Frame rate in the top right corner. Full adds frame times with a graph, CPU, GPU and "
-                                  "memory load, temperatures and the render thread's waits. F10 cycles the modes.",
+                                  "memory load, temperatures and the render thread's waits. F2 or F10 cycles the modes.",
     [UI_MENU_PERF_OFF] = "Off", [UI_MENU_PERF_FPS] = "FPS", [UI_MENU_PERF_FULL] = "Full",
     // printf format of the overlay line in FPS mode: the frame rate
     [UI_PERF_LINE_FPS] = "%.0f fps",
@@ -128,6 +134,13 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                   "For supersampling, set the game resolution above the window's. Takes effect after "
                                   "a restart.",
     [UI_MENU_RENDER_SCALE_GAME] = "Game (dynamic)",
+    [UI_MENU_ANISO] = "Anisotropic filtering",
+    [UI_MENU_ANISO_DESC] = "Sharpens textures seen at a grazing angle, such as the ground ahead. Game keeps the game's "
+                           "own level; 2x to 16x force it on mipmapped textures with linear minification. Comparison "
+                           "and min/max reduction samplers keep the game's values. Higher is sharper and costs a little "
+                           "GPU time.",
+    [UI_MENU_ANISO_GAME] = "Game", [UI_MENU_ANISO_2X] = "2x", [UI_MENU_ANISO_4X] = "4x", [UI_MENU_ANISO_8X] = "8x",
+    [UI_MENU_ANISO_16X] = "16x",
     [UI_MENU_UPSCALER] = "Upscaler",
     [UI_MENU_UPSCALER_DESC] = "How the picture is scaled when the window is larger than the game resolution. FSR keeps "
                               "edges and detail sharper than bilinear. NVIDIA DLSS (RTX cards) also replaces the game's "
@@ -140,6 +153,33 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                  "Deck's 16:10 screen), keep the picture's proportions with black bars, or stretch it "
                                  "over the whole window.",
     [UI_MENU_PICTURE_FIT_KEEP] = "Keep (bars)", [UI_MENU_PICTURE_FIT_STRETCH] = "Stretch",
+    [UI_MENU_WORLD_GROUP] = "World detail",
+    [UI_MENU_GRASS] = "Grass distance",
+    [UI_MENU_GRASS_DESC] = "How far from the camera grass loads and is drawn. Original keeps the game's ranges (10 to 90 m "
+                           "per grass layer); higher values multiply them, so grass appears further away and its denser "
+                           "layers fill in sooner. Applies at once.",
+    [UI_MENU_GRASS_ORIGINAL] = "Original", [UI_MENU_GRASS_15] = "1.5x", [UI_MENU_GRASS_2] = "2x", [UI_MENU_GRASS_3] = "3x",
+    [UI_MENU_OBJECT_LOD] = "Object detail range",
+    [UI_MENU_OBJECT_LOD_DESC] = "How much further from the camera trees, bushes, rocks and other map objects switch to "
+                                "their detailed models. Original keeps the game's distances (under 5 to about 50 m, "
+                                "depending on the object); each step adds that many metres to all of them. Higher steps "
+                                "cost some CPU time per frame. Applies at once. With Adjust range to frame rate on "
+                                "Auto, this is the most it will use.",
+    [UI_MENU_OBJECT_LOD_ORIGINAL] = "Original", [UI_MENU_OBJECT_LOD_STEP] = "+%s m",
+    [UI_MENU_OBJECT_LOD_MODE] = "Adjust range to frame rate",
+    [UI_MENU_OBJECT_LOD_MODE_DESC] = "Auto lowers the object detail range above when frames take longer than the frame "
+                                     "limit allows (the display's refresh rate when there is no limit), and raises it "
+                                     "again, up to the range set above, when there is time to spare. Fixed always uses "
+                                     "the range as set. Applies at once.",
+    [UI_MENU_OBJECT_LOD_AUTO] = "Auto", [UI_MENU_OBJECT_LOD_FIXED] = "Fixed",
+    [UI_MENU_OBJECT_LOD_NOW] = "now +%.0f m",
+    [UI_MENU_CROWD] = "Crowd distance",
+    [UI_MENU_CROWD_DESC] = "How far from you the crowd people (the walkers in NLA) appear and fade out. Original "
+                           "keeps the game's distances (about 25 m); higher values multiply them. Turn on GPU "
+                           "frame prep on its own thread (Advanced tab) before raising it: without it the extra "
+                           "people slow busy places a lot (in the Commercial District at 4x, about 66 instead of "
+                           "90 fps). Applies at once.",
+    [UI_MENU_CROWD_ORIGINAL] = "Original", [UI_MENU_CROWD_STEP] = "%sx",
     [UI_MENU_SHARPNESS] = "FSR sharpness",
     [UI_MENU_SHARPNESS_DESC] = "Sharpening after FSR scaling; 0 turns it off.",
     [UI_MENU_BRIGHTNESS] = "Brightness",
@@ -178,8 +218,15 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_CLOTH_REALTIME_DESC] = "Steps cloth and hair by real time as well.",
     [UI_MENU_HIGHFPS_FIX] = "High frame rate physics fix",
     [UI_MENU_HIGHFPS_FIX_DESC] = "Corrects physics that misbehave above 30 frames per second.",
-    [UI_MENU_GAME_LANG] = "Game language", [UI_MENU_GAME_LANG_DESC] = "Language of the game's text and voices.",
+    [UI_MENU_GAME_LANG] = "Game language",
+    [UI_MENU_GAME_LANG_DESC] = "Language of the game's text, and of its voices unless Voice language picks them.",
     [UI_MENU_GAME_LANG_AUTO] = "Automatic",
+    [UI_MENU_VOICE_LANG] = "Voice language",
+    [UI_MENU_VOICE_LANG_DESC] = "Japanese or English voices with matching lip sync, whatever the text language. "
+                                "Automatic leaves it to the game: Japanese voices with Japanese or Chinese text, "
+                                "English otherwise. A change takes effect when the game next applies its options, "
+                                "as on loading a save.",
+    [UI_MENU_VOICE_JA] = "Japanese", [UI_MENU_VOICE_EN] = "English",
     [UI_MENU_OPERATION_MODE] = "Console mode",
     [UI_MENU_OPERATION_MODE_DESC] = "Whether the game thinks it runs docked or handheld.",
     [UI_MENU_MODE_DOCKED] = "Docked", [UI_MENU_MODE_HANDHELD] = "Handheld",
@@ -204,6 +251,29 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_PAD_LAYOUT_XBOX] = "Flipped",
     [UI_MENU_MOUSE_SENS] = "Mouse camera sensitivity",
     [UI_MENU_MOUSE_SENS_DESC] = "How fast the mouse turns the camera.",
+    [UI_MENU_STICK_GROUP] = "Controller sticks",
+    [UI_MENU_STICK_DEAD_L] = "Left stick deadzone",
+    [UI_MENU_STICK_DEAD_L_DESC] = "How far the left stick has to move from its center before the game notices. Raise it if "
+                                  "your character keeps walking after you let go of the stick.",
+    [UI_MENU_STICK_DEAD_R] = "Right stick deadzone",
+    [UI_MENU_STICK_DEAD_R_DESC] = "How far the right stick has to move from its center before the camera turns. Raise it if "
+                                  "the camera keeps turning after you let go of the stick.",
+    [UI_MENU_STICK_SHAPE] = "Deadzone shape",
+    [UI_MENU_STICK_SHAPE_DESC] = "Per axis is the original: each direction of a stick is ignored on its own until it passes "
+                                 "the deadzone, then counts in full. Round ignores the stick until its distance from the "
+                                 "center passes the deadzone, in any direction, and starts from zero past it, which suits "
+                                 "a drifting stick.",
+    [UI_MENU_STICK_SHAPE_AXIS] = "Per axis", [UI_MENU_STICK_SHAPE_ROUND] = "Round",
+    [UI_MENU_STICK_CALIBRATE] = "Calibrate stick centers",
+    [UI_MENU_STICK_CALIBRATE_DESC] = "Let go of both sticks, then press: where each stick rests is measured for a second "
+                                     "and becomes its center. Helps a stick that always drifts the same way; the deadzone "
+                                     "covers the rest.",
+    [UI_MENU_STICK_CALIBRATING] = "let go of the sticks...", [UI_MENU_STICK_CALIBRATED] = "saved",
+    [UI_MENU_STICK_MOVED] = "a stick moved, try again", [UI_MENU_STICK_NO_PAD] = "no controller",
+    [UI_MENU_STICK_CLEAR] = "Clear stick calibration",
+    [UI_MENU_STICK_CLEAR_DESC] = "Forget the measured centers: each stick's center is where the controller reports it.",
+    [UI_MENU_STICK_LEGEND] = "Grey dot: the stick. Cyan dot: what the game sees. Ring or square: the deadzone. "
+                             "Cross: the calibrated center.",
 
     [UI_BINDS_HELP] = "Highlighted options can be cleared with the delete key.",
     [UI_BINDS_COL_KEY1] = "Key 1", [UI_BINDS_COL_KEY2] = "Key 2", [UI_BINDS_COL_PAD] = "Controller",
@@ -264,6 +334,8 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_PREEMPT_OFF] = "Off", [UI_MENU_PREEMPT_ON] = "On", [UI_MENU_PREEMPT_INHERIT] = "Inheritance only",
     [UI_MENU_REPLAY_ASYNC] = "GPU frame prep on its own thread",
     [UI_MENU_REPLAY_ASYNC_DESC] = "Prepares frames for the GPU on a separate thread instead of the game thread. Adds up to one frame of latency.",
+    [UI_MENU_MIRROR_COW] = "Snapshot GPU data at submit",
+    [UI_MENU_MIRROR_COW_DESC] = "With frame prep on its own thread: keeps the vertex and storage data of each frame as it was when the game submitted it, so models do not stretch into spikes at the start of camera pans with large crowds. Costs about 1 ms a frame.",
     [UI_MENU_FREE_CORES] = "Virtual core gate",
     [UI_MENU_FREE_CORES_DESC] = "Lets only one thread run per virtual core, as on the console.",
     [UI_MENU_TIMER_1MS] = "1 ms Windows timer",
@@ -349,6 +421,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_OV_TEMP] = "Temperature", [UI_MENU_OV_POWER] = "Power", [UI_MENU_OV_CLOCK] = "Clock",
     [UI_MENU_OV_NONE] = "-",
     [UI_MENU_OV_REPLAY] = "GPU frame prep", [UI_MENU_OV_GPU_TIME] = "GPU busy per frame",
+    [UI_MENU_OV_PRESENT_TIME] = "GPU present per frame", [UI_MENU_OV_GPU_GAME] = "GPU use by the game",
     [UI_MENU_OV_PIPE_WAIT] = "Pipeline waits",
     [UI_MENU_OV_SHADER_WAIT] = "Shader waits", [UI_MENU_OV_TEX_UPLOADS] = "Texture uploads",
     [UI_MENU_OV_FMT_PCT] = "%.0f%%", [UI_MENU_OV_FMT_TEMP] = "%.0f °C", [UI_MENU_OV_FMT_POWER] = "%.0f W",
@@ -436,13 +509,20 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_TAB_SCREEN] = "Экран", [UI_MENU_TAB_GAME] = "Игра", [UI_MENU_TAB_SOUND] = "Звук",
     [UI_MENU_TAB_CONTROLS] = "Управление", [UI_MENU_TAB_MENU] = "Меню", [UI_MENU_TAB_ADVANCED] = "Дополнительно",
     [UI_MENU_CONTINUE] = "Продолжить", [UI_MENU_QUIT] = "Выйти из игры",
+    [UI_QUIT_CONFIRM] = "Выйти из игры? Прогресс после последнего сохранения будет потерян.", [UI_QUIT_YES] = "Да",
+    [UI_QUIT_NO] = "Нет",
     [UI_MENU_ON] = "Вкл.", [UI_MENU_OFF] = "Выкл.", [UI_MENU_AUTO] = "Автоматически",
     [UI_MENU_DEFAULT_MARK] = "по умолчанию",
     [UI_MENU_AFTER_RESTART] = "после перезапуска", [UI_MENU_SET_BY_ENV] = "задано переменной окружения",
     [UI_MENU_SAVE_FAILED] = "не удалось сохранить настройки",
     [UI_MENU_VERSION] = "XCX Recomp %s, игра %s",
 
-    [UI_MENU_FULLSCREEN] = "Полный экран", [UI_MENU_FULLSCREEN_DESC] = "Игра на весь экран; F11 переключает режим.",
+    [UI_MENU_FULLSCREEN] = "Режим экрана",
+    [UI_MENU_FULLSCREEN_DESC] = "Окно: окно размера ниже. Без рамки: окно без рамки на весь монитор; панель задач и "
+                                "Alt+Tab работают поверх него. Полный экран: игра может занять монитор целиком, в "
+                                "разрешении рабочего стола. F11 переключает между окном и последним полноэкранным "
+                                "режимом.",
+    [UI_MENU_MODE_WINDOW] = "Окно", [UI_MENU_MODE_BORDERLESS] = "Без рамки", [UI_MENU_MODE_FULLSCREEN] = "Полный экран",
     [UI_MENU_WINDOW_SIZE] = "Размер окна", [UI_MENU_WINDOW_SIZE_DESC] = "Размер окна игры вне полноэкранного режима.",
     [UI_MENU_WINDOW_SIZE_CUSTOM] = "Другой",
     [UI_MENU_PRESENT] = "Вывод кадров", [UI_MENU_PRESENT_DESC] = "Как готовые кадры попадают на экран.",
@@ -453,7 +533,7 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_GPU_AUTO] = "Автоматически",
     [UI_MENU_PERF_OVERLAY] = "Индикатор производительности",
     [UI_MENU_PERF_OVERLAY_DESC] = "Частота кадров в правом верхнем углу. «Полный» добавляет время кадров с графиком, "
-                                  "загрузку ЦП, GPU и памяти, температуры и ожидания потока отрисовки. F10 переключает "
+                                  "загрузку ЦП, GPU и памяти, температуры и ожидания потока отрисовки. F2 или F10 переключают "
                                   "режимы.",
     [UI_MENU_PERF_OFF] = "Выкл.", [UI_MENU_PERF_FPS] = "FPS", [UI_MENU_PERF_FULL] = "Полный",
     [UI_PERF_LINE_FPS] = "%.0f к/с",
@@ -467,6 +547,12 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
                                   "Для суперсэмплинга задайте разрешение игры выше разрешения окна. Применяется после "
                                   "перезапуска.",
     [UI_MENU_RENDER_SCALE_GAME] = "Как в игре (динамически)",
+    [UI_MENU_ANISO] = "Анизотропная фильтрация",
+    [UI_MENU_ANISO_DESC] = "Делает чётче текстуры под углом, например землю впереди. «Как в игре» оставляет уровень "
+                           "игры; 2x–16x задают его для мипмап-текстур с линейной фильтрацией. Текстуры со "
+                           "сравнением и min/max — как в игре. Выше — чётче, но больше нагрузка на GPU.",
+    [UI_MENU_ANISO_GAME] = "Как в игре", [UI_MENU_ANISO_2X] = "2x", [UI_MENU_ANISO_4X] = "4x",
+    [UI_MENU_ANISO_8X] = "8x", [UI_MENU_ANISO_16X] = "16x",
     [UI_MENU_UPSCALER] = "Масштабирование",
     [UI_MENU_UPSCALER_DESC] = "Как картинка растягивается, когда окно больше разрешения игры. FSR сохраняет края и "
                               "детали чётче билинейного. NVIDIA DLSS (видеокарты RTX) также заменяет сглаживание игры: "
@@ -478,6 +564,30 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_PICTURE_FIT_DESC] = "Когда форма окна отличается от формы разрешения игры (игра 16:9 на экране Steam Deck "
                                  "16:10), сохранять пропорции картинки с чёрными полосами или растягивать её на всё окно.",
     [UI_MENU_PICTURE_FIT_KEEP] = "Сохранять (полосы)", [UI_MENU_PICTURE_FIT_STRETCH] = "Растягивать",
+    [UI_MENU_WORLD_GROUP] = "Детализация мира",
+    [UI_MENU_GRASS] = "Дальность травы",
+    [UI_MENU_GRASS_DESC] = "Как далеко от камеры загружается и рисуется трава. «Как в игре» оставляет дальность игры "
+                           "(от 10 до 90 м для каждого слоя травы); большие значения умножают её, и трава появляется "
+                           "дальше, а плотные слои заполняются раньше. Применяется сразу.",
+    [UI_MENU_GRASS_ORIGINAL] = "Как в игре", [UI_MENU_GRASS_15] = "1.5x", [UI_MENU_GRASS_2] = "2x",
+    [UI_MENU_GRASS_3] = "3x",
+    [UI_MENU_OBJECT_LOD] = "Дальность детализации объектов",
+    [UI_MENU_OBJECT_LOD_DESC] = "Насколько дальше от камеры деревья, кусты и камни получают детальные модели. «Как в игре» — "
+                                "расстояния игры (до 50 м); шаг добавляет метры ко всем. Чем выше, тем больше нагрузка на процессор. "
+                                "При «Авто» это предел. Применяется сразу.",
+    [UI_MENU_OBJECT_LOD_ORIGINAL] = "Как в игре", [UI_MENU_OBJECT_LOD_STEP] = "+%s м",
+    [UI_MENU_OBJECT_LOD_MODE] = "Подстройка под частоту кадров",
+    [UI_MENU_OBJECT_LOD_MODE_DESC] = "«Авто» снижает дальность, когда кадр не укладывается в ограничение частоты кадров (без него — в частоту "
+                                     "экрана), и поднимает её до заданного значения, когда есть запас. «Фиксированная» — всегда заданное значение. "
+                                     "Применяется сразу.",
+    [UI_MENU_OBJECT_LOD_AUTO] = "Авто", [UI_MENU_OBJECT_LOD_FIXED] = "Фиксированная",
+    [UI_MENU_OBJECT_LOD_NOW] = "сейчас +%.0f м",
+    [UI_MENU_CROWD] = "Дальность толпы",
+    [UI_MENU_CROWD_DESC] = "Как далеко от вас появляются и исчезают прохожие (в NLA). «Как в игре» — расстояния "
+                           "игры (около 25 м); большие значения умножают их. Сначала включите «Подготовка кадра "
+                           "для GPU в отдельном потоке» («Дополнительно»): без неё людные места сильно тормозят. "
+                           "Применяется сразу.",
+    [UI_MENU_CROWD_ORIGINAL] = "Как в игре", [UI_MENU_CROWD_STEP] = "%sx",
     [UI_MENU_SHARPNESS] = "Резкость FSR",
     [UI_MENU_SHARPNESS_DESC] = "Повышение резкости после масштабирования FSR; 0 выключает его.",
     [UI_MENU_BRIGHTNESS] = "Яркость",
@@ -515,8 +625,15 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_CLOTH_REALTIME_DESC] = "Ткань и волосы тоже идут по реальному времени.",
     [UI_MENU_HIGHFPS_FIX] = "Исправление физики на высоком FPS",
     [UI_MENU_HIGHFPS_FIX_DESC] = "Исправляет физику, которая ломается при частоте выше 30 кадров в секунду.",
-    [UI_MENU_GAME_LANG] = "Язык игры", [UI_MENU_GAME_LANG_DESC] = "Язык текста и озвучки игры.",
+    [UI_MENU_GAME_LANG] = "Язык игры",
+    [UI_MENU_GAME_LANG_DESC] = "Язык текста игры, а также озвучки, если её не задаёт «Язык озвучки».",
     [UI_MENU_GAME_LANG_AUTO] = "Автоматически",
+    [UI_MENU_VOICE_LANG] = "Язык озвучки",
+    [UI_MENU_VOICE_LANG_DESC] = "Японская или английская озвучка с подходящей синхронизацией губ, при любом языке "
+                                "текста. «Автоматически» оставляет выбор игре: японская озвучка при японском или "
+                                "китайском тексте, иначе английская. Изменение вступает в силу, когда игра снова "
+                                "применяет настройки, например при загрузке сохранения.",
+    [UI_MENU_VOICE_JA] = "Японский", [UI_MENU_VOICE_EN] = "Английский",
     [UI_MENU_OPERATION_MODE] = "Режим консоли",
     [UI_MENU_OPERATION_MODE_DESC] = "Игра считает, что консоль в док-станции или в портативном режиме.",
     [UI_MENU_MODE_DOCKED] = "В док-станции", [UI_MENU_MODE_HANDHELD] = "Портативный",
@@ -536,6 +653,28 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_PAD_LAYOUT_XBOX] = "Обратная",
     [UI_MENU_MOUSE_SENS] = "Чувствительность мыши",
     [UI_MENU_MOUSE_SENS_DESC] = "Как быстро мышь поворачивает камеру.",
+    [UI_MENU_STICK_GROUP] = "Стики контроллера",
+    [UI_MENU_STICK_DEAD_L] = "Мёртвая зона левого стика",
+    [UI_MENU_STICK_DEAD_L_DESC] = "Насколько нужно отклонить левый стик от центра, чтобы игра это заметила. Увеличьте, "
+                                  "если персонаж продолжает идти, когда вы отпустили стик.",
+    [UI_MENU_STICK_DEAD_R] = "Мёртвая зона правого стика",
+    [UI_MENU_STICK_DEAD_R_DESC] = "Насколько нужно отклонить правый стик от центра, чтобы камера повернулась. Увеличьте, "
+                                  "если камера продолжает поворачиваться, когда вы отпустили стик.",
+    [UI_MENU_STICK_SHAPE] = "Форма мёртвой зоны",
+    [UI_MENU_STICK_SHAPE_DESC] = "По осям — как изначально: каждое направление стика не учитывается, пока не выйдет за "
+                                 "мёртвую зону, затем учитывается полностью. Круглая не учитывает стик ближе к центру, "
+                                 "чем мёртвая зона, и начинает с нуля — лучше при дрейфе.",
+    [UI_MENU_STICK_SHAPE_AXIS] = "По осям", [UI_MENU_STICK_SHAPE_ROUND] = "Круглая",
+    [UI_MENU_STICK_CALIBRATE] = "Калибровать центр стиков",
+    [UI_MENU_STICK_CALIBRATE_DESC] = "Отпустите оба стика и нажмите: в течение секунды измеряется положение покоя каждого "
+                                     "стика, и оно становится его центром. Помогает, если стик всегда уводит в одну "
+                                     "сторону; остальное закрывает мёртвая зона.",
+    [UI_MENU_STICK_CALIBRATING] = "отпустите стики...", [UI_MENU_STICK_CALIBRATED] = "сохранено",
+    [UI_MENU_STICK_MOVED] = "стик сдвинулся, ещё раз", [UI_MENU_STICK_NO_PAD] = "нет контроллера",
+    [UI_MENU_STICK_CLEAR] = "Сбросить калибровку стиков",
+    [UI_MENU_STICK_CLEAR_DESC] = "Забыть измеренные центры: центр каждого стика там, где его сообщает контроллер.",
+    [UI_MENU_STICK_LEGEND] = "Серая точка: стик. Голубая: что видит игра. Кольцо или квадрат: мёртвая зона. "
+                             "Крест: откалиброванный центр.",
 
     [UI_BINDS_HELP] = "Выделенные пункты можно очистить клавишей Delete.",
     [UI_BINDS_COL_KEY1] = "Клавиша 1", [UI_BINDS_COL_KEY2] = "Клавиша 2", [UI_BINDS_COL_PAD] = "Контроллер",
@@ -598,6 +737,8 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_PREEMPT_OFF] = "Выкл.", [UI_MENU_PREEMPT_ON] = "Вкл.", [UI_MENU_PREEMPT_INHERIT] = "Только наследование",
     [UI_MENU_REPLAY_ASYNC] = "Подготовка кадра для GPU в отдельном потоке",
     [UI_MENU_REPLAY_ASYNC_DESC] = "Кадр для GPU готовится в отдельном потоке, а не в потоке игры. Добавляет до одного кадра задержки.",
+    [UI_MENU_MIRROR_COW] = "Снимок данных GPU при отправке",
+    [UI_MENU_MIRROR_COW_DESC] = "При подготовке кадра в отдельном потоке: данные вершин и буферов каждого кадра остаются такими, какими были при отправке, и модели не вытягиваются в шипы в начале поворота камеры при больших толпах. Стоит около 1 мс на кадр.",
     [UI_MENU_FREE_CORES] = "Ограничение виртуальных ядер",
     [UI_MENU_FREE_CORES_DESC] = "На каждом виртуальном ядре работает один поток, как на консоли.",
     [UI_MENU_TIMER_1MS] = "Таймер Windows 1 мс",
@@ -685,6 +826,8 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_OV_TEMP] = "Температура", [UI_MENU_OV_POWER] = "Мощность", [UI_MENU_OV_CLOCK] = "Частота",
     [UI_MENU_OV_NONE] = "-",
     [UI_MENU_OV_REPLAY] = "Подготовка кадра для GPU", [UI_MENU_OV_GPU_TIME] = "Занятость GPU за кадр",
+    [UI_MENU_OV_PRESENT_TIME] = "Вывод на GPU за кадр",
+    [UI_MENU_OV_GPU_GAME] = "Загрузка GPU игрой",
     [UI_MENU_OV_PIPE_WAIT] = "Ожидания конвейеров",
     [UI_MENU_OV_SHADER_WAIT] = "Ожидания шейдеров", [UI_MENU_OV_TEX_UPLOADS] = "Загрузки текстур",
     [UI_MENU_OV_FMT_PCT] = "%.0f%%", [UI_MENU_OV_FMT_TEMP] = "%.0f °C", [UI_MENU_OV_FMT_POWER] = "%.0f Вт",

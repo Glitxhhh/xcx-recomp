@@ -66,7 +66,7 @@ This remains a visible experimental limitation for review; unlimited-session sty
 
 Two packs supply the 139 style tiles, each under its own license:
 
-- **Audune Prompts 1.3.1** by Audune, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), <https://audune.itch.io/audune-prompts>: the 58 Xbox and PlayStation tiles (`assets/appendage-glyph/audune/`). Each is one 64x64 cell cut, unscaled, from the pack's "Light" sprite sheet by [tools/make_audune_tiles.py](../tools/make_audune_tiles.py); the D-pad direction tiles have their white and dim arms swapped (Audune draws the pressed direction dim; here it is the bright one), and the four PlayStation *colored* face tiles also have the dark symbol repainted in the symbol color of the pack's "Dark" sheet. The notice with the attribution line and the change statement is [audune/NOTICE.txt](../assets/appendage-glyph/audune/NOTICE.txt); the package, the two sheets and every tile (source cell, change, SHA-256) are in the `audune` block and the `pack: audune` entries of the provenance. The tiles are CC BY-SA 4.0, not MIT. Whether the compiled copy in `runtime/glyph_art.inc` and a binary that embeds it must also be offered under share-alike terms is a project decision that has not been made (see the controls context); the include's header states the license.
+- The 58 Xbox and PlayStation tiles are adapted from **Audune Prompts 1.3.1** by Audune and credited under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), as confirmed in [issue #244](https://github.com/jmars125/xcx-recomp/issues/244). The [asset notice](../assets/appendage-glyph/audune/NOTICE.txt) records the changes. [Styles provenance](../assets/appendage-glyph/styles/provenance.json) records the package, sheet, and tile hashes and the source cell for each tile.
 - **Kenney Input Prompts 1.5A**, CC0: the 42 keyboard tiles (letters, digits, mouse, Space, Tab, Ctrl and Shift), the 10 keyboard-cluster composites (nine key groups and the arrow cluster with only left and right lit, drawn for the page-turn circles) (`tools/make_keyboard_clusters.py`) and the 29 Steam tiles (the Audune pack has no Steam set). The original [license](../assets/appendage-glyph/License.txt) and [third-party notice](../THIRD_PARTY_NOTICES.md) accompany them; exact archive member names and per-file SHA-256 values are in [styles/provenance.json](../assets/appendage-glyph/styles/provenance.json). A file-specific Git attribute preserves the upstream license bytes. The older R1 PNG/include/tool remain an attributed reproducibility fixture, not the production multi-style asset path.
 
 No Nintendo resource pixels are distributed. Xbox and PlayStation tiles follow the Audune layout: standard Xbox faces are the pack's Switch-set letters A/B/X/Y, colored Xbox faces its Xbox tiles, PlayStation Start/Back are the pack's DualShock 4 Options (three lines) and Share (rays) buttons.
@@ -76,9 +76,9 @@ No Nintendo resource pixels are distributed. Xbox and PlayStation tiles follow t
 | Original Kenney package | `ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1` |
 | Original Audune package | `9b94d0cf744b73f2d43ca328d8ebf6ad14f382ec4d04f1a03543a074db4cf55c` |
 | Kenney license | `ca2f58f80f903512119da5828868199478119818cd7ecffb303d625cb74cbb5a` |
-| Audune notice | `8d91c57e0c50cfcecaee561b3b99f1acbb90ea2148ac353a1b06cd0a6b567e9f` |
-| Styles provenance | `6c12efae5a1909f23a55759a84acd0201a96b9f8e8139f2b582b161b2aace79b` |
-| Production licensed derivative | `3f953f7cde1de407e4ed47cb058291ce781189c502cd59824e22c6b4ebf0a098` |
+| Audune notice | `e8e5db52b28340fed969f7d97fc5d5653c2f27233141a396e82af88ceadf0742` |
+| Styles provenance | `3b374a47a2d591f4246a0f0eefeb9145fbfb24f45617e3522037cee215b1cd67` |
+| Production licensed derivative | `d7ec8434392919d9c28fab0b838fd25352780baca7e431b8ed3cb6dc4d8bed4f` |
 
 Reproduction needs Python 3.14 with `compression.zstd` and Pillow (verified with Pillow 12.3.0). From the repository root:
 

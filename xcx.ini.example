@@ -26,6 +26,9 @@
 # async_preempt = 1
 # Replay NVN submissions on their own thread, at most one frame behind the game (1 = on). Adds up to a frame of latency.
 # replay_async = 0
+# With replay_async = 1: the mirrored vertex and storage data of each frame is read as of the game's submit
+# (copy-on-write), so models do not stretch into spikes at the start of camera pans with large crowds (1 = on).
+# mirror_cow = 0
 # 1 lifts the virtual core gate: guest threads run without the console's limit of one thread per core.
 # free_cores = 0
 # Windows timer resolution of 1 ms for steadier frame pacing (0 = the Windows default).
@@ -107,12 +110,14 @@
 # device_profile = auto
 # Presentation mode: mailbox (default when the driver offers it, vsync otherwise), fifo (vsync) or immediate.
 # vk_present = mailbox
-# Window client area in pixels (640x360 to 7680x4320), and borderless fullscreen. F11 switches fullscreen and saves it
-# here. Changes while the game runs take effect at once.
+# Window client area in pixels (640x360 to 7680x4320), and the display mode: 0 a window, borderless a frameless window
+# over the whole monitor that the taskbar and Alt+Tab still come up over, 1 fullscreen (the driver may take the monitor
+# for the game, at the desktop's resolution). F11 switches between the window and the last full mode and saves it here.
+# Changes while the game runs take effect at once.
 # window_size = 1920x1080
 # fullscreen = 0
-# Performance overlay in the top right corner: off, fps, or full (frame rate, mean and longest frame time). F10
-# cycles the modes in game, as do both stick clicks (L3 + R3) on a controller.
+# Performance overlay in the top right corner: off, fps, or full (frame rate, mean and longest frame time). F2
+# (while no button is bound to it) or F10 cycles the modes in game, as do both stick clicks (L3 + R3) on a controller.
 # perf_overlay = off
 # Which GPU to use: its index in the log, or part of its name. Default: the first discrete GPU with Vulkan 1.3.
 # gpu_index = 0
@@ -124,6 +129,9 @@
 # percentage from 25 to 100; a higher one counts as 100. For supersampling, set output_res above window_size. Read at
 # start.
 # render_scale = game
+# Anisotropic filtering: 0 keeps the game's own level; 2, 4, 8 or 16 force it on mipmapped textures with linear
+# minification. Comparison and min/max reduction samplers keep the game's own values. Menu changes apply immediately.
+# aniso = 0
 # Scaling to the window when it is larger than the game resolution: fsr (AMD FSR 1) or bilinear, and FSR's sharpening
 # from 0 (off) to 100. Changes while the game runs take effect at once. dlss (NVIDIA RTX cards, nvngx_dlss.dll next to
 # xcx.exe) also runs DLSS on the 3D scene in place of the game's FXAA: DLAA at render_scale game or 100, DLSS upscaling
@@ -136,6 +144,22 @@
 # Picture shape when the window's differs from the game resolution's (a 16:9 game on a 16:10 screen): keep (its
 # proportions, with black bars) or stretch (over the whole window). Changes take effect at once.
 # picture_fit = keep
+# How far from the camera grass loads and is drawn: 1 (the game's ranges, 10 to 90 m per grass layer), 1.5, 2 or 3.
+# Changes take effect at once.
+# grass_distance = 1
+# How many metres further from the camera trees, bushes, rocks and other map objects switch to their detailed models:
+# 0 (the game's distances, under 5 to about 50 m depending on the object), 10, 20, 30, 50, 75, 100, 150, 200, 300,
+# 500, 750 or 1000. Those are the menu's steps; here any value from 0 to 1000 works, and the menu then shows it in
+# its place between the two steps around it. Higher values cost some CPU time per frame. Changes take effect at once.
+# object_lod_range = 0
+# With object_lod_range above 0: auto (the default) treats it as the most to use and lowers the range whenever frames
+# take longer than the frame limit allows (the display's refresh rate without a limit), raising it again when there is
+# time to spare; fixed always uses object_lod_range as set. Changes take effect at once.
+# object_lod_mode = auto
+# How far from you the crowd people (the walkers in NLA) appear and fade out: 1 (the game's distances, about 25 m),
+# 1.5, 2, 3 or 4. Turn on replay_async = 1 before raising it: without it the extra people slow busy places a lot (in
+# the Commercial District at 4x, about 66 instead of 90 fps). Changes take effect at once.
+# crowd_distance = 1
 
 # HDR output: hdr = 1 sends the picture as HDR10 (needs HDR on in Windows, "Use HDR", or a Wayland compositor with
 # colour management; without it the picture stays SDR). The game's tonemap keeps highlights up to hdr_peak_nits (your
@@ -151,8 +175,13 @@
 [language]
 # Language: a Windows locale such as de-DE, or a Switch code (en-US, ja, zh-Hant, ...). Default: the Windows locale.
 # The game cannot start in Russian: ru, from either key or the Windows locale, plays in English (en-US).
+# Chinese is zh-Hans or zh-Hant; the older zh-CN and zh-TW, in which the game cannot start either, play as those.
 # locale = en-US
 # lang = en-US
+# Voice language: ja (Japanese) or en (English), with the matching lip sync, whatever the text language. Unset, the
+# game picks: Japanese voices with Japanese or Chinese text, English otherwise. Takes effect when the game next
+# applies its options, as on loading a save.
+# voice_lang = ja
 # System mode reported to the game: docked or handheld.
 # operation_mode = docked
 # Language of the settings menu and the overlay: en or ru. Default: the Windows display language, English if it is
@@ -196,6 +225,17 @@
 # glyph_appearance = colored
 # Mouse camera sensitivity (0 to 10; 0 = no mouse camera and no cursor capture).
 # mouse_sens = 1
+# Gamepad stick deadzones in percent of full deflection (Controls tab; 0 to 40; 7.63 = 2500 of 32767, the original).
+# Raise one if the character keeps walking or the camera keeps turning after you let go of a drifting stick.
+# stick_deadzone_l = 7.63
+# stick_deadzone_r = 7.63
+# The deadzone's shape for both sticks: axis (each axis cut on its own, unchanged past it; the original) or round (the
+# distance from center, and the stick starts from 0 past it).
+# stick_deadzone_shape = axis
+# Where each stick rests, "x,y" in raw SDL units (-16384 to 16384; y down), taken off before the deadzone. The Controls
+# tab's Calibrate stick centers writes these; unset = the controller's own center.
+# stick_center_l = 0,0
+# stick_center_r = 0,0
 # Write the input of this run to a file that replays as a script (docs/controls.md, "Scripted input"). Default: off.
 # input_record = input.txt
 # Remap buttons: the Controls tab of the settings menu (F1) writes these lines. One line per Switch button or stick

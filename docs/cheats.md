@@ -12,8 +12,10 @@ Cheats change the running game, and the game saves what it finds in memory. Back
 
 For the 2.0.0 update (build `EC4ED46BBC4A9EBB`) the recomp carries the community cheat list for 1.0.2, whose
 addresses 2.0.0 keeps: codes by pspmaster, TomSwitch, ranma99vn, Nic87, zzpong and WiduraGoez, collected by Muezaa.
-The names were cleaned up for the menu; the codes are unchanged, except Max Funds, which is the recomp's own: it sets
-Funds to 99,999,999, the game's cap, once a save is loaded. The list is `tools/data/cheats/EC4ED46BBC4A9EBB.txt`.
+The names were cleaned up for the menu; the codes are unchanged, except two. Max Funds is the recomp's own: it sets
+Funds to 99,999,999, the game's cap, once a save is loaded. Items Not Used Up in Battle or Upgrades also skips the two
+stores after the count that empty the item's slot when the stack is no larger than the amount used, so a stack of one
+(often the case with Skell battle items) stays as well. The list is `tools/data/cheats/EC4ED46BBC4A9EBB.txt`.
 The runtime embeds it and every install builds its code cheats into the game, so they need no files and no extra
 setup run. Values a cheat set stay where they are when it is switched off.
 

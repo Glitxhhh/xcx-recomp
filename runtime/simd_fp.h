@@ -59,6 +59,36 @@ SN T FN(nan3)(Cpu *c, T a, T b, T d) {
     return FN(fv)(DNAN);
 }
 
+// Fused x*y + z on the host, for scalars (HFMA(K, ...)) and vectors (HFMA(VK, ...)). With FMA3 (x86-64-v3) it is one
+// instruction, which applies MXCSR.DAZ/FTZ (the FPCR.FZ mirror) like every other SSE operation. Without it
+// (tools/build_game.py --cpu x86-64-v2) clang calls the C library's fma/fmaf, on Windows UCRT's software emulation:
+// correctly rounded in every MXCSR rounding mode, but it ignores DAZ and FTZ, and when x*y underflows to zero against a
+// zero z it returns the sign of the rounded product's sum instead of the exact product's. Under FPCR.FZ, which the game
+// sets, a denormal operand then counts as itself instead of as zero (a denormal times 2^100 gives about 2^-30 where ARM
+// gives z) and a denormal result is not flushed. FN(hfma) runs the operands and the result through a multiplication
+// by a 1 the compiler cannot fold away (exact, but it applies DAZ/FTZ) and gives such a zero the exact product's sign.
+#ifdef __FMA__
+#define HFMA_K(x, y, z) __builtin_elementwise_fma(x, y, z)
+#define HFMA_VK(x, y, z) __builtin_elementwise_fma(x, y, z)
+#else
+SN T FN(hfma)(T x, T y, T z) {
+    T one = K(1);
+    __asm__("" : "+x"(one));
+    x *= one, y *= one, z *= one;
+    T r = __builtin_elementwise_fma(x, y, z);
+    if (r == 0 && z == 0 && x != 0 && y != 0) r = FN(fv)((FN(fb)(x) ^ FN(fb)(y)) & SGN);
+    return r * one;
+}
+SN VT FN(vhfma)(VT x, VT y, VT z) {
+    VT r;
+    for (int i = 0; i < NL; i++) r[i] = FN(hfma)(x[i], y[i], z[i]);
+    return r;
+}
+#define HFMA_K(x, y, z) FN(hfma)(x, y, z)
+#define HFMA_VK(x, y, z) FN(vhfma)(x, y, z)
+#endif
+#define HFMA(KK, x, y, z) HFMA_##KK(x, y, z)
+
 // The arithmetic itself, for scalars (KK = K) and vectors (KK = VK). MADD: a + b*d (a = addend).
 // RECPS/RSQRTS get their first operand already negated (FPNeg happens before NaN processing).
 #define FCALC(op, a, b, d, KK)                                                                       \
@@ -66,9 +96,9 @@ SN T FN(nan3)(Cpu *c, T a, T b, T d) {
    : (op) == FOP_MUL || (op) == FOP_MULX ? (a) * (b) : (op) == FOP_NMUL ? -((a) * (b))              \
    : (op) == FOP_DIV ? (a) / (b) : (op) == FOP_ABD ? __builtin_elementwise_abs((a) - (b))          \
    : (op) == FOP_SQRT ? __builtin_elementwise_sqrt(a)                                              \
-   : (op) == FOP_MADD ? __builtin_elementwise_fma(b, d, a)                                         \
-   : (op) == FOP_RECPS ? __builtin_elementwise_fma(a, b, KK(2))                                    \
-   : (op) == FOP_RSQRTS ? __builtin_elementwise_fma(a, b, KK(3)) * KK(0.5) : (a))
+   : (op) == FOP_MADD ? HFMA(KK, b, d, a)                                                          \
+   : (op) == FOP_RECPS ? HFMA(KK, a, b, KK(2))                                                     \
+   : (op) == FOP_RSQRTS ? HFMA(KK, a, b, KK(3)) * KK(0.5) : (a))
 
 // Lanes whose fast result needs fixing: NaN results (NaN operand or invalid op), RSQRTS overflow.
 #define FBAD(op, r) ((op) == FOP_RSQRTS ? ((r) != (r)) | (__builtin_elementwise_abs(r) == K(INFINITY)) : (r) != (r))
@@ -76,9 +106,9 @@ SN T FN(nan3)(Cpu *c, T a, T b, T d) {
 // (3 + a*b) / 2 with one rounding (a already negated): halve a normal operand first, so a product beyond
 // the format's range (which the fast path rounds to inf, or to the largest normal when rounding down) is exact.
 SN T FN(rsqrts)(T a, T b) {
-    if (__builtin_elementwise_abs(a) >= FN(fv)(2 * MINN)) return __builtin_elementwise_fma(a * K(0.5), b, K(1.5));
-    if (__builtin_elementwise_abs(b) >= FN(fv)(2 * MINN)) return __builtin_elementwise_fma(a, b * K(0.5), K(1.5));
-    return __builtin_elementwise_fma(a, b, K(3)) * K(0.5);
+    if (__builtin_elementwise_abs(a) >= FN(fv)(2 * MINN)) return HFMA(K, a * K(0.5), b, K(1.5));
+    if (__builtin_elementwise_abs(b) >= FN(fv)(2 * MINN)) return HFMA(K, a, b * K(0.5), K(1.5));
+    return HFMA(K, a, b, K(3)) * K(0.5);
 }
 
 // ARM result for a lane flagged by FBAD (operands already flushed).
@@ -355,6 +385,9 @@ SI T FN(recpx)(Cpu *c, T a) {
     return FN(fv)(s | (~x & EXPM));
 }
 
+#undef HFMA
+#undef HFMA_K
+#undef HFMA_VK
 #undef FN
 #undef SGN
 #undef EXPM

@@ -34,6 +34,7 @@ static bool g_held;                      // the last row's left / right has been
 static float g_bottom;                   // opt_reserve_bottom: kept free under the panes
 static bool g_disable_next;              // opt_disable_next: the next row is greyed out with g_disable_note
 static UiTextId g_disable_note;
+static bool g_indent_next;               // opt_indent_next: the next row is a sub-row
 // The rows of this frame's page: how many, which one has the controller / keyboard cursor (-1 none) and its id, and the
 // row that had it last frame (opt_end scrolls to the page's ends when the cursor arrives on its first or last row).
 static int g_rows, g_cursor_row;
@@ -67,6 +68,8 @@ void opt_disable_next(UiTextId note) {
     g_disable_next = true;
     g_disable_note = note;
 }
+
+void opt_indent_next(void) { g_indent_next = true; }
 
 void opt_begin(const char *id, float scale) {
     g_scale = scale;
@@ -130,6 +133,9 @@ static int row(const char *key, UiTextId label, UiTextId desc, const RowView &v)
     g_disable_next = false;
     bool off = disabled || cfg_from_env(key) != 0;
     ImGui::PushID(key);
+    float indent = g_indent_next ? 30 * g_scale : 0;   // a sub-row: inset, joined to the row above by a connector
+    g_indent_next = false;
+    if (indent) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
     ImVec2 p = ImGui::GetCursorScreenPos();
     // h whole pixels: ImGui truncates cursor positions, which rounds a fractional height the other way above the window's
     // top (negative y), so the page grew a pixel per row scrolled out and a row scrolled to the bottom was cut off
@@ -172,6 +178,12 @@ static int row(const char *key, UiTextId label, UiTextId desc, const RowView &v)
     ImDrawList *dl = ImGui::GetWindowDrawList();
     ImFont *font = ImGui::GetFont();
     float r = 9 * g_scale, pad = 16 * g_scale, small = fs * 0.72f;
+    if (indent) {   // from under the row above (its bottom edge, the spacing above this row) to this row's left edge
+        float cx = p.x - indent * 0.5f, top = p.y - ImGui::GetStyle().ItemSpacing.y, mid = p.y + h * 0.5f;
+        ImU32 lc = IM_COL32(90, 220, 245, 150);
+        dl->AddLine(ImVec2(cx, top), ImVec2(cx, mid), lc, 1.5f * g_scale);
+        dl->AddLine(ImVec2(cx, mid), ImVec2(p.x, mid), lc, 1.5f * g_scale);
+    }
     dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), hov || foc ? IM_COL32(255, 255, 255, 22) : IM_COL32(0, 0, 0, 40), r);
     dl->AddRect(p, ImVec2(p.x + w, p.y + h),
                 hov || foc ? (off ? IM_COL32(90, 220, 245, 120) : kAccent) : IM_COL32(255, 255, 255, off ? 18 : 38), r, 0,

@@ -80,6 +80,8 @@ void perf_set_overlay(int mode);
 int perf_gpu_timing(void);                      // GPU timestamps wanted: XCX_TRACE=perf or the full overlay
 void perf_gpu_busy(uint64_t ns);                // GPU busy time of a timed submission part (vk_sync.c, any thread)
 uint64_t perf_gpu_busy_total(void);             // its running total (the overlay's GPU time per frame)
+void perf_present_gpu(uint64_t ns);             // GPU time of one present command buffer (gfx_present.c)
+uint64_t perf_present_gpu_total(void);          // its running total (the overlay's present time per frame)
 #define RT_RESULT(module, desc) ((uint32_t)(module) | ((uint32_t)(desc) << 9))
 void rt_sha256(const void *p, size_t n, uint8_t out[32]);   // BCrypt; fatal if the provider fails
 
@@ -178,6 +180,26 @@ void mem_thaw(uint64_t a, uint64_t n);                     // makes the frozen r
                                                            // before a kernel write (file read) into guest memory
 void mem_freeze_stats(uint64_t *frozen, uint64_t *freezes, uint64_t *fault_thaws, uint64_t *other_thaws);
                                                            // regions frozen now; freezes and thaws since the last call
+// Copy-on-write snapshots (memory.c, "copy-on-write blocks"): the async replay reads guest memory as of a submission.
+// Submissions are numbered by mem_cow_begin. A block protected at submission p and written at q keeps a copy of its
+// bytes valid for submissions p..q until the replay is done with q.
+void mem_cow_init(int blk_shift, uint64_t arena_bytes);   // 0 arena: off
+int mem_cow_on(void);
+int mem_cow_blk_shift(void);
+uint64_t mem_cow_arena_bytes(void);
+uint32_t mem_cow_begin(void);                              // game thread, at a submit: its number; holds the lock
+void mem_cow_protect(uint64_t lo, uint64_t hi);            // between begin and end: the whole blocks of [lo, hi)
+void mem_cow_end(void);                                    // releases idle regions, drops the lock
+void mem_cow_done(uint32_t s);                             // replay: submission s recorded; its copies may go
+// Replay, recording submission s: n bytes at a (inside one block) as of s into dst. Returns 2 when they came from a
+// saved copy, 1 from a block still protected since s or earlier, 0 live (not protected: as before, read late).
+// *when is the plat_now_ns time the bytes are from: the save's, else now.
+int mem_cow_read(uint64_t a, uint64_t n, uint32_t s, void *dst, uint64_t *when);
+uint64_t mem_cow_oldest(void);                             // the plat_now_ns time of the oldest saved copy held, else now
+void mem_cow_stats(uint64_t out[15]);                      // protects, faults, saves, overflows, releases, protected
+                                                           // blocks now, saves held now, fault ns; protect pass: lock
+                                                           // wait, state and protect ns, protect calls, state calls,
+                                                           // the longest pass ns; blocks skipped in a thaw hold; since the last call
 void mem_kernel_free(void *p, uint64_t size);              // TLR/TLS reuse after thread exit
 
 // ---- modules (loader.c)
@@ -261,6 +283,8 @@ void account_uid(uint64_t out[2]);                         // the local user's n
 void movie_tick(Cpu *c);                                   // at every present, on the presenting guest thread: hands
                                                            // decoded movie frames over when due, signals their events
 int movie_playing(void);                                   // a pre-rendered movie plays (ov_movie.c)
+void voice_lang_init(void);                               // after rt_patches_init: the voice patch sets of XCX_VOICE_LANG
+void voice_lang_tick(void);                               // at every present: XCX_VOICE_LANG sets the game's voice option
 // ---- game resolution (resolution.c): XCX_OUTPUT_RES, XCX_RENDER_SCALE
 uint64_t res_heap_extra_bytes(void);                       // added to the application pool (mem_init), 2 MiB steps
 uint64_t res_heap_extra_kib(void);                         // added to the HeapDef texture heap and its parent; 0 = none
@@ -274,12 +298,25 @@ void res_sizes(unsigned out[2], unsigned scene[2]);      // the output and scene
 // ---- code patches (patches.c) and the frame step (frame_rate.c)
 void rt_patches_init(void);                                // after ldr_load: switches from the environment, the patch
                                                            // page committed; logs the sets
+void rt_aniso_init(void);                                   // after patches: initializes the anisotropic filtering level
+void rt_aniso_update(void);                                 // at every present: applies a changed live menu setting
 int rt_patch_set(const char *name);                        // index of a set of generated patches.h, -1 if absent
 int rt_patch_enabled(int set);                             // the set is on (0 for -1)
 void rt_patch_disable(int set);                            // before the guest starts: a set needs another that is off
 void rt_patch_switch(int set, int on);                     // at run time (live settings): each site takes the new code
                                                            // the next time it runs
 void *rt_patch_page(void);                                 // the page the patched code reads (NULL without the table)
+void rt_grass_init(void);                                  // after rt_patches_init: XCX_GRASS_DISTANCE (grass.c)
+void rt_grass_update(void);                                // at every present: applies a changed grass distance
+int rt_grass_available(void);                              // the grass patch set exists (the 2.0.0 update)
+void rt_objlod_update(void);                               // at every present: XCX_OBJECT_LOD_RANGE (objlod.c)
+int rt_objlod_available(void);                             // the 2.0.0 update's map object settings were found
+// the automatic object detail range (objlod.c): its state for the menu; 0 when Auto is not in effect
+int rt_objlod_status(float *now_m, float *max_m, float *busy_ms, float *budget_ms);
+uint64_t perf_last_frame(uint64_t *interval_ns, uint64_t *pace_ns);   // perf.c: the last frame's interval and pacing wait
+void rt_crowd_init(void);                                  // after rt_patches_init: XCX_CROWD_DISTANCE (crowd.c)
+void rt_crowd_update(void);                                // at every present: applies a changed crowd distance
+int rt_crowd_available(void);                              // the crowd patch set exists (the 2.0.0 update)
 void frame_step_init(void);                                // after rt_patches_init: the real-time step's first value
 int frame_step_realtime(void);                             // the real-time step is on: presents ignore the interval
 int frame_rate_paced(void);                                // XCX: the game runs at the frame limit (frame_rate.c)

@@ -18,6 +18,7 @@ from . import game_files
 from . import guilogic
 from . import ini
 from . import layout as layouts
+from . import recent
 from . import state as statefile
 from .events import Reporter
 from .runner import Context, InstallError, run_steps
@@ -109,6 +110,8 @@ def main(argv=None):
         return 1
     if args.lang == 'auto':
         args.lang = auto_language(dest, state)
+    # the player's files as given (a --game folder, not what it resolves to), for the next setup window to fill in
+    paths = recent.merge_paths((state or {}).get('paths'), args)
     if args.game:
         try:
             game_files.resolve(args)
@@ -117,6 +120,7 @@ def main(argv=None):
             rep.emit('end', result='failed', seconds=0)
             return 1
     ctx = Context(layout, dest, temp, rep, args, state=state, verify=args.verify)
+    ctx.state['paths'] = paths   # saved with the first finished step
     steps = all_steps()
     rep.emit('start', release=layout.release, mode=ctx.mode, dev=layout.dev, dest=str(dest), log=str(log),
              steps=[s.id for s in steps])

@@ -23,7 +23,7 @@
 #include "vk.h"
 #include "platform/platform.h"
 
-enum { STICK_MAX = 32767, STICK_DEAD = 2500, STICK_DIR = 16384, TRIGGER_ON = 16384, RESCAN_MS = 1000 };
+enum { STICK_MAX = 32767, STICK_DIR = 16384, TRIGGER_ON = 16384, RESCAN_MS = 1000 };
 
 static PlatMutex lock = PLAT_MUTEX_INIT;
 static int state;                    // 0 not started, 1 running, -1 disabled or SDL failed
@@ -266,9 +266,36 @@ static void mouse_camera(int32_t out[2]) {
     out[1] = held[1];
 }
 
-static int32_t axis(int16_t v) {
-    int32_t a = v < -STICK_MAX ? -STICK_MAX : v;
-    return a > -STICK_DEAD && a < STICK_DEAD ? 0 : a;
+// The gamepad sticks' deadzones, their shape and the resting offsets (XCX_STICK_DEADZONE_L/R in percent,
+// XCX_STICK_DEADZONE_SHAPE, XCX_STICK_CENTER_L/R "x,y" in raw units; input_stick_shape). Live: read again when
+// cfg_version changes. Under `lock`.
+static struct { float dead; int32_t cx, cy; } tune[2];
+static int tune_round;
+static unsigned tune_seen, tune_ok;
+
+static void tune_refresh(void) {
+    unsigned ver = cfg_version();
+    if (tune_ok && ver == tune_seen) return;
+    tune_ok = 1, tune_seen = ver;
+    tune_round = !strcmp(cfg_value("XCX_STICK_DEADZONE_SHAPE"), "round");
+    static const char *const dead_key[2] = {"XCX_STICK_DEADZONE_L", "XCX_STICK_DEADZONE_R"};
+    static const char *const center_key[2] = {"XCX_STICK_CENTER_L", "XCX_STICK_CENTER_R"};
+    for (int s = 0; s < 2; s++) {
+        double d = cfg_double(dead_key[s]);
+        tune[s].dead = (float)(d < 0 ? 0 : d > 40 ? 0.4 : d / 100);   // the setting's range, 0..40 (cfg.c)
+        input_stick_center_parse(cfg_get(center_key[s]), &tune[s].cx, &tune[s].cy);
+    }
+}
+
+// Under `lock`, with the open gamepad: its raw stick axes (lx, ly, rx, ry as SDL reports them) and the sticks the game
+// sees (shaped, up +y).
+static void pad_sticks(int16_t raw[4], int32_t sl[2], int32_t sr[2]) {
+    static const SDL_GamepadAxis ax[4] = {SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY, SDL_GAMEPAD_AXIS_RIGHTX,
+                                          SDL_GAMEPAD_AXIS_RIGHTY};
+    for (int i = 0; i < 4; i++) raw[i] = SDL_GetGamepadAxis(pad, ax[i]);
+    tune_refresh();
+    input_stick_shape(raw[0], raw[1], tune[0].cx, tune[0].cy, tune[0].dead, tune_round, sl);
+    input_stick_shape(raw[2], raw[3], tune[1].cx, tune[1].cy, tune[1].dead, tune_round, sr);
 }
 
 // Open the first gamepad when none is open or the open one went away; logs once per change.
@@ -399,10 +426,8 @@ static int pad_read(uint64_t *b, int32_t sl[2], int32_t sr[2]) {
         SDL_GAMEPAD_AXIS_RIGHTX,SDL_GAMEPAD_AXIS_RIGHTY,SDL_GAMEPAD_AXIS_LEFT_TRIGGER,SDL_GAMEPAD_AXIS_RIGHT_TRIGGER};
     for (int i = 0; i < 6; i++) glyph_sample.axes[i] = SDL_GetGamepadAxis(pad,ax[i]);
     *b |= input_map_pad_buttons(pd, pad_layout_get());
-    sl[0] = axis(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX));
-    sl[1] = -axis(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTY));
-    sr[0] = axis(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTX));
-    sr[1] = -axis(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTY));
+    int16_t raw[4];
+    pad_sticks(raw, sl, sr);
     return 1;
 }
 
@@ -456,6 +481,10 @@ static void poll_merged(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx
                glyph_family);
     script_apply(&b, sl, sr);
     rec_apply(b, sl, sr);
+    // L+R+ZL+ZR held for a second ask whether to quit, over the game or the open menu (before the menu's gate, which
+    // empties the pad while the menu is open)
+    static InputQuitHold quit_hold;
+    int quit = input_quit_gate(&quit_hold, plat_now_ns(), &b);
     // Minus and Plus held together (gamepad or keys) open or close the menu and never reach the game
     static int combo_held;
     int32_t st[4] = {sl[0], sl[1], sr[0], sr[1]};
@@ -466,6 +495,7 @@ static void poll_merged(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx
     plat_mutex_unlock(&lock);
     if (toggle) menu_toggle();
     if (overlay) menu_perf_cycle();
+    if (quit) menu_quit_prompt();
     stick_bits(&b, sl[0], sl[1], B_SL_LEFT);
     stick_bits(&b, sr[0], sr[1], B_SR_LEFT);
     *buttons = b; *lx = sl[0]; *ly = sl[1]; *rx = sr[0]; *ry = sr[1];
@@ -508,6 +538,21 @@ void input_poll(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int32_
 
 void input_poll_ui(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry) {
     poll_merged(buttons, lx, ly, rx, ry);
+}
+
+// Called from the menu thread (Controls: the stick view and calibration). pad_physical runs SDL_UpdateGamepads and,
+// while no gamepad is open, scan_pads here too, not only on the game's input thread; `lock` serialises both callers,
+// so the two never touch SDL's gamepad state or `pad` at the same time.
+int input_pad_sticks(int16_t raw[4], int32_t shaped[4]) {
+    memset(raw, 0, 4 * sizeof *raw);
+    memset(shaped, 0, 4 * sizeof *shaped);
+    uint8_t pd[PAD_COUNT];
+    plat_mutex_lock(&lock);
+    if (!state) start();
+    int ok = state == 1 && pad_physical(pd);
+    if (ok) pad_sticks(raw, shaped, shaped + 2);
+    plat_mutex_unlock(&lock);
+    return ok;
 }
 
 int input_pad_read(uint64_t *buttons, int32_t *lx, int32_t *ly) {

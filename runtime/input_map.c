@@ -3,10 +3,12 @@
 #include <ctype.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cfg.h"
 #include "host.h"
+#include "input.h"
 #include "input_map.h"
 
 #define STICK_MAX 32767
@@ -89,6 +91,13 @@ int input_map_keys_of(const InputMap *m, int action, uint8_t *out, int max) {
     for (int i = 0; i < m->nkeys; i++)
         if (m->keys[i].action == action && n < max) out[n++] = m->keys[i].key;
     return n;
+}
+
+// F2 is the overlay key (issue #153) while no action has it; a player who bound F2 to a button keeps it for the game.
+int input_overlay_f2(void) {
+    for (int i = 0; i < input_map.nkeys; i++)
+        if (input_map.keys[i].key == KEY_F2) return 0;
+    return 1;
 }
 
 int input_map_pads_of(const InputMap *m, int action, int layout, uint8_t *out, int max) {
@@ -325,6 +334,44 @@ void input_mouse_stick(int32_t dx, int32_t dy, double dt_s, float sens, int32_t 
     out[1] = (int32_t)lrint(y);
 }
 
+// One axis per axis: the offset taken off and stretched back to full (the edge on the side the offset leans to is that
+// much closer), clamped, then zeroed under d.
+static int32_t stick_axis(int32_t v, int32_t c, int32_t d) {
+    double a = (double)v - c;
+    if (c) a = a * STICK_MAX / (STICK_MAX - abs(c));
+    int32_t r = (int32_t)lrint(a < -STICK_MAX ? -STICK_MAX : a > STICK_MAX ? STICK_MAX : a);
+    return r > -d && r < d ? 0 : r;
+}
+
+void input_stick_shape(int32_t x, int32_t y, int32_t cx, int32_t cy, float dead, int round, int32_t out[2]) {
+    out[0] = out[1] = 0;
+    double dz = !(dead > 0) ? 0 : dead > 0.9f ? 0.9 : dead;
+    if (!round) {
+        int32_t d = (int32_t)lrint(dz * STICK_MAX);
+        out[0] = stick_axis(x, cx, d);
+        out[1] = -stick_axis(y, cy, d);
+        return;
+    }
+    double dx = (double)x - cx, dy = -((double)y - cy), len = sqrt(dx * dx + dy * dy);
+    double full = STICK_MAX - (abs(cx) > abs(cy) ? abs(cx) : abs(cy));
+    double d = dz * full;
+    if (len <= d || full <= d) return;
+    double m = (len - d) / (full - d);
+    if (m > 1) m = 1;
+    out[0] = (int32_t)lrint(dx / len * m * STICK_MAX);
+    out[1] = (int32_t)lrint(dy / len * m * STICK_MAX);
+}
+
+int input_stick_center_parse(const char *s, int32_t *cx, int32_t *cy) {
+    *cx = *cy = 0;
+    int x, y;
+    char tail;
+    if (!s || sscanf(s, " %d , %d %c", &x, &y, &tail) != 2) return 0;
+    *cx = x < -INPUT_STICK_CENTER_MAX ? -INPUT_STICK_CENTER_MAX : x > INPUT_STICK_CENTER_MAX ? INPUT_STICK_CENTER_MAX : x;
+    *cy = y < -INPUT_STICK_CENTER_MAX ? -INPUT_STICK_CENTER_MAX : y > INPUT_STICK_CENTER_MAX ? INPUT_STICK_CENTER_MAX : y;
+    return 1;
+}
+
 // Minus and Plus held together open or close the menu. *held: latched from the poll where both go down until neither is
 // down (the caller keeps it). Every poll of the latch reports neither to the game, so releasing one button first does not
 // leak the other; Minus alone before Plus reaches the game unchanged. With the menu open the game sees a neutral pad.
@@ -355,4 +402,24 @@ int input_menu_gate(int *held, int menu_open, uint64_t *buttons, int32_t sticks[
 // Game Mode). The same latch as the menu's above; the game sees neither click while it holds.
 int input_overlay_gate(int *held, uint64_t *buttons) {
     return chord(held, buttons, 1ull << B_STICK_L | 1ull << B_STICK_R);
+}
+
+// All four shoulder buttons held together for a second open the Quit Game prompt (issue #153), a chord play hardly
+// makes by chance. The game sees none of the four from the poll where the last of them goes down until all four are up
+// again, the same latch as the menu's above. A button let go before the second is up cancels; the four must go down
+// again.
+int input_quit_gate(InputQuitHold *q, uint64_t now_ns, uint64_t *buttons) {
+    const uint64_t combo = 1ull << B_L | 1ull << B_R | 1ull << B_ZL | 1ull << B_ZR;
+    int all = (*buttons & combo) == combo;
+    if (chord(&q->held, buttons, combo)) {
+        q->since = now_ns;
+        q->fired = 0;
+    }
+    if (!q->held || q->fired) return 0;
+    if (!all || now_ns - q->since < INPUT_QUIT_HOLD_NS) {
+        if (!all) q->fired = 1;
+        return 0;
+    }
+    q->fired = 1;
+    return 1;
 }

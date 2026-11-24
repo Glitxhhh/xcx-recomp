@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "cfg.h"
+#include "gfx_wsys.h"
 #include "host.h"
 #include "input.h"
 #include "input_map.h"
@@ -134,13 +135,50 @@ int probe_cfg(void) {
     CHECK(m && EQ(m->def, "1") && m->live, "meta: fps60 defaults to 1 and is live");
     m = cfg_meta("ASYNC_PREEMPT");
     CHECK(m && EQ(m->values, "0|1|2") && !m->live, "meta: async_preempt takes 0|1|2 and needs a restart");
+    m = cfg_meta("STICK_DEADZONE_L");
+    CHECK(m && EQ(m->def, "7.63") && EQ(m->values, "0..40") && m->live, "meta: stick deadzone is 7.63 by default, 0..40, live");
+    m = cfg_meta("STICK_DEADZONE_SHAPE");
+    CHECK(m && EQ(m->def, "axis") && EQ(m->values, "axis|round") && m->live, "meta: deadzone shape is per axis by default, live");
+    m = cfg_meta("STICK_CENTER_R");
+    CHECK(m && EQ(m->def, "") && m->live, "meta: stick center has no default and is live");
+    m = cfg_meta("GRASS_DISTANCE");
+    CHECK(m && EQ(m->def, "1") && EQ(m->values, "1|1.5|2|3") && m->live, "meta: grass distance is 1 by default, up to 3, live");
+    m = cfg_meta("OBJECT_LOD_RANGE");
+    CHECK(m && EQ(m->def, "0") && !strncmp(m->values, "0|10|", 5) && strstr(m->values, "|1000") && m->live,
+          "meta: object lod range is 0 by default, up to 1000, live");
+    m = cfg_meta("OBJECT_LOD_MODE");
+    CHECK(m && EQ(m->def, "auto") && EQ(m->values, "auto|fixed") && m->live, "meta: object lod mode is auto by default, live");
+    m = cfg_meta("CROWD_DISTANCE");
+    CHECK(m && EQ(m->def, "1") && EQ(m->values, "1|1.5|2|3|4") && m->live, "meta: crowd distance is 1 by default, up to 4, live");
     m = cfg_meta("xcx_vk_present");
     CHECK(m && EQ(m->key, "VK_PRESENT") && EQ(m->values, "mailbox|fifo|immediate") && m->live,
           "meta: prefix and case are accepted");
     m = cfg_meta("RUMBLE_STRENGTH");
     CHECK(m && EQ(m->def, "130") && EQ(m->values, "0..300"), "meta: rumble strength 130 in 0..300");
+    m = cfg_meta("ANISO");
+    CHECK(m && EQ(m->def, "0") && EQ(m->values, "0|2|4|8|16") && m->live,
+          "meta: the game's anisotropy is the live default");
     m = cfg_meta("PERF_OVERLAY");
     CHECK(m && EQ(m->def, "off") && EQ(m->values, "off|fps|full") && m->live, "meta: perf_overlay is live, off by default");
+    m = cfg_meta("VOICE_LANG");
+    CHECK(m && EQ(m->def, "") && EQ(m->values, "ja|en") && m->live, "meta: voice_lang is automatic (unset) by default, ja|en, live");
+    // the display mode: the menu's Window, Borderless and Fullscreen; 0 and 1 of older files keep their meaning
+    m = cfg_meta("FULLSCREEN");
+    CHECK(m && EQ(m->def, "0") && EQ(m->values, "0|borderless|1") && m->live, "meta: fullscreen takes 0|borderless|1");
+    {
+        char keep[64];
+        int had = plat_getenv("XCX_FULLSCREEN", keep, sizeof keep);
+        static const struct { const char *v, *back; int mode; } modes[] = {
+            {"0", "0", GFX_WINDOWED}, {"borderless", "borderless", GFX_BORDERLESS}, {"1", "1", GFX_FULLSCREEN},
+            {"yes", "1", GFX_FULLSCREEN}};
+        int ok = 1;
+        for (size_t i = 0; i < sizeof modes / sizeof *modes; i++) {
+            plat_setenv("XCX_FULLSCREEN", modes[i].v);
+            ok &= gfx_cfg_window_mode() == modes[i].mode && EQ(gfx_window_mode_value(modes[i].mode), modes[i].back);
+        }
+        plat_setenv("XCX_FULLSCREEN", had ? keep : NULL);
+        CHECK(ok, "window mode: 0 window, borderless, 1 and other values fullscreen, each written back as the menu does");
+    }
     CHECK(cfg_meta("BIND_A") == NULL && cfg_meta("FPS_COUNTER") == NULL && cfg_meta("NO_SUCH") == NULL,
           "meta: keys the menu does not show are NULL");
 
@@ -261,6 +299,47 @@ int probe_cfg(void) {
     CHECK((int64_t)st[0] * st[0] + (int64_t)st[1] * st[1] <= 32768ll * 32768, "mouse: clamped to the unit circle");
     input_mouse_stick(30, 0, 1.0 / 60, 0, st);
     CHECK(st[0] == 0 && st[1] == 0, "mouse: sensitivity 0 is off");
+    // Gamepad sticks (input_map.c). Per axis at 7.63 % with no offset is the runtime's original cut, raw value for value.
+    {
+        static const int32_t raw[] = {-32768, -32767, -20000, -2501, -2500, -2499, -1, 0, 1, 2499, 2500, 2501, 20000, 32767};
+        int same = 1;
+        for (unsigned i = 0; i < sizeof raw / sizeof *raw; i++)
+            for (unsigned j = 0; j < sizeof raw / sizeof *raw; j++) {
+                int32_t ox = raw[i] < -32767 ? -32767 : raw[i], oy = raw[j] < -32767 ? -32767 : raw[j];
+                ox = ox > -2500 && ox < 2500 ? 0 : ox;
+                oy = oy > -2500 && oy < 2500 ? 0 : -oy;
+                input_stick_shape(raw[i], raw[j], 0, 0, 0.0763f, 0, st);
+                same &= st[0] == ox && st[1] == oy;
+            }
+        CHECK(same, "stick: per axis at the default is the original cut (|axis| < 2500 is 0, the rest unchanged)");
+    }
+    input_stick_shape(3000, 30000, 3000, 0, 0.0763f, 0, st);
+    CHECK(st[0] == 0 && st[1] == -30000, "stick: per axis, a calibrated center takes the offset off that axis only");
+    input_stick_shape(32767, 0, 3000, 0, 0.0763f, 0, st);
+    CHECK(st[0] == 32767, "stick: per axis, with a center offset the near edge still reaches full deflection");
+    input_stick_shape(2400, 0, 0, 0, 0.0763f, 1, st);
+    CHECK(st[0] == 0 && st[1] == 0, "stick: round, inside the deadzone is center");
+    input_stick_shape(2000, 2000, 0, 0, 0.0763f, 1, st);
+    CHECK(st[0] > 0 && st[1] < 0, "stick: round (each axis under the deadzone, the length past it, moves)");
+    input_stick_shape(2000, 2000, 0, 0, 0.0763f, 0, st);
+    CHECK(st[0] == 0 && st[1] == 0, "stick: per axis, the same diagonal is center");
+    input_stick_shape(32767, 0, 0, 0, 0.0763f, 1, st);
+    CHECK(st[0] == 32767 && st[1] == 0, "stick: round, the edge is still full deflection");
+    input_stick_shape(0, -32768, 0, 0, 0.0763f, 1, st);
+    CHECK(st[0] == 0 && st[1] == 32767, "stick: round, SDL up (negative y) is stick up");
+    input_stick_shape(2700, 0, 0, 0, 0.0763f, 1, st);
+    CHECK(st[0] > 0 && st[0] < 1000, "stick: round, just past the deadzone starts small, not at the deadzone's size");
+    input_stick_shape(3000, -1000, 3000, -1000, 0.0763f, 1, st);
+    CHECK(st[0] == 0 && st[1] == 0, "stick: round, resting at the calibrated center is center");
+    input_stick_shape(32767, 0, 3000, 0, 0.0763f, 1, st);
+    CHECK(st[0] == 32767, "stick: round, with a center offset the near edge still reaches full deflection");
+    input_stick_shape(100, 0, 0, 0, 0, 1, st);
+    CHECK(st[0] == 100, "stick: deadzone 0 passes the stick through");
+    int32_t cx, cy;
+    CHECK(input_stick_center_parse(" 1200 , -300 ", &cx, &cy) && cx == 1200 && cy == -300, "stick center: x,y parses");
+    CHECK(!input_stick_center_parse("1,2,3", &cx, &cy) && cx == 0 && cy == 0, "stick center: a bad value is no offset");
+    CHECK(input_stick_center_parse("99999,-99999", &cx, &cy) && cx == INPUT_STICK_CENTER_MAX && cy == -INPUT_STICK_CENTER_MAX &&
+              INPUT_STICK_CENTER_MAX == 16384, "stick center: clamped to 16384");
     // Gamepad layouts (input_map.c)
     CHECK(input_pad_layout_pick("auto", 1) == PAD_LAYOUT_NINTENDO && input_pad_layout_pick(NULL, 0) == PAD_LAYOUT_XBOX,
           "pad layout: automatic is Nintendo for an east button labelled A, Xbox otherwise");
@@ -335,6 +414,15 @@ int probe_cfg(void) {
     plat_setenv("XCX_MOUSE_SENS", NULL);
     plat_setenv("XCX_FREE_CORES", NULL);
     CHECK(cfg_bool("XCX_FPS60") == 1, "default: unset FPS60 is on");
+    plat_setenv("XCX_ANISO", NULL);
+    CHECK(cfg_int("XCX_ANISO") == 0, "default: the game's anisotropy is kept");
+    plat_setenv("XCX_ANISO", "0");
+    CHECK(cfg_int("XCX_ANISO") == 0, "anisotropy: 0 keeps the game's values");
+    plat_setenv("XCX_ANISO", "8");
+    CHECK(cfg_int("XCX_ANISO") == 8, "anisotropy: a level of 8");
+    plat_setenv("XCX_ANISO", "not-a-number");
+    CHECK(cfg_int("XCX_ANISO") == 0, "anisotropy: invalid input falls back to the default");
+    plat_setenv("XCX_ANISO", NULL);
     CHECK(EQ(cfg_value("XCX_VK_PRESENT"), "mailbox") && cfg_int("XCX_SPLIT_DRAWS") == 64, "default: text and integer");
     plat_setenv("XCX_MOUSE_SENS", "2.5");
     CHECK(cfg_double("XCX_MOUSE_SENS") == 2.5, "double: the environment value");

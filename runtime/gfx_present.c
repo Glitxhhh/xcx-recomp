@@ -11,7 +11,7 @@
 // dirty (gfx_window_mark_dirty), the next present (or gfx_window_resize) rebuilds it.
 //
 // The in-game menu (ui/menu.h) draws over the game image in the present's command buffer, after the blit. The window's
-// size and fullscreen state are the settings XCX_WINDOW_SIZE and XCX_FULLSCREEN, which the back end applies at start
+// size and window mode are the settings XCX_WINDOW_SIZE and XCX_FULLSCREEN, which the back end applies at start
 // and whenever a cfg_set changes them (window_settings_live -> gfx_window_apply_settings).
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,9 +65,18 @@ void gfx_window_closed(void) {
     plat_exit(0);
 }
 
-// XCX_FULLSCREEN=1: borderless window over the monitor. XCX_WINDOW_SIZE=<w>x<h>: client area of the window (the
-// swapchain follows the window; the game image is scaled to it).
-int gfx_cfg_fullscreen(void) { return cfg_bool("XCX_FULLSCREEN"); }
+// XCX_FULLSCREEN: 0 a window, borderless a window without a frame over the monitor that the desktop still composes (the
+// taskbar and Alt+Tab come up over it), 1 the same window with the driver allowed to take the monitor for the swapchain
+// (exclusive fullscreen at the desktop's mode). Any other value counts as 1, as when the key was a switch.
+// XCX_WINDOW_SIZE=<w>x<h>: client area of the window (the swapchain follows the window; the game image is scaled to it).
+int gfx_cfg_window_mode(void) {
+    const char *v = cfg_value("XCX_FULLSCREEN");
+    return !strcmp(v, "0") ? GFX_WINDOWED : !strcmp(v, "borderless") ? GFX_BORDERLESS : GFX_FULLSCREEN;
+}
+
+const char *gfx_window_mode_value(int mode) {
+    return mode == GFX_BORDERLESS ? "borderless" : mode == GFX_FULLSCREEN ? "1" : "0";
+}
 
 void gfx_cfg_window_size(int *w, int *h) {
     int x = 0, y = 0;
@@ -105,6 +114,10 @@ static struct { VkImage src; VkImageLayout layout; VkFormat fmt; int w, h, crop[
 static VkCommandPool g_pool;
 static VkCommandBuffer g_cb[FRAMES];
 static VkFence g_fence[FRAMES];
+// The full overlay's present time: a timestamp at the start and the end of each slot's command buffer, read once its
+// fence has signalled (perf_present_gpu). g_ts_pool is made at the first timed present; 0 on a queue without timestamps.
+static VkQueryPool g_ts_pool;
+static int g_ts_tried, g_ts_written[FRAMES];
 static VkSemaphore g_acquire[FRAMES];
 static unsigned g_frame;
 static int g_capture;
@@ -328,7 +341,7 @@ static int create_swapchain_once(void) {
                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,   // every surface supports it (the menu overlay draws into it)
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = caps.currentTransform,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, .presentMode = pick_present_mode(c->phys), .clipped = VK_TRUE,
-        .oldSwapchain = old};
+        .oldSwapchain = old, .pNext = wsys_swapchain_next()};
     VkResult r = vkCreateSwapchainKHR(c->device, &ci, NULL, &g_sc);
     if (r != VK_SUCCESS) {
         rt_log("gfx: vkCreateSwapchainKHR failed (%d)", (int)r);
@@ -584,6 +597,27 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
     if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR) goto out;     // lost, not ready: skip the frame
     if (r == VK_SUBOPTIMAL_KHR) plat_xchg32(&g_dirty, 1);
     vkResetFences(c->device, 1, &g_fence[slot]);
+    if (g_ts_written[slot]) {   // the fence has signalled: that submission's timestamps are there
+        uint64_t ts[2];
+        if (vkGetQueryPoolResults(c->device, g_ts_pool, 2 * slot, 2, sizeof ts, ts, sizeof *ts, VK_QUERY_RESULT_64_BIT) ==
+                VK_SUCCESS && ts[1] > ts[0])
+            perf_present_gpu((uint64_t)((double)(ts[1] - ts[0]) * c->props.limits.timestampPeriod));
+        g_ts_written[slot] = 0;
+    }
+    if (!g_ts_tried && perf_gpu_timing()) {
+        g_ts_tried = 1;
+        uint32_t nq = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(c->phys, &nq, NULL);
+        VkQueueFamilyProperties qp[16];
+        if (nq > 16) nq = 16;
+        vkGetPhysicalDeviceQueueFamilyProperties(c->phys, &nq, qp);
+        VkQueryPoolCreateInfo qi = {.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO, .queryType = VK_QUERY_TYPE_TIMESTAMP,
+                                    .queryCount = 2 * FRAMES};
+        if (c->gfx_family >= nq || !qp[c->gfx_family].timestampValidBits || c->props.limits.timestampPeriod <= 0 ||
+            vkCreateQueryPool(c->device, &qi, NULL, &g_ts_pool) != VK_SUCCESS)
+            g_ts_pool = VK_NULL_HANDLE;
+    }
+    int timed = g_ts_pool && perf_gpu_timing();
     if (g_sc_hdr) vk_hdr_metadata(g_sc, 0);   // a changed peak or white goes to the display
     if (g_th_pending[slot]) {   // that fence has signalled: the thumbnail its submission wrote is complete
         g_th_tag[g_th_pending[slot] % (uint64_t)g_th_n] = g_th_pending[slot];
@@ -613,6 +647,10 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
     vkBeginCommandBuffer(cb, &bi);
     uint64_t crumb = __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED);
     vk_crumb(cb, VK_CRUMB_PRESENT, crumb);
+    if (timed) {
+        vkCmdResetQueryPool(cb, g_ts_pool, 2 * slot, 2);
+        vkCmdWriteTimestamp2(cb, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, g_ts_pool, 2 * slot);
+    }
     VkImage dst = g_sc_img[idx];
     sync_barrier(cb, dst, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_TRANSFER_BIT, 0,
                  VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
@@ -698,11 +736,24 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
         record_thumb(cb, dst, slot);
     }
     sync_barrier(cb, dst, last, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, last_stage, last_write, VK_PIPELINE_STAGE_2_NONE, 0);
+    if (timed) vkCmdWriteTimestamp2(cb, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, g_ts_pool, 2 * slot + 1);
     vk_crumb(cb, VK_CRUMB_PRESENT_END, crumb);
     vkEndCommandBuffer(cb);
 
+    // Nothing in the command buffer starts before the swapchain image is free. With the wait at the copy only, the HDR
+    // encode (a compute pass, the first command) could start and the GPU then sit inside this submission until the image
+    // came back, which Windows counts as the game's GPU use (issue 148: 34 % to 81 % at the same work and power).
+    // XCX_PRESENT_WAIT=copy keeps the old wait at the copy, for comparison.
+    static int wait_at_copy = -1;
+    if (wait_at_copy < 0) {
+        const char *e = cfg_get("XCX_PRESENT_WAIT");
+        wait_at_copy = e && !strcmp(e, "copy");
+        rt_log("gfx: the present waits for the swapchain image %s (XCX_PRESENT_WAIT)",
+               wait_at_copy ? "at the copy" : "before its first command");
+    }
     VkSemaphoreSubmitInfo wait = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = g_acquire[slot],
-                                  .stageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT};
+                                  .stageMask = wait_at_copy ? VK_PIPELINE_STAGE_2_TRANSFER_BIT
+                                                            : VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT};
     VkSemaphoreSubmitInfo sig = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = g_render_done[idx],
                                  .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT};
     VkCommandBufferSubmitInfo cbi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = cb};
@@ -713,6 +764,7 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
     r = vkQueueSubmit2(c->gfx_queue, 1, &si, g_fence[slot]);
     vk_queue_unlock();
     if (r == VK_SUCCESS) {
+        g_ts_written[slot] = timed;
         g_flip_on = 1;
         g_flip_idx = idx;
         if (!defer) flip_locked();
@@ -787,7 +839,11 @@ void gfx_window_release_vk(void) {
         for (int i = 0; i < FRAMES; i++) {
             vkDestroySemaphore(c->device, g_acquire[i], NULL);
             vkDestroyFence(c->device, g_fence[i], NULL);
+            g_ts_written[i] = 0;
         }
+        if (g_ts_pool) vkDestroyQueryPool(c->device, g_ts_pool, NULL);
+        g_ts_pool = VK_NULL_HANDLE;
+        g_ts_tried = 0;
         for (uint32_t i = 0; i < g_sc_n; i++) {
             vkDestroySemaphore(c->device, g_render_done[i], NULL);
             if (g_sc_view[i]) vkDestroyImageView(c->device, g_sc_view[i], NULL);
